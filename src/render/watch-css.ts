@@ -81,6 +81,7 @@ export const WATCH_CSS = `/* ═════════════════
   border-radius: 16px;
   overflow: hidden;
   position: relative;
+  aspect-ratio: 16/9;
   border: 1px solid rgba(255,255,255,0.1);
   box-shadow: 0 0 0 1px rgba(0,0,0,.5), 0 2px 0 rgba(255,255,255,0.06) inset, 0 32px 96px rgba(0,0,0,.9), 0 8px 32px rgba(0,0,0,.6);
   animation: playerReveal .55s cubic-bezier(0.16,1,0.3,1) both;
