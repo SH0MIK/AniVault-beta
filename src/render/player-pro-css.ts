@@ -30,9 +30,10 @@ export const PLAYER_PRO_CSS = `<style id="sp-skin">
   -webkit-tap-highlight-color:transparent;
 }
 #senshi-player-root.sp-fs{
-  height:100vh;height:100dvh;
+  width:100vw;height:100vh;height:100dvh;
   display:flex;flex-direction:column;
   border-radius:0;
+  position:fixed;top:0;left:0;
 }
 #senshi-player-root.sp-fs #sp-panel{display:none}
 
