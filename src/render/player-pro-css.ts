@@ -45,7 +45,7 @@ export const PLAYER_PRO_CSS = `<style id="sp-skin">
 
 /* ─── Video area ────────────────────────────────────────── */
 #sp-video-area{position:relative;width:100%;aspect-ratio:16/9;background:#000;overflow:hidden}
-#sp-video{width:100%;height:100%;display:block;background:#000}
+#sp-video{width:100%;height:100%;display:block;background:#000;object-fit:contain}
 #senshi-player-root.sp-fs #sp-video-area{aspect-ratio:unset;flex:1;min-height:0}
 
 /* ─── Spinner ───────────────────────────────────────────── */
