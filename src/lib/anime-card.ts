@@ -22,9 +22,9 @@ export function renderAnimeCard(a: NormalisedAnime, siteUrl: string, userStatus:
 
   return `
 <div class="anime-card" onclick="window.location.href='${h(aurl)}'">
-  <div class="anime-card-poster">
+  <div class="anime-card-poster${aimg ? ' img-skel' : ' img-skel img-ready'}">
     ${aimg
-      ? `<img src="${h(aimg)}" alt="${h(atitle)}" loading="lazy">`
+      ? `<img src="${h(aimg)}" alt="${h(atitle)}" loading="lazy" onload="this.classList.add('img-loaded');this.parentElement.classList.add('img-ready')" onerror="this.parentElement.classList.add('img-ready')">`
       : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:2rem;">${icon('user', 'icon-xl')}</div>`}
     ${ascore ? `<div class="anime-card-score">${icon('star', 'icon-small')} ${ascore.toFixed(1)}</div>` : ''}
     ${userStatus ? `<div class="anime-card-user-status badge ${STATUS_CLASSES[userStatus] ?? 'badge-default'}" data-anime-id="${aid}">${STATUS_LABELS[userStatus] ?? userStatus}</div>` : ''}
