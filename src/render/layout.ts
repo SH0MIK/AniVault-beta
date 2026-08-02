@@ -160,7 +160,6 @@ ${ogBlock}
 <style>
 #av-page-progress{position:fixed;top:0;left:0;height:3px;width:0;z-index:99999;background:linear-gradient(90deg,#ff2a2a,#ff6b6b);opacity:0;transition:width .25s ease,opacity .25s ease;}
 #av-page-progress.av-progress-active{opacity:1;}
-.page-content.av-content-enter{opacity:0;filter:blur(10px);transform:translateY(10px);}
 </style>
 <script>
 (function(){
@@ -201,20 +200,12 @@ ${ogBlock}
     },200);
   }
 
-  // The new page's own content starts blurred/faded-out (via the
-  // .av-content-enter class already in its server-rendered HTML) and
-  // eases into full clarity here, instead of the page popping in all
-  // at once behind a blocking spinner.
-  function revealContent(){
-    document.querySelectorAll('.page-content.av-content-enter').forEach(function(el){
-      requestAnimationFrame(function(){
-        requestAnimationFrame(function(){ el.classList.remove('av-content-enter'); });
-      });
-    });
-  }
+  // The new page's images (posters/thumbs/avatars) reveal themselves as
+  // each one finishes loading — see the .img-skel handling in style.css /
+  // the onload attributes on those <img> tags. Nothing to drive from here.
 
-  if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded', function(){ navFinish(); revealContent(); }); }
-  else { navFinish(); revealContent(); }
+  if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded', navFinish); }
+  else { navFinish(); }
   window.__navStart=navStart;
   window.__navFinish=navFinish;
 
@@ -257,7 +248,7 @@ ${ogBlock}
 
   // Back/forward restored straight from bfcache without a real reload —
   // make sure nothing is left stuck mid-transition.
-  window.addEventListener('pageshow', function(e){ if(e.persisted){ navFinish(); revealContent(); } });
+  window.addEventListener('pageshow', function(e){ if(e.persisted){ navFinish(); } });
 })();
 </script>
 </head>
@@ -460,7 +451,7 @@ window.__currentPage = '${o.currentPage}';
   </div>
 </div>
 
-<main class="page-content av-content-enter">`;
+<main class="page-content">`;
 }
 
 export function renderFooter(o: { siteUrl: string; currentUser: CurrentUser | null }): string {

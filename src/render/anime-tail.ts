@@ -39,12 +39,9 @@ export function animeTailScript(animeDubConfirmed: boolean): string {
   border-color: rgba(60,210,110,.5);
   color: #fff;
 }
-/* Spinner in tabs */
-#ep-grid-loading .av-loader,
-#char-grid-loading .av-loader,
-#related-grid-loading .av-loader {
-  width: 40px; height: 40px;
-}
+/* Loading skeletons for the Episodes/Characters/Related tabs are plain
+   .ep-grid/.anime-grid markup with .skel-card children — see style.css
+   for the shimmer, and anime.ts for the server-rendered placeholder grid. */
 </style>
 
 <script>
