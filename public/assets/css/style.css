@@ -7,23 +7,44 @@
    PAGE LOADER
    ============================================= */
 
-#av-page-loader {
+/* =============================================
+   PAGE NAVIGATION — top progress bar + content reveal
+   ============================================= */
+
+#av-page-progress {
   position: fixed;
-  inset: 0;
+  top: 0;
+  left: 0;
+  height: 3px;
+  width: 0%;
   z-index: 99999;
-  background: rgba(10, 10, 15, 0.45);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  transition: opacity 0.4s ease, visibility 0.4s ease;
+  background: linear-gradient(90deg, #ff2a2a, #ff6b6b);
+  box-shadow: 0 0 8px rgba(255, 42, 42, 0.7), 0 0 3px rgba(255, 42, 42, 0.9);
+  opacity: 0;
+  transition: width 0.25s ease, opacity 0.25s ease;
 }
 
-#av-page-loader.av-loader-hidden {
+#av-page-progress.av-progress-active { opacity: 1; }
+
+.page-content {
+  transition: opacity 0.45s ease, filter 0.45s ease, transform 0.45s ease;
+}
+
+.page-content.av-content-enter {
   opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
+  filter: blur(10px);
+  transform: translateY(10px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-content,
+  .page-content.av-content-enter {
+    transition: none;
+    opacity: 1;
+    filter: none;
+    transform: none;
+  }
+  #av-page-progress { transition: none; }
 }
 
 .av-loader {
