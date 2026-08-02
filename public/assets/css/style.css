@@ -127,6 +127,48 @@
   50%       { transform: translateY(-12px); opacity: 1; }
 }
 
+/* =============================================
+   SKELETON LOADING — shimmering placeholders that get
+   replaced with real content once it's actually ready
+   ============================================= */
+
+@keyframes skel-shimmer {
+  0%   { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+.skel-block {
+  background: linear-gradient(90deg, var(--bg-surface) 25%, rgba(255,255,255,0.07) 37%, var(--bg-surface) 63%);
+  background-size: 400% 100%;
+  animation: skel-shimmer 1.4s ease-in-out infinite;
+  border-radius: var(--radius-md);
+}
+
+.skel-line { height: 10px; margin: 10px 10px 0; }
+.skel-line.w-60 { width: 60%; }
+.skel-line.w-40 { width: 40%; margin-bottom: 10px; }
+
+.skel-card { pointer-events: none; }
+
+/* Real <img> tags: stay hidden behind a shimmer until they actually
+   finish downloading, then fade in. Wrap the img in (or apply to) a
+   position:relative container and add class="img-skel" to it; the img
+   itself gets onload/onerror handlers that add .img-loaded / .img-ready. */
+.img-skel { position: relative; }
+.img-skel > img { opacity: 0; transition: opacity 0.35s ease; position: relative; z-index: 1; }
+.img-skel > img.img-loaded { opacity: 1; }
+.img-skel:not(.img-ready)::before {
+  content: "";
+  position: absolute; inset: 0;
+  background: linear-gradient(90deg, var(--bg-surface) 25%, rgba(255,255,255,0.07) 37%, var(--bg-surface) 63%);
+  background-size: 400% 100%;
+  animation: skel-shimmer 1.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skel-block, .img-skel:not(.img-ready)::before { animation: none; }
+}
+
 /* ============================================= */
 
 @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800&family=Exo+2:wght@300;400;500;600&display=swap');
