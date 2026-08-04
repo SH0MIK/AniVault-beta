@@ -29,13 +29,7 @@ export const PLAYER_PRO_CSS = `<style id="sp-skin">
   overflow:hidden;
   -webkit-tap-highlight-color:transparent;
 }
-#senshi-player-root.sp-fs{
-  width:100vw;height:100vh;height:100dvh;
-  display:flex;flex-direction:column;
-  border-radius:0;
-  position:fixed;top:0;left:0;
-}
-#senshi-player-root.sp-fs #sp-panel{display:none}
+#senshi-player-root:fullscreen{border-radius:0}
 
 /* ─── HUD corner accents ────────────────────────────────── */
 .sp-corner{position:absolute;width:18px;height:18px;border-color:var(--sp-accent);opacity:.35;z-index:15;pointer-events:none}
@@ -46,8 +40,8 @@ export const PLAYER_PRO_CSS = `<style id="sp-skin">
 
 /* ─── Video area ────────────────────────────────────────── */
 #sp-video-area{position:relative;width:100%;aspect-ratio:16/9;background:#000;overflow:hidden}
-#sp-video{width:100%;height:100%;display:block;background:#000;object-fit:contain}
-#senshi-player-root.sp-fs #sp-video-area{aspect-ratio:unset;flex:1;min-height:0}
+#sp-video{width:100%;height:100%;display:block;background:#000}
+#senshi-player-root:fullscreen #sp-video-area{aspect-ratio:unset;height:100%}
 
 /* ─── Spinner ───────────────────────────────────────────── */
 #sp-spinner{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;z-index:20;background:#000;opacity:1;transition:opacity .25s}

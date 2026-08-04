@@ -158,56 +158,41 @@ ${og.type === 'video.episode' ? `
 <script src="${o.siteUrl}/assets/js/app.js" defer></script>
 ${ogBlock}
 <style>
-#av-page-progress{position:fixed;top:0;left:0;height:3px;width:0;z-index:99999;background:linear-gradient(90deg,#ff2a2a,#ff6b6b);opacity:0;transition:width .25s ease,opacity .25s ease;}
-#av-page-progress.av-progress-active{opacity:1;}
+#av-page-loader{position:fixed;inset:0;z-index:99999;background:#0a0a0f;display:flex;justify-content:center;align-items:center;}
+#av-page-loader.av-loader-hidden{opacity:0;visibility:hidden;pointer-events:none;transition:opacity .4s ease,visibility .4s ease;}
 </style>
 <script>
 (function(){
-  function bar(){ return document.getElementById('av-page-progress'); }
-  var trickleTimer=null;
+  function getLoader(){ return document.getElementById('av-page-loader'); }
 
-  // Slim top progress bar (à la YouTube/GitHub) — starts the instant a
-  // real navigation is triggered, so feedback is immediate even though
-  // the page itself doesn't switch until the new HTML arrives.
-  function navStart(){
-    var b=bar();
-    if(!b) return;
-    clearInterval(trickleTimer);
-    clearTimeout(b._safety);
-    b.style.width='0%';
-    void b.offsetWidth; // force reflow so the reset above isn't skipped
-    b.classList.add('av-progress-active');
-    b.style.width='20%';
-    var pct=20;
-    trickleTimer=setInterval(function(){
-      pct += (90-pct)*0.1;
-      b.style.width=Math.min(pct,90)+'%';
-    },200);
+  function dismissLoader(){
+    var l=getLoader();
+    if(!l)return;
+    l._done=true;
+    l.classList.add('av-loader-hidden');
+    clearTimeout(l._safety);
+  }
+
+  // Kept separate from dismissLoader so a click can re-show it even after
+  // this page's own load already hid it. The node is never removed from
+  // the DOM (unlike the old version) specifically so it stays available
+  // to be re-shown here.
+  function showLoader(){
+    var l=getLoader();
+    if(!l)return;
+    l._done=false;
+    l.classList.remove('av-loader-hidden');
     // Safety net: if the click/submit gets cancelled somewhere (validation
-    // error, confirm() decline, etc.) don't leave the bar stuck mid-flight.
-    b._safety=setTimeout(navFinish,8000);
+    // error, confirm() decline, etc.) and no real navigation happens,
+    // don't leave the user stuck staring at the loader forever.
+    clearTimeout(l._safety);
+    l._safety=setTimeout(dismissLoader,8000);
   }
 
-  function navFinish(){
-    var b=bar();
-    if(!b) return;
-    clearInterval(trickleTimer);
-    clearTimeout(b._safety);
-    b.style.width='100%';
-    setTimeout(function(){
-      b.classList.remove('av-progress-active');
-      setTimeout(function(){ b.style.width='0%'; },250);
-    },200);
-  }
-
-  // The new page's images (posters/thumbs/avatars) reveal themselves as
-  // each one finishes loading — see the .img-skel handling in style.css /
-  // the onload attributes on those <img> tags. Nothing to drive from here.
-
-  if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded', navFinish); }
-  else { navFinish(); }
-  window.__navStart=navStart;
-  window.__navFinish=navFinish;
+  if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded',dismissLoader); } else { dismissLoader(); }
+  setTimeout(dismissLoader,3000);
+  window.__dismissLoader=dismissLoader;
+  window.__showLoader=showLoader;
 
   function isRealNav(a){
     if(!a) return false;
@@ -235,7 +220,7 @@ ${ogBlock}
     if(e.button!==0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
     var a = e.target && e.target.closest && e.target.closest('a[href]');
     if(!isRealNav(a)) return;
-    setTimeout(function(){ if(!e.defaultPrevented) navStart(); }, 0);
+    setTimeout(function(){ if(!e.defaultPrevented) showLoader(); }, 0);
   }, true);
 
   document.addEventListener('submit', function(e){
@@ -243,18 +228,23 @@ ${ogBlock}
     if(!(f instanceof HTMLFormElement)) return;
     if(f.target && f.target!=='' && f.target!=='_self') return;
     if(f.dataset && f.dataset.noLoader!==undefined) return;
-    setTimeout(function(){ if(!e.defaultPrevented) navStart(); }, 0);
+    setTimeout(function(){ if(!e.defaultPrevented) showLoader(); }, 0);
   }, true);
 
   // Back/forward restored straight from bfcache without a real reload —
-  // make sure nothing is left stuck mid-transition.
-  window.addEventListener('pageshow', function(e){ if(e.persisted){ navFinish(); } });
+  // make sure a loader left visible before navigating away doesn't linger.
+  window.addEventListener('pageshow', function(e){ if(e.persisted) dismissLoader(); });
 })();
 </script>
 </head>
 <body>
 ${ICON_SPRITE}
-<div id="av-page-progress"></div>
+<div id="av-page-loader">
+  <div class="av-loader">
+    <div class="particle p1"></div><div class="particle p2"></div><div class="particle p3"></div>
+    <div class="logo-wrap"><img src="${o.siteUrl}/assets/img/site-img/logo.png" class="logo" alt="AniVault"></div>
+  </div>
+</div>
 ${bannerBlock}
 <div id="toast-container"></div>
 
@@ -536,7 +526,7 @@ export function renderFooter(o: { siteUrl: string; currentUser: CurrentUser | nu
 })();
 </script>
 <script>
-if (window.__navFinish) window.__navFinish();
+if (window.__dismissLoader) window.__dismissLoader();
 </script>
 </body>
 </html>`;
