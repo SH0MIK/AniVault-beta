@@ -2863,3 +2863,199 @@ textarea.form-control { resize: vertical; min-height: 100px; }
   line-height: 1;
 }
 .chat-react-picker button:hover { background: var(--bg-hover); }
+
+/* =============================================================
+   VAULT THEME v2 — dark, cinematic, premium re-skin
+   Palette: deep ink base + ember accent + museum-vault gold trim.
+   Signature: gold hairline "seal" that traces card/panel edges,
+   and a concentric vault-dial motif in hero backgrounds.
+   ============================================================= */
+
+@import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=Inter:wght@400;500;600;700&display=swap');
+
+:root {
+  --bg-base:        #08090c;
+  --bg-surface:      #10131a;
+  --bg-card:         #141822;
+  --bg-hover:        #1b202c;
+  --accent:          #d8402f;
+  --accent-dim:      #8f2c22;
+  --accent-glow:     rgba(216,64,47,0.28);
+  --vault-gold:      #c9a24b;
+  --vault-gold-soft: rgba(201,162,75,0.35);
+  --gold:            #c9a24b;
+  --teal:            #2bcfa3;
+  --purple:          #a78bfa;
+  --blue:            #5da3f5;
+  --text-primary:    #f3f1ea;
+  --text-secondary:  #9ba0ae;
+  --text-muted:      #5b6070;
+  --border:          rgba(255,255,255,0.07);
+  --border-accent:   rgba(201,162,75,0.4);
+  --font-display:    'Bricolage Grotesque', sans-serif;
+  --font-body:       'Inter', sans-serif;
+  --shadow-card:     0 10px 30px rgba(0,0,0,0.55);
+  --shadow-glow:     0 0 24px var(--accent-glow);
+}
+
+body { font-family: var(--font-body); }
+h1, h2, h3, h4, .section-title, .nav-logo, .hero-title { font-family: var(--font-display); }
+
+/* ── Nav: glass ink bar with a gold hairline instead of a hard border ── */
+.navbar {
+  background: rgba(8,9,12,0.82);
+  border-bottom: 1px solid transparent;
+  background-image: linear-gradient(rgba(8,9,12,0.86), rgba(8,9,12,0.86)),
+    linear-gradient(90deg, transparent, var(--vault-gold-soft) 20%, var(--vault-gold-soft) 80%, transparent);
+  background-origin: border-box;
+  background-clip: padding-box, border-box;
+  border-bottom: 1px solid transparent;
+}
+.nav-logo { font-weight: 700; letter-spacing: 0.2px; }
+.nav-logo span { color: var(--vault-gold); }
+.nav-links a.active { color: var(--vault-gold); background: rgba(201,162,75,0.09); }
+
+/* ── Buttons: ember-to-ink primary, gold hairline ghost ── */
+.btn-primary {
+  background: linear-gradient(135deg, var(--accent) 0%, #9c2a1f 100%);
+  border-color: transparent;
+  box-shadow: 0 4px 16px rgba(216,64,47,0.25);
+}
+.btn-primary:hover { box-shadow: 0 6px 20px rgba(216,64,47,0.4); filter: brightness(1.06); }
+.btn-ghost { border-color: var(--border); }
+.btn-ghost:hover { border-color: var(--vault-gold-soft); }
+
+/* ── Section titles: gold eyebrow tick instead of plain accent text ── */
+.section-title {
+  color: var(--text-primary);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  position: relative;
+  padding-left: 14px;
+}
+.section-title::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 50%;
+  transform: translateY(-50%);
+  width: 4px; height: 62%;
+  background: var(--vault-gold);
+  border-radius: 2px;
+}
+.section-title::after { background: var(--border); }
+
+/* ── Anime cards: notched gold-seal corner, cleaner hover lift ── */
+.anime-card {
+  border-radius: 14px;
+  clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 0 100%);
+  background: var(--bg-card);
+  transition: transform 0.25s cubic-bezier(.2,.8,.2,1), box-shadow 0.25s ease, border-color 0.25s ease;
+}
+.anime-card::after {
+  content: '';
+  position: absolute;
+  top: 0; right: 0;
+  width: 14px; height: 14px;
+  background: linear-gradient(135deg, transparent 50%, var(--vault-gold-soft) 50%);
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  pointer-events: none;
+}
+.anime-card:hover {
+  transform: translateY(-6px);
+  border-color: var(--vault-gold-soft);
+  box-shadow: var(--shadow-card);
+}
+.anime-card:hover::after { opacity: 1; }
+.anime-card-score { background: rgba(8,9,12,0.85); border: 1px solid var(--vault-gold-soft); }
+
+/* ── Hero: vault-dial concentric rings behind the title ── */
+.hero { padding: 6rem 2rem 3.5rem; background: none; }
+.hero::before { display: none; }
+.hero-vault-rings {
+  position: absolute;
+  top: 50%; left: 50%;
+  width: 900px; height: 900px;
+  transform: translate(-50%, -55%);
+  pointer-events: none;
+  z-index: 0;
+}
+.hero-vault-rings::before,
+.hero-vault-rings::after {
+  content: '';
+  position: absolute; inset: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(201,162,75,0.14);
+}
+.hero-vault-rings::after { inset: 90px; border-color: rgba(216,64,47,0.12); }
+.hero-vault-ring-mid {
+  position: absolute; inset: 45px;
+  border-radius: 50%;
+  border: 1px dashed rgba(255,255,255,0.06);
+}
+.hero > * { position: relative; z-index: 1; }
+.hero-eyebrow {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: 0.72rem; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--vault-gold);
+  margin-bottom: 1.1rem;
+}
+.hero-eyebrow::before, .hero-eyebrow::after { content: ''; width: 20px; height: 1px; background: var(--vault-gold-soft); }
+.hero-title {
+  font-size: 3.2rem;
+  font-weight: 700;
+  letter-spacing: -1.5px;
+  background: linear-gradient(150deg, #fff 0%, #c8cbd6 60%, var(--vault-gold) 130%);
+  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+}
+.hero-title span { -webkit-text-fill-color: var(--accent); }
+.hero-sub { font-size: 1.05rem; }
+
+@media (max-width: 700px) {
+  .hero { padding: 4.5rem 1.25rem 2.5rem; }
+  .hero-title { font-size: 2.15rem; }
+  .hero-vault-rings { width: 600px; height: 600px; }
+}
+
+/* ── Stat cards on home: gold-trimmed glass tiles ── */
+.stat-card {
+  position: relative;
+  background: linear-gradient(180deg, var(--bg-card), var(--bg-surface));
+  border: 1px solid var(--border);
+}
+.stat-card::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, transparent, var(--vault-gold), transparent);
+  opacity: 0.6;
+}
+
+/* ── Anime detail: gold-seamed poster + info panel ── */
+.av-detail-panel {
+  background: linear-gradient(180deg, var(--bg-card), var(--bg-surface));
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  position: relative;
+  overflow: hidden;
+}
+.av-detail-panel::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--vault-gold-soft) 30%, var(--vault-gold-soft) 70%, transparent);
+}
+.av-poster-frame {
+  position: relative;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 1px solid var(--vault-gold-soft);
+  box-shadow: 0 12px 30px rgba(0,0,0,0.5);
+}
+.av-genre-tag, .genre-tag {
+  display: inline-flex; align-items: center;
+  font-size: 0.74rem; font-weight: 600; letter-spacing: 0.03em;
+  padding: 4px 11px; border-radius: 20px;
+  background: rgba(201,162,75,0.08);
+  border: 1px solid var(--vault-gold-soft);
+  color: var(--vault-gold);
+}
+.genre-tag:hover { border-color: var(--accent); color: var(--accent); }
+.tabs { border-bottom-color: var(--border); }
+.tab-btn.active { color: var(--vault-gold); box-shadow: inset 0 -2px 0 var(--vault-gold); }
