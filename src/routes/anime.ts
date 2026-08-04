@@ -100,25 +100,9 @@ animeRoutes.get('/anime', async (c) => {
   const jTitle = JSON.stringify(title);
   const jImage = JSON.stringify(image);
 
-  const skelEpCards = Array.from({ length: 6 }).map(() => `
-    <div class="ep-card skel-card">
-      <div class="ep-thumb skel-block"></div>
-      <div class="skel-block skel-line w-60"></div>
-      <div class="skel-block skel-line w-40"></div>
-    </div>`).join('');
-
-  const skelAnimeCards = Array.from({ length: 10 }).map(() => `
-    <div class="anime-card skel-card">
-      <div class="anime-card-poster skel-block"></div>
-      <div class="anime-card-info">
-        <div class="skel-block skel-line w-60"></div>
-        <div class="skel-block skel-line w-40"></div>
-      </div>
-    </div>`).join('');
-
   html += `
 <div class="container section">
-  <div class="anime-detail-header">
+  <div class="anime-detail-header av-detail-panel" style="padding:1.5rem;">
     <style>
       .anime-detail-header { display: flex; gap: 1.5rem; margin-bottom: 1.5rem; align-items: flex-start; }
       .anime-poster-col { width: 220px; flex-shrink: 0; }
@@ -136,8 +120,8 @@ animeRoutes.get('/anime', async (c) => {
       }
     </style>
     ${image ? `
-    <div class="anime-poster-col img-skel" style="aspect-ratio:2/3;overflow:hidden;border-radius:var(--radius-lg);">
-      <img src="${h(image)}" alt="${h(title)}" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-lg);border:1px solid var(--border);display:block;" onload="this.classList.add('img-loaded');this.parentElement.classList.add('img-ready')" onerror="this.parentElement.classList.add('img-ready')">
+    <div class="anime-poster-col">
+      <div class="av-poster-frame"><img src="${h(image)}" alt="${h(title)}" style="width:100%;display:block;"></div>
       ${streamLinks.length > 0 ? `
       <div class="stream-under-poster" style="margin-top:12px;">
         ${streamWatchOn(streamLinks, id, siteUrl)}
@@ -165,7 +149,7 @@ animeRoutes.get('/anime', async (c) => {
       ${jpTitle && jpTitle !== title ? `<p class="text-muted mb-1">${h(jpTitle)}</p>` : ''}
 
       <div class="flex flex-wrap gap-1 mb-2" style="gap:8px;">
-        ${anime.score ? `<span style="background:rgba(245,200,66,0.15);color:var(--gold);padding:4px 12px;border-radius:20px;font-size:0.85rem;font-weight:600;">⭐ ${anime.score.toFixed(2)}/10 <span style="color:var(--text-muted);font-weight:400;">(${(anime.scored_by || anime.members || 0).toLocaleString('en-US')} users)</span></span>` : ''}
+        ${anime.score ? `<span class="av-genre-tag">⭐ ${anime.score.toFixed(2)}/10 <span style="color:var(--text-muted);font-weight:400;margin-left:4px;">(${(anime.scored_by || anime.members || 0).toLocaleString('en-US')} users)</span></span>` : ''}
         ${anime.rank ? `<span class="genre-tag">🏆 Rank #${anime.rank}</span>` : ''}
         ${anime.popularity ? `<span class="genre-tag">🔥 #${anime.popularity} Popular</span>` : ''}
       </div>
@@ -228,7 +212,10 @@ animeRoutes.get('/anime', async (c) => {
     </div>
 
     <div id="tab-episodes" class="tab-content">
-      <div id="ep-grid-loading" class="ep-grid">${skelEpCards}</div>
+      <div id="ep-grid-loading" style="text-align:center;padding:2.5rem 0;color:var(--text-muted);">
+        <div class="av-loader" style="margin:0 auto 1rem;transform:scale(.6);"></div>
+        Loading episodes…
+      </div>
       <div class="ep-grid" id="ep-grid-js" style="display:none;"></div>
     </div>
 
@@ -260,12 +247,18 @@ animeRoutes.get('/anime', async (c) => {
     ${(layoutUser?.role === 'admin' || layoutUser?.role === 'owner') ? renderEpisodeEditorModal() : ''}
 
     <div id="tab-characters" class="tab-content">
-      <div id="char-grid-loading" class="anime-grid">${skelAnimeCards}</div>
+      <div id="char-grid-loading" style="text-align:center;padding:2.5rem 0;color:var(--text-muted);">
+        <div class="av-loader" style="margin:0 auto 1rem;transform:scale(.6);"></div>
+        Loading characters…
+      </div>
       <div class="anime-grid" id="char-grid-js" style="display:none;"></div>
     </div>
 
     <div id="tab-related" class="tab-content">
-      <div id="related-grid-loading" class="anime-grid">${skelAnimeCards}</div>
+      <div id="related-grid-loading" style="text-align:center;padding:2.5rem 0;color:var(--text-muted);">
+        <div class="av-loader" style="margin:0 auto 1rem;transform:scale(.6);"></div>
+        Loading recommendations…
+      </div>
       <div class="anime-grid" id="related-grid-js" style="display:none;"></div>
     </div>
   </div>
