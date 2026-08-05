@@ -12,11 +12,12 @@ import { AnimeTracker } from '../lib/tracker';
 import { Notification } from '../lib/notification';
 import { getUserAnimeStatuses } from '../lib/user-list';
 import { icon } from '../lib/icons';
-import { h, getAnimeTitle } from '../lib/helpers';
+import { h } from '../lib/helpers';
 import { renderAnimeCard } from '../lib/anime-card';
 import { renderHeader, renderFooter } from '../render/layout';
 import { CONTINUE_WATCHING_CSS } from '../render/home-css';
-import { continueWatchingScript } from '../render/home-js';
+import { continueWatchingScript, heroSliderScript, rowNavScript } from '../render/home-js';
+import type { NormalisedAnime } from '../lib/mal-api';
 import { getBannerData } from '../lib/settings';
 
 export const homeRoutes = new Hono<{ Bindings: Env }>();
@@ -100,29 +101,22 @@ homeRoutes.get('/', async (c) => {
     requestUrl: c.req.url,
   });
 
-  const spotlight = topList[0] || seasonalList[0];
-  const spotlightImg = spotlight?.images?.jpg?.large_image_url || spotlight?.images?.jpg?.image_url || '';
-  const spotlightTitle = spotlight ? getAnimeTitle(spotlight) : 'AniVault';
+  // Hero slider slides — pulled from the top-ranked list (falls back to
+  // seasonal if MAL's top-anime endpoint is empty/rate-limited).
+  const heroPool = (topList.length > 0 ? topList : seasonalList).slice(0, 6);
 
   html += `
-<div class="av-hero">
-  ${spotlightImg ? `<div class="av-hero-bg" style="background-image:url('${h(spotlightImg)}')"></div>` : ''}
-  <div class="av-hero-scrim"></div>
-  <div class="av-hero-glow"></div>
-  <div class="av-hero-content">
-    <div class="av-hero-tag">${icon('fire', 'icon-small')} Trending Now</div>
-    <h1 class="av-hero-title">Your Anime<br><span>Universe</span></h1>
-    <p class="av-hero-sub">Track what you watch, discover what's trending, and never lose your place again.</p>
-    <div class="flex flex-center gap-1 av-hero-actions">
-      ${!currentUser ? `
-      <a href="${siteUrl}/register" class="btn av-btn-primary btn-lg">${icon('plus', 'icon-small')} Get Started</a>
-      <a href="${siteUrl}/browse" class="btn av-btn-glass btn-lg">${icon('search', 'icon-small')} Browse</a>` : `
-      <a href="${siteUrl}/mylist" class="btn av-btn-primary btn-lg">${icon('list', 'icon-small')} My List</a>
-      <a href="${siteUrl}/browse" class="btn av-btn-glass btn-lg">${icon('search', 'icon-small')} Discover More</a>`}
-    </div>
-    ${spotlight ? `<div class="av-hero-spotlight-name">${icon('play', 'icon-small')} Now trending: <strong>${h(spotlightTitle)}</strong></div>` : ''}
+<section id="hero">
+  <div id="hero-slides">
+    ${heroPool.map((a, i) => renderHeroSlide(a, i, siteUrl)).join('')}
   </div>
-</div>
+  <div class="hero-indicators" id="hero-dots">
+    ${heroPool.map((_, i) => `<button class="hero-dot ${i === 0 ? 'active' : ''}" data-idx="${i}" aria-label="Slide ${i + 1}"></button>`).join('')}
+  </div>
+  <button class="hero-prev" id="hero-prev" aria-label="Previous slide">${icon('chevron-left', 'icon-medium')}</button>
+  <button class="hero-next" id="hero-next" aria-label="Next slide">${icon('chevron-right', 'icon-medium')}</button>
+</section>
+${heroSliderScript(heroPool.length)}
 
 <div class="container">`;
 
@@ -137,74 +131,87 @@ homeRoutes.get('/', async (c) => {
   </div>`;
   }
 
+  // ── Genre bar ────────────────────────────────────────────────────────────
+  const genreList = mal.getAnimeGenres().data;
+  html += `
+  <div class="genre-nav-wrap">
+    <button class="btn btn-ghost btn-sm btn-icon genre-nav-btn prev" data-target="genre-bar" data-dir="prev" aria-label="Previous genres">${icon('chevron-left', 'icon-small')}</button>
+    <div class="genre-bar" id="genre-bar">
+      ${genreList.map((g) => `<a href="${siteUrl}/browse?genre=${g.mal_id}" class="genre-pill">${h(g.name)}</a>`).join('')}
+    </div>
+    <button class="btn btn-ghost btn-sm btn-icon genre-nav-btn next" data-target="genre-bar" data-dir="next" aria-label="Next genres">${icon('chevron-right', 'icon-small')}</button>
+  </div>
+
+  <div class="home-grid">
+    <div class="home-sections">`;
+
   // ── Continue Watching ──────────────────────────────────────────────────
   if (watchHistory.length > 0) {
     html += `
-  <section class="section">
-      <style>${CONTINUE_WATCHING_CSS}</style>
-    <div class="cw-header">
-      <div class="section-title" style="margin-bottom:0;flex:1;">${icon('watching', 'icon-small')} Continue Watching</div>
-      <button onclick="clearWatchHistory(this)" class="cw-clear">Clear History</button>
-    </div>
-    <div class="cw-row" id="watch-history-grid">
-      ${watchHistory.map((hRow) => renderContinueWatchingCard(hRow, siteUrl)).join('')}
-    </div>
-    <div class="cw-show-more-wrap">
-      <div class="cw-show-more-line"></div>
-      <a href="${siteUrl}/history" class="cw-show-more-btn">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;flex-shrink:0;"><circle cx="12" cy="12" r="10"/><polyline points="12 8 12 16"/><polyline points="8 12 12 16 16 12"/></svg>
-        View Full History
-      </a>
-      <div class="cw-show-more-line"></div>
-    </div>
-  </section>
-  ${continueWatchingScript(siteUrl)}`;
+      <section class="content-section">
+        <style>${CONTINUE_WATCHING_CSS}</style>
+        <div class="section-header">
+          <h2 class="section-title">Continue Watching</h2>
+          <div style="display:flex;align-items:center;gap:14px;">
+            <button onclick="clearWatchHistory(this)" class="btn btn-ghost btn-sm">Clear All</button>
+            <button class="btn btn-ghost btn-sm btn-icon row-nav-btn" data-target="row-history" data-dir="prev" aria-label="Previous">${icon('chevron-left', 'icon-small')}</button>
+            <button class="btn btn-ghost btn-sm btn-icon row-nav-btn" data-target="row-history" data-dir="next" aria-label="Next">${icon('chevron-right', 'icon-small')}</button>
+            <a href="${siteUrl}/history" class="section-link">View Full History ${icon('arrow-right', 'icon-small')}</a>
+          </div>
+        </div>
+        <div class="scroll-row" id="row-history">
+          ${watchHistory.map((hRow) => renderContinueWatchingCard(hRow, siteUrl)).join('')}
+        </div>
+      </section>
+      ${continueWatchingScript(siteUrl)}`;
   }
 
   // ── Watch Now ────────────────────────────────────────────────────────────
   if (watchNowList.length > 0) {
     html += `
-  <section class="section">
-    <div class="section-title">${icon('watching', 'icon-small')} Watch Now</div>
-    <div class="anime-grid" id="watch-now-grid">
-      ${watchNowList.map((a, i) => `<div class="watch-now-item" ${i >= 6 ? 'style="display:none;"' : ''}>${renderAnimeCard(a, siteUrl, userStatuses[a.mal_id] ?? null)}</div>`).join('')}
-    </div>
-    ${watchNowList.length > 6 ? `
-    <style>
-    .wn-more-wrap { display:flex; align-items:center; gap:1rem; margin-top:1.5rem; }
-    .wn-line      { flex:1; height:1px; background:var(--border, rgba(255,255,255,.1)); }
-    .wn-more-btn  { background:none; border:1px solid var(--border, rgba(255,255,255,.15)); color:var(--text-muted); font-size:.78rem; font-weight:700; letter-spacing:.08em; text-transform:uppercase; padding:.45rem 1.4rem; border-radius:999px; white-space:nowrap; text-decoration:none; transition:color .15s, border-color .15s; }
-    .wn-more-btn:hover { color:var(--text-primary); border-color:var(--accent, #e00); }
-    </style>
-    <div class="wn-more-wrap"><div class="wn-line"></div><a href="${siteUrl}/watch-now" class="wn-more-btn">Show More</a><div class="wn-line"></div></div>` : ''}
-  </section>`;
+      <section class="content-section">
+        ${sectionHeader('Watch Now', 'row-watchnow', `${siteUrl}/watch-now`)}
+        <div class="scroll-row" id="row-watchnow">
+          ${watchNowList.map((a) => renderAnimeCard(a, siteUrl, userStatuses[a.mal_id] ?? null)).join('')}
+        </div>
+      </section>`;
   }
 
-  // ── Airing This Season ─────────────────────────────────────────────────
+  // ── Trending Now (seasonal) ─────────────────────────────────────────────
   html += `
-  <section class="section">
-    <div class="section-title">${icon('fire', 'icon-small')} Airing This Season</div>
-    ${seasonalList.length === 0
-      ? `<p class="text-muted text-center">Could not load seasonal anime. API may be rate limited — try again shortly.</p>`
-      : `<div class="anime-grid">${seasonalList.map((a) => renderAnimeCard(a, siteUrl, userStatuses[a.mal_id] ?? null)).join('')}</div>`}
-    <div class="text-center mt-2"><a href="${siteUrl}/seasonal" class="btn btn-ghost">${icon('arrow-right', 'icon-small')} View All Seasonal →</a></div>
-  </section>
+      <section class="content-section">
+        ${sectionHeader('Trending Now', 'row-trending', `${siteUrl}/seasonal`)}
+        ${seasonalList.length === 0
+          ? `<p class="text-muted text-center">Could not load seasonal anime. API may be rate limited — try again shortly.</p>`
+          : `<div class="scroll-row" id="row-trending">${seasonalList.map((a) => renderAnimeCard(a, siteUrl, userStatuses[a.mal_id] ?? null)).join('')}</div>`}
+      </section>
 
-  <section class="section">
-    <div class="section-title">${icon('trophy', 'icon-small')} Top Anime</div>
-    <div class="anime-grid">${topList.map((a) => renderAnimeCard(a, siteUrl, userStatuses[a.mal_id] ?? null)).join('')}</div>
-    <div class="text-center mt-2"><a href="${siteUrl}/top" class="btn btn-ghost">${icon('arrow-right', 'icon-small')} View Full Rankings →</a></div>
-  </section>`;
+      <section class="content-section">
+        ${sectionHeader('Most Popular', 'row-popular', `${siteUrl}/top`, 'View Full Rankings')}
+        <div class="scroll-row" id="row-popular">${topList.map((a) => renderAnimeCard(a, siteUrl, userStatuses[a.mal_id] ?? null)).join('')}</div>
+      </section>`;
 
   if (upcomingList.length > 0) {
     html += `
-  <section class="section">
-    <div class="section-title">${icon('calendar', 'icon-small')} Coming Soon</div>
-    <div class="anime-grid">${upcomingList.map((a) => renderAnimeCard(a, siteUrl, userStatuses[a.mal_id] ?? null)).join('')}</div>
-  </section>`;
+      <section class="content-section">
+        ${sectionHeader('Coming Soon', 'row-upcoming')}
+        <div class="scroll-row" id="row-upcoming">${upcomingList.map((a) => renderAnimeCard(a, siteUrl, userStatuses[a.mal_id] ?? null)).join('')}</div>
+      </section>`;
   }
 
+  html += `
+    </div>
+
+    <aside>
+      <div class="sidebar-widget">
+        <div class="sidebar-widget-header">${icon('trophy', 'icon-small')} Top 10 Ranked</div>
+        ${topList.slice(0, 10).map((a, i) => renderSidebarItem(a, i + 1, siteUrl)).join('')}
+      </div>
+    </aside>
+  </div>`;
+
   html += `</div>`;
+  html += rowNavScript();
   html += renderFooter({ siteUrl, currentUser: layoutUser });
 
   await session.save(c, lifetime);
@@ -244,6 +251,71 @@ function renderContinueWatchingCard(hRow: WatchHistoryRow, siteUrl: string): str
   <div class="cw-info">
     <div class="cw-anime-name">${animeTitle}</div>
     <div class="cw-ep-title">E${epNum} – ${epTitle}</div>
+  </div>
+</a>`;
+}
+
+// Reusable Anivexa-style section header: title + prev/next row-scroll arrows
+// + an optional "View All" link.
+function sectionHeader(title: string, rowId: string, viewAllHref?: string, viewAllLabel = 'View All'): string {
+  return `
+<div class="section-header">
+  <h2 class="section-title">${h(title)}</h2>
+  <div style="display:flex;align-items:center;gap:14px;">
+    <button class="btn btn-ghost btn-sm btn-icon row-nav-btn" data-target="${rowId}" data-dir="prev" aria-label="Previous">${icon('chevron-left', 'icon-small')}</button>
+    <button class="btn btn-ghost btn-sm btn-icon row-nav-btn" data-target="${rowId}" data-dir="next" aria-label="Next">${icon('chevron-right', 'icon-small')}</button>
+    ${viewAllHref ? `<a href="${viewAllHref}" class="section-link">${h(viewAllLabel)} ${icon('arrow-right', 'icon-small')}</a>` : ''}
+  </div>
+</div>`;
+}
+
+// One slide of the hero carousel, built from a top/seasonal anime entry.
+function renderHeroSlide(a: NormalisedAnime, i: number, siteUrl: string): string {
+  const title = a.title_english && a.title_english !== a.title ? a.title_english : (a.title || 'Unknown');
+  const img = a.images?.jpg?.large_image_url || a.images?.jpg?.image_url || '';
+  const desc = a.synopsis || '';
+  const genres = (a.genres || []).slice(0, 3);
+  const aurl = `${siteUrl}/anime?id=${a.mal_id}`;
+
+  return `
+<div class="hero-slide ${i === 0 ? 'active' : ''}" data-idx="${i}">
+  <div class="hero-bg">${img ? `<img src="${h(img)}" alt="${h(title)}" loading="${i === 0 ? 'eager' : 'lazy'}">` : ''}</div>
+  <div class="hero-gradient"></div>
+  <div class="hero-content">
+    <div class="container">
+      <div class="hero-info">
+        ${genres.length ? `<div class="hero-badges">${genres.map((g) => `<span class="badge badge-accent">${h(g.name)}</span>`).join('')}</div>` : ''}
+        <h1 class="hero-title">${h(title)}</h1>
+        ${desc ? `<p class="hero-desc">${h(desc)}</p>` : ''}
+        ${genres.length ? `<div class="hero-genres">${genres.map((g) => `<span class="hero-genre-tag">${h(g.name)}</span>`).join('')}</div>` : ''}
+        <div class="hero-stat-strip">
+          ${a.score ? `<span>${icon('star', 'icon-small')} ${a.score.toFixed(1)}</span>` : ''}
+          ${a.episodes ? `<span>${icon('list', 'icon-small')} ${a.episodes} eps</span>` : ''}
+          ${a.type ? `<span>${icon('tv', 'icon-small')} ${h(a.type)}</span>` : ''}
+        </div>
+        <div class="hero-actions">
+          <a href="${aurl}" class="btn btn-primary">${icon('play', 'icon-small')} View Details</a>
+          <button class="btn btn-ghost" onclick='event.stopPropagation(); addToList(${a.mal_id}, ${JSON.stringify(title)}, ${JSON.stringify(img)}, ${Number(a.episodes || 0)})'>${icon('plus', 'icon-small')} Add to List</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>`;
+}
+
+// A ranked row in the "Top 10" sidebar widget.
+function renderSidebarItem(a: NormalisedAnime, rank: number, siteUrl: string): string {
+  const title = a.title_english && a.title_english !== a.title ? a.title_english : (a.title || 'Unknown');
+  const img = a.images?.jpg?.image_url || '';
+  const aurl = `${siteUrl}/anime?id=${a.mal_id}`;
+
+  return `
+<a class="sidebar-item" href="${aurl}">
+  <span class="sidebar-rank">#${rank}</span>
+  ${img ? `<img class="sidebar-thumb" src="${h(img)}" alt="${h(title)}" loading="lazy">` : ''}
+  <div>
+    <div class="sidebar-title">${h(title)}</div>
+    <div class="sidebar-meta">${a.score ? `${icon('star', 'icon-small')} ${a.score.toFixed(1)}` : ''}${a.type ? ` · ${h(a.type)}` : ''}</div>
   </div>
 </a>`;
 }
