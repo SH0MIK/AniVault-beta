@@ -46,6 +46,25 @@ function fetchAnimeHeavenOnce(audio) {
     return newRec.promise;
 }
 
+// ── v2 sources (AniZone / AniNeko / KAA) request de-duplication ──────────
+// Same reasoning as fetchAnimeHeavenOnce above: the probe checks a source
+// works, then activation loads it again — without this, that's two full
+// resolves (search + scrape + decrypt) back-to-back for the same episode.
+window._v2Req = window._v2Req || {};
+function fetchV2Once(sourceKey, audio) {
+    const store = window._v2Req;
+    const cacheKey = sourceKey + '::' + audio;
+    const rec = store[cacheKey];
+    if (rec && (rec.pending || (Date.now() - rec.ts) < 8000)) return rec.promise;
+    const newRec = { pending: true, ts: Date.now(), promise: null };
+    newRec.promise = fetch(\`\${SITE_URL}/api/\${sourceKey}_stream.php?anilist=\${anilistId}&ep=\${epNum}&audio=\${audio}\`)
+        .then(r => r.json())
+        .then(d => { newRec.pending = false; newRec.ts = Date.now(); return d; })
+        .catch(e => { newRec.pending = false; newRec.ts = Date.now(); throw e; });
+    store[cacheKey] = newRec;
+    return newRec.promise;
+}
+
 // ── Visible error surfacing ──────────────────────────────────────────────
 // Any uncaught JS error used to just leave the "Finding the best server..."
 // skeleton spinning forever with zero feedback. This writes the real error
@@ -360,11 +379,12 @@ function switchToAnikoto(providerName, audio) {
         });
 }
 
-// ── AniZone / AniNeko / KAA (HLS via fetch, single provider per source) ──
-// Unlike Anikoto, each of these v2 sources is its own single provider (no
-// "pick a server within the source" step) — the scraper backend already
-// does its own title-matching + m3u8 resolution and hands back one stream.
-function switchToV2Source(source, audio) {
+// ── v2 sources: AniZone / AniNeko / KAA (HLS via fetch, with subtitles) ──
+// All three resolve fully server-side in one call (unlike Anikoto's
+// separate list-then-resolve), so this is just "fetch once, play it" —
+// same shape as switchToAnikoto's playback half, minus the provider-mirror
+// concept, since each of these is a single logical source.
+function switchToV2Source(sourceKey, audio) {
     const pw = document.getElementById('watch-player-wrap');
     if (!pw) return;
 
@@ -374,7 +394,6 @@ function switchToV2Source(source, audio) {
     if (sp && sp.parentNode) sp.parentNode.removeChild(sp);
 
     pw.style.opacity = '0';
-
     pw.style.aspectRatio  = 'unset';
     pw.style.overflow     = 'visible';
     pw.style.background   = 'transparent';
@@ -397,50 +416,27 @@ function switchToV2Source(source, audio) {
     const badge = document.getElementById('sp-hls-badge');
     if (badge) badge.textContent = 'HLS';
 
-    function applyV2Result(d) {
-        if (d.error || (!d.m3u8 && !d.embedUrl)) {
-            const errMsg = document.getElementById('sp-err-msg');
-            if (errMsg) errMsg.textContent = d.error ? \`\${source}: \${d.error}\` : 'No stream URL returned.';
-            if (errEl) errEl.classList.add('show');
-            if (spinEl) spinEl.classList.add('hide');
-            return;
-        }
-        if (d.m3u8) {
-            if (window.SenshiPlayer && window.SenshiPlayer.loadWithSubs) {
-                window.SenshiPlayer.loadWithSubs(d.m3u8, d.subtitles || []);
-            } else if (window.SenshiPlayer) {
-                window.SenshiPlayer.load(d.m3u8);
-            } else {
-                const vid = document.getElementById('sp-video');
-                if (vid) { vid.src = d.m3u8; vid.load(); vid.play().catch(()=>{}); }
-            }
-            return;
-        }
-        // No direct HLS — fall back to an iframe embed.
+    function fail(msg) {
+        const errMsg = document.getElementById('sp-err-msg');
+        if (errMsg) errMsg.textContent = msg;
+        if (errEl) errEl.classList.add('show');
         if (spinEl) spinEl.classList.add('hide');
-        pw.innerHTML = \`<iframe src="\${d.embedUrl}" style="width:100%;aspect-ratio:16/9;border:0;border-radius:14px;" allowfullscreen referrerpolicy="no-referrer"></iframe>\`;
     }
 
-    // Same reuse-the-probe-response pattern as Anikoto — avoids requesting
-    // the same source twice back-to-back for a link that only survives one hit.
-    window._v2Cache = window._v2Cache || {};
-    const cacheKey = source + '::' + audio;
-    const cached = window._v2Cache[cacheKey];
-    if (cached && (Date.now() - cached.ts) < 8000) {
-        delete window._v2Cache[cacheKey];
-        applyV2Result(cached.data);
-        return;
-    }
-
-    fetch(\`${siteUrl}/api/v2_stream.php?provider=\${source}&anilist=${anilistId}&ep=${epNum}&audio=\${audio}\`)
-        .then(r => r.json())
-        .then(applyV2Result)
-        .catch(() => {
-            const errMsg = document.getElementById('sp-err-msg');
-            if (errMsg) errMsg.textContent = 'Could not reach stream server.';
-            if (errEl) errEl.classList.add('show');
-            if (spinEl) spinEl.classList.add('hide');
-        });
+    fetchV2Once(sourceKey, audio).then(d => {
+        if (d.error || !d.m3u8) {
+            fail(d.error ? \`\${sourceKey}: \${d.error}\` : 'No stream URL returned.');
+            return;
+        }
+        if (window.SenshiPlayer && window.SenshiPlayer.loadWithSubs) {
+            window.SenshiPlayer.loadWithSubs(d.m3u8, d.subtitles || []);
+        } else if (window.SenshiPlayer) {
+            window.SenshiPlayer.load(d.m3u8);
+        } else {
+            const vid = document.getElementById('sp-video');
+            if (vid) { vid.src = d.m3u8; vid.load(); vid.play().catch(()=>{}); }
+        }
+    }).catch(() => fail('Could not reach stream server.'));
 }
 
 function switchToServer(serverName, audio = currentAudio) {
@@ -466,10 +462,9 @@ function switchToServer(serverName, audio = currentAudio) {
         return;
     }
 
-    // ── AniZone / AniNeko / KAA (single-provider HLS, via v2_stream.php) ───
-    if (serverName.startsWith('v2-')) {
-        const source = serverName.slice('v2-'.length);
-        switchToV2Source(source, audio);
+    // ── v2 sources: AniZone / AniNeko / KAA (HLS + subtitles) ─────────────
+    if (['anizone', 'anineko', 'kaa'].includes(serverName)) {
+        switchToV2Source(serverName, audio);
         currentServer = serverName;
         currentAudio  = audio;
         updateActiveServerButton(serverName, audio);
@@ -583,21 +578,17 @@ document.querySelectorAll('.server-tab-panel').forEach(panel => {
                 return ok;
             }).catch(() => false);
     }
-    // AniZone/AniNeko/KAA are looked up by AniList ID (resolved server-side
-    // once, from the MAL ID, when the page rendered) rather than MAL ID —
-    // if that lookup came back empty there's nothing to probe.
-    const ANILIST_ID = ${JSON.stringify(anilistId)};
-    function checkV2Provider(source, audio) {
-        return fetch(\`\${SITE}/api/v2_stream.php?provider=\${source}&anilist=\${ANILIST_ID}&ep=\${EP}&audio=\${audio}\`)
-            .then(r => r.json()).then(d => {
-                const ok = !d.error && !!(d.m3u8 || d.embedUrl);
-                console.log('[AniVault player]', source, audio, ok ? 'OK' : 'FAILED', d);
-                if (ok) {
-                    window._v2Cache = window._v2Cache || {};
-                    window._v2Cache[source + '::' + audio] = { data: d, ts: Date.now() };
-                }
+
+    // v2 sources (AniZone/AniNeko/KAA) resolve in one shot, so the probe
+    // and the eventual play just share the same fetchV2Once cache — no
+    // separate "list" call needed like Anikoto.
+    function checkV2Source(sourceKey, audio) {
+        return fetchV2Once(sourceKey, audio)
+            .then(d => {
+                const ok = !d.error && !!d.m3u8;
+                console.log('[AniVault player]', sourceKey, audio, ok ? 'OK' : 'FAILED', d);
                 return ok;
-            }).catch(() => false);
+            }).catch(e => { console.error('[AniVault player]', sourceKey, 'fetch threw', e); return false; });
     }
 
     // ── Incremental probing ───────────────────────────────────────────────
@@ -701,12 +692,11 @@ document.querySelectorAll('.server-tab-panel').forEach(panel => {
     // contributes a dub task.
     // Senshi and Miruro have been removed — only AnimeHeaven and Anikoto
     // are probed and shown on the watch page now.
-    subPending = 2;
-    dubPending = 1;
-    // AniZone (sub-only) + AniNeko + KAA add 3 more sub tasks and 2 more
-    // dub tasks (AniNeko, KAA) — but only if we actually have an AniList ID
-    // to look them up by.
-    if (ANILIST_ID) { subPending += 3; dubPending += 2; }
+    // v2 sources (AniZone/AniNeko/KAA) need an AniList ID, which isn't
+    // always resolvable for obscure titles — skip them entirely rather
+    // than counting tasks that will never resolve.
+    subPending = 2 + (anilistId ? 3 : 0); // + anizone(sub), anineko(sub), kaa(sub)
+    dubPending = 1 + (anilistId ? 2 : 0); // + anineko(dub), kaa(dub) — anizone has no dub
 
     // ── SERVER DISPLAY NAMES ─────────────────────────────────────────────────
     // Change any value here to rename that button on the watch page.
@@ -725,9 +715,9 @@ document.querySelectorAll('.server-tab-panel').forEach(panel => {
         telli:        'Flux',
         hop:          'Dart',
         animedunya:   'Dune',
-        anizone:      'Zenith',
-        anineko:      'Nyra',
-        kaa:          'Onix',
+        anizone:      'Rift',
+        anineko:      'Paw',
+        kaa:          'Coil',
     };
 
     checkAnimeHeaven('sub').then(ok => { if (ok) markServerFound('sub', 'animeheaven', SERVER_NAMES.animeheaven); subTaskDone(); });
@@ -756,13 +746,12 @@ document.querySelectorAll('.server-tab-panel').forEach(panel => {
         dubTaskDone();
     });
 
-    // ── AniZone / AniNeko / KAA ───────────────────────────────────────────
-    if (ANILIST_ID) {
-        checkV2Provider('anizone', 'sub').then(ok => { if (ok) markServerFound('sub', 'v2-anizone', SERVER_NAMES.anizone); subTaskDone(); });
-        checkV2Provider('anineko', 'sub').then(ok => { if (ok) markServerFound('sub', 'v2-anineko', SERVER_NAMES.anineko); subTaskDone(); });
-        checkV2Provider('anineko', 'dub').then(ok => { if (ok) markServerFound('dub', 'v2-anineko', SERVER_NAMES.anineko); dubTaskDone(); });
-        checkV2Provider('kaa', 'sub').then(ok => { if (ok) markServerFound('sub', 'v2-kaa', SERVER_NAMES.kaa); subTaskDone(); });
-        checkV2Provider('kaa', 'dub').then(ok => { if (ok) markServerFound('dub', 'v2-kaa', SERVER_NAMES.kaa); dubTaskDone(); });
+    if (anilistId) {
+        checkV2Source('anizone', 'sub').then(ok => { if (ok) markServerFound('sub', 'anizone', SERVER_NAMES.anizone); subTaskDone(); });
+        checkV2Source('anineko', 'sub').then(ok => { if (ok) markServerFound('sub', 'anineko', SERVER_NAMES.anineko); subTaskDone(); });
+        checkV2Source('kaa', 'sub').then(ok => { if (ok) markServerFound('sub', 'kaa', SERVER_NAMES.kaa); subTaskDone(); });
+        checkV2Source('anineko', 'dub').then(ok => { if (ok) markServerFound('dub', 'anineko', SERVER_NAMES.anineko); dubTaskDone(); });
+        checkV2Source('kaa', 'dub').then(ok => { if (ok) markServerFound('dub', 'kaa', SERVER_NAMES.kaa); dubTaskDone(); });
     }
   } catch (e) {
     _showFatalClientError('probeAndRenderServers crashed: ' + (e && e.message ? e.message : e));
