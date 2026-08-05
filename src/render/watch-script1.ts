@@ -360,6 +360,89 @@ function switchToAnikoto(providerName, audio) {
         });
 }
 
+// ── AniZone / AniNeko / KAA (HLS via fetch, single provider per source) ──
+// Unlike Anikoto, each of these v2 sources is its own single provider (no
+// "pick a server within the source" step) — the scraper backend already
+// does its own title-matching + m3u8 resolution and hands back one stream.
+function switchToV2Source(source, audio) {
+    const pw = document.getElementById('watch-player-wrap');
+    if (!pw) return;
+
+    stopCurrentVideo();
+
+    const sp = document.getElementById('senshi-player-root');
+    if (sp && sp.parentNode) sp.parentNode.removeChild(sp);
+
+    pw.style.opacity = '0';
+
+    pw.style.aspectRatio  = 'unset';
+    pw.style.overflow     = 'visible';
+    pw.style.background   = 'transparent';
+    pw.style.borderRadius = '14px';
+    pw.innerHTML = '';
+
+    if (sp) {
+        sp.style.cssText = 'display:block;width:100%;';
+        pw.appendChild(sp);
+    }
+    pw.style.opacity = '1';
+
+    if (window.SenshiPlayer) window.SenshiPlayer.destroy();
+    const spinEl = document.getElementById('sp-spinner');
+    if (spinEl) spinEl.classList.remove('hide');
+    const errEl = document.getElementById('sp-error');
+    if (errEl) errEl.classList.remove('show');
+    const preplay = document.getElementById('sp-preplay');
+    if (preplay) preplay.classList.add('hide');
+    const badge = document.getElementById('sp-hls-badge');
+    if (badge) badge.textContent = 'HLS';
+
+    function applyV2Result(d) {
+        if (d.error || (!d.m3u8 && !d.embedUrl)) {
+            const errMsg = document.getElementById('sp-err-msg');
+            if (errMsg) errMsg.textContent = d.error ? \`\${source}: \${d.error}\` : 'No stream URL returned.';
+            if (errEl) errEl.classList.add('show');
+            if (spinEl) spinEl.classList.add('hide');
+            return;
+        }
+        if (d.m3u8) {
+            if (window.SenshiPlayer && window.SenshiPlayer.loadWithSubs) {
+                window.SenshiPlayer.loadWithSubs(d.m3u8, d.subtitles || []);
+            } else if (window.SenshiPlayer) {
+                window.SenshiPlayer.load(d.m3u8);
+            } else {
+                const vid = document.getElementById('sp-video');
+                if (vid) { vid.src = d.m3u8; vid.load(); vid.play().catch(()=>{}); }
+            }
+            return;
+        }
+        // No direct HLS — fall back to an iframe embed.
+        if (spinEl) spinEl.classList.add('hide');
+        pw.innerHTML = \`<iframe src="\${d.embedUrl}" style="width:100%;aspect-ratio:16/9;border:0;border-radius:14px;" allowfullscreen referrerpolicy="no-referrer"></iframe>\`;
+    }
+
+    // Same reuse-the-probe-response pattern as Anikoto — avoids requesting
+    // the same source twice back-to-back for a link that only survives one hit.
+    window._v2Cache = window._v2Cache || {};
+    const cacheKey = source + '::' + audio;
+    const cached = window._v2Cache[cacheKey];
+    if (cached && (Date.now() - cached.ts) < 8000) {
+        delete window._v2Cache[cacheKey];
+        applyV2Result(cached.data);
+        return;
+    }
+
+    fetch(\`${siteUrl}/api/v2_stream.php?provider=\${source}&anilist=${anilistId}&ep=${epNum}&audio=\${audio}\`)
+        .then(r => r.json())
+        .then(applyV2Result)
+        .catch(() => {
+            const errMsg = document.getElementById('sp-err-msg');
+            if (errMsg) errMsg.textContent = 'Could not reach stream server.';
+            if (errEl) errEl.classList.add('show');
+            if (spinEl) spinEl.classList.add('hide');
+        });
+}
+
 function switchToServer(serverName, audio = currentAudio) {
     const pw = document.getElementById('watch-player-wrap');
     if (!pw) return;
@@ -377,6 +460,16 @@ function switchToServer(serverName, audio = currentAudio) {
     if (serverName.startsWith('anikoto-')) {
         const providerName = serverName.slice('anikoto-'.length);
         switchToAnikoto(providerName, audio);
+        currentServer = serverName;
+        currentAudio  = audio;
+        updateActiveServerButton(serverName, audio);
+        return;
+    }
+
+    // ── AniZone / AniNeko / KAA (single-provider HLS, via v2_stream.php) ───
+    if (serverName.startsWith('v2-')) {
+        const source = serverName.slice('v2-'.length);
+        switchToV2Source(source, audio);
         currentServer = serverName;
         currentAudio  = audio;
         updateActiveServerButton(serverName, audio);
@@ -490,6 +583,22 @@ document.querySelectorAll('.server-tab-panel').forEach(panel => {
                 return ok;
             }).catch(() => false);
     }
+    // AniZone/AniNeko/KAA are looked up by AniList ID (resolved server-side
+    // once, from the MAL ID, when the page rendered) rather than MAL ID —
+    // if that lookup came back empty there's nothing to probe.
+    const ANILIST_ID = ${JSON.stringify(anilistId)};
+    function checkV2Provider(source, audio) {
+        return fetch(\`\${SITE}/api/v2_stream.php?provider=\${source}&anilist=\${ANILIST_ID}&ep=\${EP}&audio=\${audio}\`)
+            .then(r => r.json()).then(d => {
+                const ok = !d.error && !!(d.m3u8 || d.embedUrl);
+                console.log('[AniVault player]', source, audio, ok ? 'OK' : 'FAILED', d);
+                if (ok) {
+                    window._v2Cache = window._v2Cache || {};
+                    window._v2Cache[source + '::' + audio] = { data: d, ts: Date.now() };
+                }
+                return ok;
+            }).catch(() => false);
+    }
 
     // ── Incremental probing ───────────────────────────────────────────────
     // Every server check below runs independently (no Promise.all gate).
@@ -594,6 +703,10 @@ document.querySelectorAll('.server-tab-panel').forEach(panel => {
     // are probed and shown on the watch page now.
     subPending = 2;
     dubPending = 1;
+    // AniZone (sub-only) + AniNeko + KAA add 3 more sub tasks and 2 more
+    // dub tasks (AniNeko, KAA) — but only if we actually have an AniList ID
+    // to look them up by.
+    if (ANILIST_ID) { subPending += 3; dubPending += 2; }
 
     // ── SERVER DISPLAY NAMES ─────────────────────────────────────────────────
     // Change any value here to rename that button on the watch page.
@@ -612,6 +725,9 @@ document.querySelectorAll('.server-tab-panel').forEach(panel => {
         telli:        'Flux',
         hop:          'Dart',
         animedunya:   'Dune',
+        anizone:      'Zenith',
+        anineko:      'Nyra',
+        kaa:          'Onix',
     };
 
     checkAnimeHeaven('sub').then(ok => { if (ok) markServerFound('sub', 'animeheaven', SERVER_NAMES.animeheaven); subTaskDone(); });
@@ -639,6 +755,15 @@ document.querySelectorAll('.server-tab-panel').forEach(panel => {
         });
         dubTaskDone();
     });
+
+    // ── AniZone / AniNeko / KAA ───────────────────────────────────────────
+    if (ANILIST_ID) {
+        checkV2Provider('anizone', 'sub').then(ok => { if (ok) markServerFound('sub', 'v2-anizone', SERVER_NAMES.anizone); subTaskDone(); });
+        checkV2Provider('anineko', 'sub').then(ok => { if (ok) markServerFound('sub', 'v2-anineko', SERVER_NAMES.anineko); subTaskDone(); });
+        checkV2Provider('anineko', 'dub').then(ok => { if (ok) markServerFound('dub', 'v2-anineko', SERVER_NAMES.anineko); dubTaskDone(); });
+        checkV2Provider('kaa', 'sub').then(ok => { if (ok) markServerFound('sub', 'v2-kaa', SERVER_NAMES.kaa); subTaskDone(); });
+        checkV2Provider('kaa', 'dub').then(ok => { if (ok) markServerFound('dub', 'v2-kaa', SERVER_NAMES.kaa); dubTaskDone(); });
+    }
   } catch (e) {
     _showFatalClientError('probeAndRenderServers crashed: ' + (e && e.message ? e.message : e));
   }
