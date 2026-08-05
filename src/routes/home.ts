@@ -12,7 +12,7 @@ import { AnimeTracker } from '../lib/tracker';
 import { Notification } from '../lib/notification';
 import { getUserAnimeStatuses } from '../lib/user-list';
 import { icon } from '../lib/icons';
-import { h } from '../lib/helpers';
+import { h, getAnimeTitle } from '../lib/helpers';
 import { renderAnimeCard } from '../lib/anime-card';
 import { renderHeader, renderFooter } from '../render/layout';
 import { CONTINUE_WATCHING_CSS } from '../render/home-css';
@@ -100,17 +100,27 @@ homeRoutes.get('/', async (c) => {
     requestUrl: c.req.url,
   });
 
+  const spotlight = topList[0] || seasonalList[0];
+  const spotlightImg = spotlight?.images?.jpg?.large_image_url || spotlight?.images?.jpg?.image_url || '';
+  const spotlightTitle = spotlight ? getAnimeTitle(spotlight) : 'AniVault';
+
   html += `
-<div class="hero">
-  ${icon('fire', 'hero-icon', '48px')}
-  <h1 class="hero-title">Your Anime<br><span>Universe</span></h1>
-  <p class="hero-sub">Track what you watch, discover what's trending, and never lose your place again.</p>
-  <div class="flex flex-center gap-1 hero-actions">
-    ${!currentUser ? `
-    <a href="${siteUrl}/register" class="btn btn-primary btn-lg">${icon('plus', 'icon-small')} Get Started</a>
-    <a href="${siteUrl}/browse" class="btn btn-ghost btn-lg">${icon('search', 'icon-small')} Browse</a>` : `
-    <a href="${siteUrl}/mylist" class="btn btn-primary btn-lg">${icon('list', 'icon-small')} My List</a>
-    <a href="${siteUrl}/browse" class="btn btn-ghost btn-lg">${icon('search', 'icon-small')} Discover More</a>`}
+<div class="av-hero">
+  ${spotlightImg ? `<div class="av-hero-bg" style="background-image:url('${h(spotlightImg)}')"></div>` : ''}
+  <div class="av-hero-scrim"></div>
+  <div class="av-hero-glow"></div>
+  <div class="av-hero-content">
+    <div class="av-hero-tag">${icon('fire', 'icon-small')} Trending Now</div>
+    <h1 class="av-hero-title">Your Anime<br><span>Universe</span></h1>
+    <p class="av-hero-sub">Track what you watch, discover what's trending, and never lose your place again.</p>
+    <div class="flex flex-center gap-1 av-hero-actions">
+      ${!currentUser ? `
+      <a href="${siteUrl}/register" class="btn av-btn-primary btn-lg">${icon('plus', 'icon-small')} Get Started</a>
+      <a href="${siteUrl}/browse" class="btn av-btn-glass btn-lg">${icon('search', 'icon-small')} Browse</a>` : `
+      <a href="${siteUrl}/mylist" class="btn av-btn-primary btn-lg">${icon('list', 'icon-small')} My List</a>
+      <a href="${siteUrl}/browse" class="btn av-btn-glass btn-lg">${icon('search', 'icon-small')} Discover More</a>`}
+    </div>
+    ${spotlight ? `<div class="av-hero-spotlight-name">${icon('play', 'icon-small')} Now trending: <strong>${h(spotlightTitle)}</strong></div>` : ''}
   </div>
 </div>
 

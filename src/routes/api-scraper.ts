@@ -19,9 +19,6 @@ export const scraperRoutes = new Hono<{ Bindings: Env }>();
 
 const SENSHI_BASE = 'https://anivault-api.up.railway.app/api';
 const ANIKOTO_MIRURO_BASE = 'https://anivault-api.up.railway.app/';
-// v2 sources (AniZone/AniNeko/KAA) currently only live on the beta deploy —
-// swap this to SENSHI_BASE's host once v2 is merged into the main branch.
-const V2_BASE = 'https://anivault-api-beta.up.railway.app/api/v2';
 
 async function fetchJson(url: string, timeoutMs = 12000): Promise<{ ok: boolean; code: number; data: any }> {
   try {
@@ -84,53 +81,6 @@ scraperRoutes.get('/api/anikoto_stream.php', async (c) => {
   if (m3u8) return c.json({ servers, m3u8, server: data.server ?? server, subtitles: data.subtitles ?? [] });
   return c.json({ error: 'No stream URL in response' });
 });
-
-// ── api/{anizone,anineko,kaa}_stream.php ────────────────────────────────────
-// v2 sources resolve directly from an AniList ID (no MAL "site ID" mapping
-// step) and hand back everything — including any subtitles — in a single
-// /v2/watch call, unlike Anikoto's separate list-then-resolve dance. So
-// these are modeled closer to animeheaven_stream.php (one fetch, one
-// result) than anikoto_stream.php, just carrying subtitles/HLS instead of
-// a flat MP4 URL.
-type V2Provider = 'anizone' | 'anineko' | 'kaa';
-
-// AniNeko/KAA can return several mirror streams per request; AniZone only
-// ever returns one. Prefer whichever the scraper already ranked as active
-// (AniNeko marks this explicitly), otherwise just take the first working
-// HLS entry — the goal here is "pick something playable", not exposing
-// every mirror as its own button.
-function pickV2Stream(data: any): { m3u8: string | null; subtitles: any[] } {
-  const streams: any[] = Array.isArray(data?.streams) ? data.streams : [];
-  const hls = streams.find((s) => s.isActive && s.type === 'hls') ?? streams.find((s) => s.type === 'hls');
-  const subtitles = (hls?.subtitles ?? []).map((s: any) => ({
-    url: s.url,
-    lang: s.lang ?? s.language ?? s.srclang ?? 'en',
-    label: s.label ?? s.lang ?? s.language ?? 'Subtitles',
-    default: !!s.default,
-  }));
-  return { m3u8: hls?.url ?? null, subtitles };
-}
-
-function registerV2Route(provider: V2Provider, dubSupported: boolean) {
-  scraperRoutes.get(`/api/${provider}_stream.php`, async (c) => {
-    const anilistId = parseInt(c.req.query('anilist') ?? '0', 10) || 0;
-    const epNum = parseInt(c.req.query('ep') ?? '0', 10) || 0;
-    const audio = c.req.query('audio') === 'dub' ? 'dub' : 'sub';
-    if (!anilistId || !epNum) return c.json({ error: 'Missing anilist or ep' }, 400);
-    if (audio === 'dub' && !dubSupported) return c.json({ error: `${provider} has no dub audio` });
-
-    const { ok, code, data } = await fetchJson(`${V2_BASE}/watch/${provider}/${anilistId}/${audio}/${epNum}`, 20000);
-    if (!ok) return c.json({ error: data?.error ?? `${provider} fetch failed HTTP ${code}` });
-
-    const { m3u8, subtitles } = pickV2Stream(data);
-    if (!m3u8) return c.json({ error: 'No stream URL in response' });
-    return c.json({ m3u8, subtitles });
-  });
-}
-
-registerV2Route('anizone', false);
-registerV2Route('anineko', true);
-registerV2Route('kaa', true);
 
 // ── api/server_check.php ───────────────────────────────────────────────────
 const ERROR_PHRASES = ['episode not found', 'video not found', '404 not found', 'page not found', 'no video found', 'no sources found', 'no servers found', 'this episode is not available', 'something went wrong'];
