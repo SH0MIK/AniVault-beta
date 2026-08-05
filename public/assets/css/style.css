@@ -2863,3 +2863,217 @@ textarea.form-control { resize: vertical; min-height: 100px; }
   line-height: 1;
 }
 .chat-react-picker button:hover { background: var(--bg-hover); }
+
+/* =============================================================
+   AniVault — Neon-Glass Theme
+   Near-black base, violet neon-glass accents, floating glass nav,
+   glow shadows, pill radii, spotlight hero banner.
+   ============================================================= */
+
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap');
+
+:root {
+  --bg-base:        #08080a;
+  --bg-surface:      #0d0d10;
+  --bg-elevated:     #111114;
+  --bg-card:         #0f0f13;
+  --bg-hover:        #1a1a20;
+  --accent:          #7c3aed;
+  --accent-2:        #9d6ef8;
+  --accent-dim:      #5b21b6;
+  --accent-glow:     rgba(124,58,237,0.38);
+  --gold:            #f5c842;
+  --teal:            #22c55e;
+  --purple:          #a78bfa;
+  --blue:            #60a5fa;
+  --text-primary:    #ffffff;
+  --text-secondary:  #8b8b9e;
+  --text-muted:      #4a4a58;
+  --border:          rgba(255,255,255,0.07);
+  --border-bright:   rgba(124,58,237,0.45);
+  --radius-lg:       16px;
+  --radius-pill:     999px;
+  --shadow-card:     0 4px 32px rgba(0,0,0,0.75);
+  --shadow-glow:     0 8px 40px rgba(124,58,237,0.35);
+  --font-display:    'Manrope', sans-serif;
+  --font-body:       'Inter', sans-serif;
+}
+
+body {
+  font-family: var(--font-body);
+  background: var(--bg-base);
+  background-image:
+    radial-gradient(ellipse 900px 500px at 15% -10%, rgba(124,58,237,0.10), transparent 60%),
+    radial-gradient(ellipse 700px 500px at 90% 10%, rgba(157,110,248,0.06), transparent 60%);
+  background-attachment: fixed;
+}
+h1, h2, h3, h4, .section-title, .nav-logo { font-family: var(--font-display); }
+
+/* ── Floating glass nav ── */
+.navbar {
+  margin: 14px auto 0;
+  max-width: 1320px;
+  left: 0; right: 0;
+  background: rgba(13,13,16,0.72);
+  backdrop-filter: blur(18px) saturate(160%);
+  -webkit-backdrop-filter: blur(18px) saturate(160%);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  box-shadow: 0 8px 30px rgba(0,0,0,0.45);
+}
+.nav-logo { font-weight: 800; letter-spacing: -0.02em; }
+.nav-logo span { color: var(--accent-2); }
+.nav-links a.active { color: #fff; background: rgba(124,58,237,0.18); border-radius: var(--radius-pill); }
+
+/* ── Buttons: violet glow primary, frosted glass secondary ── */
+.btn { border-radius: var(--radius-pill); font-weight: 600; }
+.btn-primary, .av-btn-primary {
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-dim) 100%);
+  border-color: transparent;
+  box-shadow: 0 4px 20px rgba(124,58,237,0.35);
+}
+.btn-primary:hover, .av-btn-primary:hover { box-shadow: 0 6px 28px rgba(124,58,237,0.55); filter: brightness(1.08); transform: translateY(-1px); }
+.btn-ghost, .av-btn-glass {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid var(--border);
+  backdrop-filter: blur(8px);
+  color: var(--text-primary);
+}
+.btn-ghost:hover, .av-btn-glass:hover { background: rgba(255,255,255,0.1); border-color: var(--border-bright); }
+
+/* ── Section titles ── */
+.section-title {
+  color: #fff; font-weight: 800; letter-spacing: -0.01em;
+  position: relative; padding-left: 16px;
+}
+.section-title::before {
+  content: ''; position: absolute; left: 0; top: 50%; transform: translateY(-50%);
+  width: 5px; height: 65%; border-radius: 3px;
+  background: linear-gradient(180deg, var(--accent-2), var(--accent));
+  box-shadow: 0 0 12px var(--accent-glow);
+}
+.section-title::after { background: var(--border); }
+
+/* ── Anime cards: glow-on-hover, glass score chip ── */
+.anime-card {
+  border-radius: var(--radius-lg);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  transition: transform 0.28s cubic-bezier(.2,.8,.2,1), box-shadow 0.28s ease, border-color 0.28s ease;
+  overflow: hidden;
+}
+.anime-card:hover {
+  transform: translateY(-6px) scale(1.015);
+  border-color: var(--border-bright);
+  box-shadow: var(--shadow-glow);
+}
+.anime-card-score {
+  background: rgba(8,8,10,0.75);
+  backdrop-filter: blur(6px);
+  border: 1px solid var(--border-bright);
+  border-radius: var(--radius-pill);
+}
+.genre-tag {
+  border-radius: var(--radius-pill);
+  background: rgba(124,58,237,0.1);
+  border: 1px solid rgba(124,58,237,0.3);
+  color: var(--accent-2);
+}
+.genre-tag:hover { border-color: var(--accent-2); color: #fff; background: rgba(124,58,237,0.22); }
+
+/* ── Spotlight hero banner ── */
+.av-hero {
+  position: relative;
+  min-height: 58vh;
+  display: flex; align-items: flex-end;
+  border-radius: 0 0 28px 28px;
+  overflow: hidden;
+  margin-top: 20px;
+}
+.av-hero-bg {
+  position: absolute; inset: 0;
+  background-size: cover; background-position: center 20%;
+  filter: saturate(1.1) brightness(0.75);
+  transform: scale(1.05);
+}
+.av-hero-scrim {
+  position: absolute; inset: 0;
+  background:
+    linear-gradient(0deg, var(--bg-base) 2%, rgba(8,8,10,0.65) 40%, rgba(8,8,10,0.35) 70%, rgba(8,8,10,0.55) 100%),
+    linear-gradient(90deg, rgba(8,8,10,0.75) 0%, transparent 55%);
+}
+.av-hero-glow {
+  position: absolute; left: 8%; bottom: -10%;
+  width: 480px; height: 480px;
+  background: radial-gradient(circle, var(--accent-glow), transparent 70%);
+  filter: blur(20px);
+  pointer-events: none;
+}
+.av-hero-content { position: relative; z-index: 1; padding: 3rem 2rem 3.5rem; max-width: 720px; }
+.av-hero-tag {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 0.78rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
+  color: var(--accent-2);
+  background: rgba(124,58,237,0.12);
+  border: 1px solid rgba(124,58,237,0.3);
+  padding: 6px 14px; border-radius: var(--radius-pill);
+  margin-bottom: 1.1rem;
+}
+.av-hero-title {
+  font-size: 3.4rem; font-weight: 800; letter-spacing: -0.03em; line-height: 1.05;
+  color: #fff; margin-bottom: 0.9rem;
+}
+.av-hero-title span {
+  background: linear-gradient(120deg, var(--accent-2), var(--accent));
+  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+}
+.av-hero-sub { font-size: 1.08rem; color: var(--text-secondary); margin-bottom: 1.6rem; max-width: 540px; }
+.av-hero-actions { justify-content: flex-start; }
+.av-hero-spotlight-name {
+  margin-top: 1.4rem; font-size: 0.88rem; color: var(--text-secondary);
+  display: flex; align-items: center; gap: 6px;
+}
+.av-hero-spotlight-name strong { color: #fff; }
+
+@media (max-width: 700px) {
+  .av-hero { min-height: 48vh; margin-top: 12px; }
+  .av-hero-content { padding: 2rem 1.25rem 2.25rem; }
+  .av-hero-title { font-size: 2.1rem; }
+  .av-hero-actions { justify-content: center; }
+  .av-hero-glow { width: 300px; height: 300px; }
+}
+
+/* ── Stat tiles: glass panels ── */
+.stat-card {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--border);
+  backdrop-filter: blur(10px);
+  border-radius: var(--radius-lg);
+}
+
+/* ── Anime detail: glass panel, glow poster frame ── */
+.av-detail-panel {
+  background: rgba(255,255,255,0.025);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  backdrop-filter: blur(10px);
+}
+.av-poster-frame {
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  border: 1px solid var(--border-bright);
+  box-shadow: var(--shadow-glow);
+}
+.av-genre-tag {
+  display: inline-flex; align-items: center;
+  font-size: 0.78rem; font-weight: 600;
+  padding: 5px 13px; border-radius: var(--radius-pill);
+  background: rgba(124,58,237,0.14);
+  border: 1px solid rgba(124,58,237,0.35);
+  color: var(--accent-2);
+}
+.tab-btn.active { color: var(--accent-2); box-shadow: inset 0 -2px 0 var(--accent-2); }
+
+/* ── Footer polish ── */
+.footer { background: var(--bg-surface); }
+.footer-logo span { color: var(--accent-2); }
