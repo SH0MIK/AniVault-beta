@@ -102,8 +102,7 @@ homeRoutes.get('/', async (c) => {
 
   html += `
 <div class="hero">
-  <div class="hero-vault-rings"><div class="hero-vault-ring-mid"></div></div>
-  <div class="hero-eyebrow">The Vault is Open</div>
+  ${icon('fire', 'hero-icon', '48px')}
   <h1 class="hero-title">Your Anime<br><span>Universe</span></h1>
   <p class="hero-sub">Track what you watch, discover what's trending, and never lose your place again.</p>
   <div class="flex flex-center gap-1 hero-actions">

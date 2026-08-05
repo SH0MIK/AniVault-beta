@@ -102,7 +102,7 @@ animeRoutes.get('/anime', async (c) => {
 
   html += `
 <div class="container section">
-  <div class="anime-detail-header av-detail-panel" style="padding:1.5rem;">
+  <div class="anime-detail-header">
     <style>
       .anime-detail-header { display: flex; gap: 1.5rem; margin-bottom: 1.5rem; align-items: flex-start; }
       .anime-poster-col { width: 220px; flex-shrink: 0; }
@@ -121,7 +121,7 @@ animeRoutes.get('/anime', async (c) => {
     </style>
     ${image ? `
     <div class="anime-poster-col">
-      <div class="av-poster-frame"><img src="${h(image)}" alt="${h(title)}" style="width:100%;display:block;"></div>
+      <img src="${h(image)}" alt="${h(title)}" style="width:100%;border-radius:var(--radius-lg);border:1px solid var(--border);display:block;">
       ${streamLinks.length > 0 ? `
       <div class="stream-under-poster" style="margin-top:12px;">
         ${streamWatchOn(streamLinks, id, siteUrl)}
@@ -149,7 +149,7 @@ animeRoutes.get('/anime', async (c) => {
       ${jpTitle && jpTitle !== title ? `<p class="text-muted mb-1">${h(jpTitle)}</p>` : ''}
 
       <div class="flex flex-wrap gap-1 mb-2" style="gap:8px;">
-        ${anime.score ? `<span class="av-genre-tag">⭐ ${anime.score.toFixed(2)}/10 <span style="color:var(--text-muted);font-weight:400;margin-left:4px;">(${(anime.scored_by || anime.members || 0).toLocaleString('en-US')} users)</span></span>` : ''}
+        ${anime.score ? `<span style="background:rgba(245,200,66,0.15);color:var(--gold);padding:4px 12px;border-radius:20px;font-size:0.85rem;font-weight:600;">⭐ ${anime.score.toFixed(2)}/10 <span style="color:var(--text-muted);font-weight:400;">(${(anime.scored_by || anime.members || 0).toLocaleString('en-US')} users)</span></span>` : ''}
         ${anime.rank ? `<span class="genre-tag">🏆 Rank #${anime.rank}</span>` : ''}
         ${anime.popularity ? `<span class="genre-tag">🔥 #${anime.popularity} Popular</span>` : ''}
       </div>
