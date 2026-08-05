@@ -20,6 +20,13 @@ export const scraperRoutes = new Hono<{ Bindings: Env }>();
 const SENSHI_BASE = 'https://anivault-api.up.railway.app/api';
 const ANIKOTO_MIRURO_BASE = 'https://anivault-api.up.railway.app/';
 
+// AniZone / AniNeko / KAA live on the beta scraper deployment (a separate
+// Railway service from the main one above) and are looked up by AniList ID
+// rather than MAL ID — see getAnilistIdFromMal() in routes/watch.ts.
+const V2_BASE = 'https://anivault-api-beta.up.railway.app/api';
+const V2_SOURCES = ['anizone', 'anineko', 'kaa'] as const;
+type V2Source = typeof V2_SOURCES[number];
+
 async function fetchJson(url: string, timeoutMs = 12000): Promise<{ ok: boolean; code: number; data: any }> {
   try {
     const controller = new AbortController();
@@ -79,6 +86,34 @@ scraperRoutes.get('/api/anikoto_stream.php', async (c) => {
 
   if (data?.iframeOnly) return c.json({ servers, embedUrl: data.embedUrl ?? '', iframeOnly: true, server: data.server ?? server });
   if (m3u8) return c.json({ servers, m3u8, server: data.server ?? server, subtitles: data.subtitles ?? [] });
+  return c.json({ error: 'No stream URL in response' });
+});
+
+// ── api/v2_stream.php (AniZone / AniNeko / KAA) ─────────────────────────────
+// Same shape as anikoto_stream.php above (m3u8 + optional subtitles, or an
+// iframeOnly embedUrl when the source only handed back an embed link) but
+// each of these is a single provider on its own, not a multi-server list —
+// so there's no separate "list servers" step, just probe-and-play directly.
+// Read-only proxy, no session data to persist.
+scraperRoutes.get('/api/v2_stream.php', async (c) => {
+  const provider = (c.req.query('provider') ?? '').trim();
+  if (!V2_SOURCES.includes(provider as V2Source)) return c.json({ error: 'Invalid provider' }, 400);
+
+  const anilistId = parseInt(c.req.query('anilist') ?? '0', 10) || 0;
+  const epNum = parseInt(c.req.query('ep') ?? '0', 10) || 0;
+  const audio = ['sub', 'dub'].includes(c.req.query('audio') ?? '') ? c.req.query('audio')! : 'sub';
+  if (!anilistId || !epNum) return c.json({ error: 'Missing anilist or ep' }, 400);
+
+  const { ok, code, data } = await fetchJson(`${V2_BASE}/v2/watch/${provider}/${anilistId}/${audio}/${epNum}`, 20000);
+  if (!ok) return c.json({ error: data?.error ?? `${provider} fetch failed HTTP ${code}` });
+
+  const streams: any[] = Array.isArray(data?.streams) ? data.streams : [];
+  const hlsStream = streams.find((s) => s?.type === 'hls' && s?.url);
+  if (hlsStream) return c.json({ m3u8: hlsStream.url, server: hlsStream.server ?? provider, subtitles: hlsStream.subtitles ?? [] });
+
+  const embedStream = streams.find((s) => s?.url);
+  if (embedStream) return c.json({ embedUrl: embedStream.url, iframeOnly: true, server: embedStream.server ?? provider });
+
   return c.json({ error: 'No stream URL in response' });
 });
 
