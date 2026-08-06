@@ -44,6 +44,9 @@ export interface NormalisedAnime {
   members: number;
   broadcast: { day: string | null; time: string | null };
   duration_mins: number | null;
+  // Only populated for AniList-sourced entries (see getAniListSeasonNow) —
+  // MAL/Jikan has no equivalent field. A real wide banner image, not a poster.
+  banner_image?: string;
 }
 
 export class MalAPI {
@@ -103,40 +106,97 @@ export class MalAPI {
     return { data: [] };
   }
 
-  // AniList doesn't share MAL's poster art — it has real wide banner images
-  // (bannerImage), which is what Anivexa's hero uses. We look these up by
-  // MAL id (idMal) in a single batched GraphQL call and cache the result,
-  // since AniList has no official rate-limit guarantee.
-  async getAniListBanners(malIds: number[]): Promise<Record<number, string>> {
-    const ids = [...new Set(malIds)].filter(Boolean);
-    if (ids.length === 0) return {};
+  // AniList's "this season" data is far more current than MAL/Jikan's
+  // season/now endpoint (which frequently lags real air dates or lists
+  // shows as "airing" long after/before they actually are). This also
+  // gives us AniList's real wide bannerImage for free, which MAL has no
+  // equivalent for at all — that's what the home page hero uses.
+  async getAniListSeasonNow(): Promise<{ data: NormalisedAnime[] }> {
+    const now = new Date();
+    const month = now.getUTCMonth() + 1; // 1-12
+    const seasonYear = now.getUTCFullYear();
+    const season = month <= 3 ? 'WINTER' : month <= 6 ? 'SPRING' : month <= 9 ? 'SUMMER' : 'FALL';
 
-    const cacheKey = 'anilist_banners_' + (await sha1(ids.slice().sort((a, b) => a - b).join(',')));
+    const cacheKey = `anilist_season_${season}_${seasonYear}`;
     if (this.kv && this.cacheEnabled()) {
-      const cached = await this.kv.get(cacheKey, 'json') as Record<number, string> | null;
+      const cached = await this.kv.get(cacheKey, 'json') as { data: NormalisedAnime[] } | null;
       if (cached) return cached;
     }
 
-    const query = `query ($ids: [Int]) { Page(perPage: 50) { media(idMal_in: $ids, type: ANIME) { idMal bannerImage } } }`;
+    const query = `
+      query ($season: MediaSeason, $seasonYear: Int) {
+        Page(page: 1, perPage: 24) {
+          media(season: $season, seasonYear: $seasonYear, type: ANIME, sort: POPULARITY_DESC, isAdult: false) {
+            idMal
+            title { romaji english }
+            description(asHtml: false)
+            bannerImage
+            coverImage { large extraLarge }
+            genres
+            episodes
+            averageScore
+            format
+            status
+          }
+        }
+      }`;
+
     try {
       const res = await fetch('https://graphql.anilist.co', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({ query, variables: { ids } }),
+        body: JSON.stringify({ query, variables: { season, seasonYear } }),
       });
-      if (!res.ok) return {};
+      if (!res.ok) return { data: [] };
       const json: any = await res.json();
-      const media = json?.data?.Page?.media ?? [];
-      const map: Record<number, string> = {};
-      for (const m of media) {
-        if (m.idMal && m.bannerImage) map[m.idMal] = m.bannerImage;
-      }
+      const media: any[] = json?.data?.Page?.media ?? [];
+
+      const data: NormalisedAnime[] = media
+        .filter((m) => m.idMal)
+        .map((m) => ({
+          mal_id: m.idMal,
+          title: m.title?.romaji || m.title?.english || 'Unknown',
+          title_english: m.title?.english || '',
+          title_japanese: '',
+          images: {
+            jpg: {
+              image_url: m.coverImage?.large || '',
+              large_image_url: m.coverImage?.extraLarge || m.coverImage?.large || '',
+            },
+          },
+          synopsis: stripAniListHtml(m.description || ''),
+          background: '',
+          score: typeof m.averageScore === 'number' ? m.averageScore / 10 : null,
+          scored_by: null,
+          rank: null,
+          popularity: null,
+          episodes: m.episodes || 0,
+          status: m.status || '',
+          type: m.format || 'TV',
+          rating: '',
+          source: '',
+          duration: null,
+          aired: { string: null },
+          start_date: null,
+          genres: (m.genres || []).map((g: string, i: number) => ({ mal_id: i, name: g })),
+          studios: [],
+          related_anime: [],
+          recommendations: [],
+          trailer: [],
+          themes: [],
+          members: 0,
+          broadcast: { day: null, time: null },
+          duration_mins: null,
+          banner_image: m.bannerImage || undefined,
+        }));
+
+      const result = { data };
       if (this.kv && this.cacheEnabled()) {
-        await this.kv.put(cacheKey, JSON.stringify(map), { expirationTtl: Math.max(this.cacheTtl(), 21600) });
+        await this.kv.put(cacheKey, JSON.stringify(result), { expirationTtl: this.cacheTtl() });
       }
-      return map;
+      return result;
     } catch {
-      return {};
+      return { data: [] };
     }
   }
 
@@ -390,4 +450,18 @@ function mapStatus(s: string): string {
 async function sha1(str: string): Promise<string> {
   const buf = await crypto.subtle.digest('SHA-1', new TextEncoder().encode(str));
   return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+// AniList descriptions come back with light HTML markup (<br>, <i>, etc.)
+// and literal escaped entities — strip both down to plain text.
+function stripAniListHtml(input: string): string {
+  return input
+    .replace(/<br\s*\/?>/gi, ' ')
+    .replace(/<\/?[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&#039;/g, "'")
+    .replace(/\s+/g, ' ')
+    .trim();
 }
