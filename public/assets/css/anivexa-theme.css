@@ -115,9 +115,11 @@ body { font-family: var(--font-body); }
 .scroll-row::-webkit-scrollbar { height: 4px; }
 .scroll-row::-webkit-scrollbar-thumb { background: var(--accent); border-radius: 99px; }
 .scroll-row .anime-card { flex-shrink: 0; width: 158px; }
-.scroll-row .cw-card { flex-shrink: 0; }
+.scroll-row .cw-card { flex-shrink: 0; width: 260px; }
+.scroll-row .cw-card:nth-child(n+4) { display: flex !important; }
 @media (max-width: 640px) {
   .scroll-row .anime-card { width: 130px; }
+  .scroll-row .cw-card { width: 200px; }
 }
 
 /* -- home grid + sidebar widget -- */
