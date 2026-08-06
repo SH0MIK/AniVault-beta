@@ -187,10 +187,18 @@ export class MalAPI {
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify({ query, variables: { season, seasonYear } }),
       });
-      if (!res.ok) return null;
+      if (!res.ok) {
+        const bodyText = await res.text().catch(() => '');
+        console.error(`[anilist] HTTP ${res.status} ${res.statusText}`, bodyText.slice(0, 500));
+        return null;
+      }
       const json: any = await res.json();
-      if (json?.errors?.length) return null;
+      if (json?.errors?.length) {
+        console.error('[anilist] GraphQL errors:', JSON.stringify(json.errors).slice(0, 500));
+        return null;
+      }
       const media: any[] = json?.data?.Page?.media ?? [];
+      console.log(`[anilist] fetched ${media.length} media for ${season} ${seasonYear}`);
 
       return media
         .filter((m) => m.idMal)
@@ -230,7 +238,8 @@ export class MalAPI {
           duration_mins: null,
           banner_image: m.bannerImage || undefined,
         }));
-    } catch {
+    } catch (err) {
+      console.error('[anilist] fetch threw:', err instanceof Error ? err.message : String(err));
       return null;
     }
   }
