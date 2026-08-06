@@ -111,17 +111,57 @@ export class MalAPI {
   // shows as "airing" long after/before they actually are). This also
   // gives us AniList's real wide bannerImage for free, which MAL has no
   // equivalent for at all — that's what the home page hero uses.
+  //
+  // Live requests should almost never need to hit AniList directly: a cron
+  // job (see refreshAniListSeasonCache below + src/scheduled.ts) keeps this
+  // cache warm on a timer. This method is the read path — cache first, and
+  // only falls back to a live AniList call / then MAL if the cache is
+  // somehow cold (e.g. right after first deploy, before the cron has run).
   async getAniListSeasonNow(): Promise<{ data: NormalisedAnime[] }> {
-    const now = new Date();
-    const month = now.getUTCMonth() + 1; // 1-12
-    const seasonYear = now.getUTCFullYear();
-    const season = month <= 3 ? 'WINTER' : month <= 6 ? 'SPRING' : month <= 9 ? 'SUMMER' : 'FALL';
-
-    const cacheKey = `anilist_season_${season}_${seasonYear}`;
+    const cacheKey = this.seasonCacheKey();
     if (this.kv && this.cacheEnabled()) {
       const cached = await this.kv.get(cacheKey, 'json') as { data: NormalisedAnime[] } | null;
       if (cached) return cached;
     }
+
+    const data = await this.fetchAniListSeasonLive();
+    if (!data || data.length === 0) return this.getSeasonNowFallback();
+
+    const result = { data };
+    if (this.kv && this.cacheEnabled()) {
+      // Generous TTL as a safety net — the cron is what actually keeps this
+      // fresh minute-to-minute; this just stops a cold cache from forcing
+      // every single request to call AniList live.
+      await this.kv.put(cacheKey, JSON.stringify(result), { expirationTtl: Math.max(this.cacheTtl(), 7200) });
+    }
+    return result;
+  }
+
+  // Called by the scheduled cron handler ONLY — always hits AniList live
+  // (ignores whatever's already cached) and overwrites the cache key that
+  // getAniListSeasonNow() reads. Returns true on a successful refresh.
+  async refreshAniListSeasonCache(): Promise<boolean> {
+    const data = await this.fetchAniListSeasonLive();
+    if (!data || data.length === 0) return false;
+    if (this.kv && this.cacheEnabled()) {
+      await this.kv.put(this.seasonCacheKey(), JSON.stringify({ data }), { expirationTtl: 7200 });
+    }
+    return true;
+  }
+
+  private seasonCacheKey(): string {
+    const now = new Date();
+    const month = now.getUTCMonth() + 1; // 1-12
+    const seasonYear = now.getUTCFullYear();
+    const season = month <= 3 ? 'WINTER' : month <= 6 ? 'SPRING' : month <= 9 ? 'SUMMER' : 'FALL';
+    return `anilist_season_${season}_${seasonYear}`;
+  }
+
+  private async fetchAniListSeasonLive(): Promise<NormalisedAnime[] | null> {
+    const now = new Date();
+    const month = now.getUTCMonth() + 1;
+    const seasonYear = now.getUTCFullYear();
+    const season = month <= 3 ? 'WINTER' : month <= 6 ? 'SPRING' : month <= 9 ? 'SUMMER' : 'FALL';
 
     const query = `
       query ($season: MediaSeason, $seasonYear: Int) {
@@ -147,11 +187,12 @@ export class MalAPI {
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify({ query, variables: { season, seasonYear } }),
       });
-      if (!res.ok) return { data: [] };
+      if (!res.ok) return null;
       const json: any = await res.json();
+      if (json?.errors?.length) return null;
       const media: any[] = json?.data?.Page?.media ?? [];
 
-      const data: NormalisedAnime[] = media
+      return media
         .filter((m) => m.idMal)
         .map((m) => ({
           mal_id: m.idMal,
@@ -189,12 +230,19 @@ export class MalAPI {
           duration_mins: null,
           banner_image: m.bannerImage || undefined,
         }));
+    } catch {
+      return null;
+    }
+  }
 
-      const result = { data };
-      if (this.kv && this.cacheEnabled()) {
-        await this.kv.put(cacheKey, JSON.stringify(result), { expirationTtl: this.cacheTtl() });
-      }
-      return result;
+  // Used when AniList errors, times out, or returns nothing — falls back to
+  // MAL/Jikan's season/now data so the row and hero still populate (just
+  // without AniList's banner art) instead of showing nothing. Deliberately
+  // not cached under the AniList key, so the very next request tries
+  // AniList fresh rather than staying stuck on the fallback.
+  private async getSeasonNowFallback(): Promise<{ data: NormalisedAnime[] }> {
+    try {
+      return await this.getSeasonNow(1);
     } catch {
       return { data: [] };
     }
