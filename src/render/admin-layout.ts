@@ -67,6 +67,7 @@ ${o.impersonating ? `
     <a href="stream_cache.php" class="${active('stream_cache')}">${icon('database', 'icon-small')} Stream Cache</a>
     <a href="ep_thumbnails.php" class="${active('ep_thumbnails')}">${icon('camera', 'icon-small')} EP Thumbnails</a>
     <a href="anime_images.php" class="${active('anime_images')}">${icon('upload', 'icon-small')} Anime Images</a>
+    <a href="anime_banners.php" class="${active('anime_banners')}">${icon('camera', 'icon-small')} Anime Banners</a>
     <a href="heal_images.php" class="${active('heal_images')}">${icon('heal', 'icon-small')} Heal Images</a>
 
     <div class="nav-group">System</div>
