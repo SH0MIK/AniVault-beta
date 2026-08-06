@@ -103,7 +103,7 @@ body { font-family: var(--font-body); }
 @media (max-width: 768px) { .genre-nav-btn { display: none !important; } }
 
 /* -- section headers / scroll rows -- */
-.content-section { margin-bottom: 48px; position: relative; }
+.content-section { margin-bottom: 48px; position: relative; min-width: 0; }
 .section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; gap: 12px; flex-wrap: wrap; }
 .section-title { display: flex; align-items: center; gap: 10px; font-size: 1.15rem; font-weight: 700; }
 .section-title::before { content: ''; display: block; width: 4px; height: 20px; background: var(--grad-accent); border-radius: 2px; }
@@ -111,15 +111,19 @@ body { font-family: var(--font-body); }
 .section-link:hover { color: var(--purple); gap: 8px; }
 .row-nav-btn { opacity: .5; transition: var(--trans); }
 .content-section:hover .row-nav-btn { opacity: 1; }
-.scroll-row { display: flex; gap: 14px; overflow-x: auto; scroll-behavior: smooth; padding: 6px 2px 12px; scrollbar-width: thin; scrollbar-color: var(--accent) transparent; }
+.scroll-row { display: flex; gap: 14px; overflow-x: auto; scroll-behavior: smooth; padding: 6px 2px 12px; scrollbar-width: thin; scrollbar-color: var(--accent) transparent; min-width: 0; }
 .scroll-row::-webkit-scrollbar { height: 4px; }
 .scroll-row::-webkit-scrollbar-thumb { background: var(--accent); border-radius: 99px; }
 .scroll-row .anime-card { flex-shrink: 0; width: 158px; }
 .scroll-row .cw-card { flex-shrink: 0; }
+@media (max-width: 640px) {
+  .scroll-row .anime-card { width: 130px; }
+}
 
 /* -- home grid + sidebar widget -- */
-.home-grid { display: grid; grid-template-columns: 1fr 320px; gap: 40px; align-items: start; }
-@media (max-width: 1024px) { .home-grid { grid-template-columns: 1fr; } }
+.home-grid { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 40px; align-items: start; }
+.home-grid > .home-sections { min-width: 0; }
+@media (max-width: 1024px) { .home-grid { grid-template-columns: minmax(0, 1fr); } }
 .sidebar-widget { position: sticky; top: calc(var(--header-h) + 16px); background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; }
 @media (max-width: 1024px) { .sidebar-widget { position: static; margin-top: 8px; } }
 .sidebar-widget-header { padding: 16px 16px 12px; border-bottom: 1px solid var(--border); background: rgba(255,255,255,.02); font-size: .95rem; font-weight: 700; display: flex; align-items: center; gap: 8px; }
