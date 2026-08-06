@@ -257,9 +257,22 @@ export class MalAPI {
     }
   }
 
-  private async getLocalAnimeImage(animeId: number): Promise<string> {
+  // Public so the home page (and anywhere else) can look up an admin-saved
+  // local cover for a specific anime — e.g. the mobile hero, which shows
+  // your own cover art instead of the wide banner (see home.ts).
+  async getLocalAnimeImage(animeId: number): Promise<string> {
     if (!animeId) return '';
     const row = await this.db.fetchOne<{ image_url: string }>('SELECT image_url FROM anime_images WHERE anime_id = ?', [animeId]);
+    return row ? row.image_url : '';
+  }
+
+  // Same idea as getLocalAnimeImage, but for wide banner art (a separate
+  // table/admin page: anime_banners / admin/anime_banners.php). AniList's
+  // bannerImage is community-submitted and often mediocre — this lets you
+  // manually curate a nicer banner per title, same as Anivexa does.
+  async getLocalAnimeBanner(animeId: number): Promise<string> {
+    if (!animeId) return '';
+    const row = await this.db.fetchOne<{ image_url: string }>('SELECT image_url FROM anime_banners WHERE anime_id = ?', [animeId]);
     return row ? row.image_url : '';
   }
 
