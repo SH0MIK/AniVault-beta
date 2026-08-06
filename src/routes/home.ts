@@ -106,10 +106,20 @@ homeRoutes.get('/', async (c) => {
   // Anivexa's "spotlight" behaviour rather than the all-time popular list.
   const heroPool = (seasonalList.length > 0 ? seasonalList : topList).slice(0, 6);
 
+  // Desktop shows the wide banner (your own curated upload if you've saved
+  // one for that title, else AniList's, else the poster). Mobile shows the
+  // portrait cover instead — your own saved local cover if there is one,
+  // matching Anivexa's mobile behaviour — via a <picture> breakpoint swap,
+  // no JS needed.
+  const [heroBanners, heroCovers] = await Promise.all([
+    Promise.all(heroPool.map((a) => mal.getLocalAnimeBanner(a.mal_id))),
+    Promise.all(heroPool.map((a) => mal.getLocalAnimeImage(a.mal_id))),
+  ]);
+
   html += `
 <section id="hero">
   <div id="hero-slides">
-    ${heroPool.map((a, i) => renderHeroSlide(a, i, siteUrl, a.banner_image)).join('')}
+    ${heroPool.map((a, i) => renderHeroSlide(a, i, siteUrl, heroBanners[i] || a.banner_image, heroCovers[i])).join('')}
   </div>
   <div class="hero-indicators" id="hero-dots">
     ${heroPool.map((_, i) => `<button class="hero-dot ${i === 0 ? 'active' : ''}" data-idx="${i}" aria-label="Slide ${i + 1}"></button>`).join('')}
@@ -271,19 +281,27 @@ function sectionHeader(title: string, rowId: string, viewAllHref?: string, viewA
 }
 
 // One slide of the hero carousel, built from a currently-airing anime entry.
-// `banner` is AniList's wide bannerImage for this title (looked up by MAL id);
-// falls back to the MAL poster art when AniList has no banner on file.
-function renderHeroSlide(a: NormalisedAnime, i: number, siteUrl: string, banner?: string): string {
+// `banner` = wide art for desktop (local override > AniList's bannerImage >
+// poster fallback). `mobileCover` = your own saved local cover, shown
+// instead of the banner on small screens (Anivexa does the same) — falls
+// back to the API poster if you haven't saved one for this title yet.
+function renderHeroSlide(a: NormalisedAnime, i: number, siteUrl: string, banner?: string, mobileCover?: string): string {
   const title = a.title_english && a.title_english !== a.title ? a.title_english : (a.title || 'Unknown');
   const poster = a.images?.jpg?.large_image_url || a.images?.jpg?.image_url || '';
   const bg = banner || poster;
+  const cover = mobileCover || poster;
   const desc = a.synopsis || '';
   const genres = (a.genres || []).slice(0, 3);
   const aurl = `${siteUrl}/anime?id=${a.mal_id}`;
 
   return `
 <div class="hero-slide ${i === 0 ? 'active' : ''}" data-idx="${i}">
-  <div class="hero-bg${banner ? '' : ' hero-bg-fallback'}">${bg ? `<img src="${h(bg)}" alt="${h(title)}" loading="${i === 0 ? 'eager' : 'lazy'}">` : ''}</div>
+  <div class="hero-bg${banner ? '' : ' hero-bg-fallback'}">
+    <picture>
+      ${cover ? `<source media="(max-width: 768px)" srcset="${h(cover)}">` : ''}
+      ${bg ? `<img src="${h(bg)}" alt="${h(title)}" loading="${i === 0 ? 'eager' : 'lazy'}">` : ''}
+    </picture>
+  </div>
   <div class="hero-gradient"></div>
   <div class="hero-content">
     <div class="container">
