@@ -44,7 +44,7 @@ homeRoutes.get('/', async (c) => {
   const siteUrl = c.env.SITE_URL;
 
   const [seasonal, topAnime, upcoming] = await Promise.all([
-    mal.getSeasonNow(1),
+    mal.getAniListSeasonNow(),
     mal.getTopAnime('bypopularity', 1),
     mal.getSeasonUpcoming(),
   ]);
@@ -101,15 +101,15 @@ homeRoutes.get('/', async (c) => {
     requestUrl: c.req.url,
   });
 
-  // Hero slider slides — newly-airing anime (this season), matching
-  // Anivexa's "spotlight" behaviour, rather than the all-time popular list.
+  // Hero slider slides — newly-airing anime (this season, sourced from
+  // AniList since MAL/Jikan's season/now data is frequently stale), matching
+  // Anivexa's "spotlight" behaviour rather than the all-time popular list.
   const heroPool = (seasonalList.length > 0 ? seasonalList : topList).slice(0, 6);
-  const heroBanners = await mal.getAniListBanners(heroPool.map((a) => a.mal_id));
 
   html += `
 <section id="hero">
   <div id="hero-slides">
-    ${heroPool.map((a, i) => renderHeroSlide(a, i, siteUrl, heroBanners[a.mal_id])).join('')}
+    ${heroPool.map((a, i) => renderHeroSlide(a, i, siteUrl, a.banner_image)).join('')}
   </div>
   <div class="hero-indicators" id="hero-dots">
     ${heroPool.map((_, i) => `<button class="hero-dot ${i === 0 ? 'active' : ''}" data-idx="${i}" aria-label="Slide ${i + 1}"></button>`).join('')}
