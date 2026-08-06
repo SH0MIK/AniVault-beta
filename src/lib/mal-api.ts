@@ -103,6 +103,43 @@ export class MalAPI {
     return { data: [] };
   }
 
+  // AniList doesn't share MAL's poster art — it has real wide banner images
+  // (bannerImage), which is what Anivexa's hero uses. We look these up by
+  // MAL id (idMal) in a single batched GraphQL call and cache the result,
+  // since AniList has no official rate-limit guarantee.
+  async getAniListBanners(malIds: number[]): Promise<Record<number, string>> {
+    const ids = [...new Set(malIds)].filter(Boolean);
+    if (ids.length === 0) return {};
+
+    const cacheKey = 'anilist_banners_' + (await sha1(ids.slice().sort((a, b) => a - b).join(',')));
+    if (this.kv && this.cacheEnabled()) {
+      const cached = await this.kv.get(cacheKey, 'json') as Record<number, string> | null;
+      if (cached) return cached;
+    }
+
+    const query = `query ($ids: [Int]) { Page(perPage: 50) { media(idMal_in: $ids, type: ANIME) { idMal bannerImage } } }`;
+    try {
+      const res = await fetch('https://graphql.anilist.co', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ query, variables: { ids } }),
+      });
+      if (!res.ok) return {};
+      const json: any = await res.json();
+      const media = json?.data?.Page?.media ?? [];
+      const map: Record<number, string> = {};
+      for (const m of media) {
+        if (m.idMal && m.bannerImage) map[m.idMal] = m.bannerImage;
+      }
+      if (this.kv && this.cacheEnabled()) {
+        await this.kv.put(cacheKey, JSON.stringify(map), { expirationTtl: Math.max(this.cacheTtl(), 21600) });
+      }
+      return map;
+    } catch {
+      return {};
+    }
+  }
+
   private async getLocalAnimeImage(animeId: number): Promise<string> {
     if (!animeId) return '';
     const row = await this.db.fetchOne<{ image_url: string }>('SELECT image_url FROM anime_images WHERE anime_id = ?', [animeId]);
