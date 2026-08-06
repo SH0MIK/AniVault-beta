@@ -38,6 +38,7 @@ import { legalRoutes } from './routes/legal';
 import { watchNowRoutes } from './routes/watch-now';
 import { legacyRedirectRoutes } from './routes/legacy-redirects';
 import { apiChatRoutes } from './routes/api-chat';
+import { handleScheduled } from './scheduled';
 
 // Env bindings + secrets (set secrets via `wrangler secret put NAME`, see wrangler.toml)
 export interface Env {
@@ -106,4 +107,10 @@ app.route('/', watchNowRoutes);
 app.route('/', legacyRedirectRoutes);
 app.route('/', apiChatRoutes);
 
-export default app;
+export default {
+  fetch: app.fetch,
+  // Cloudflare Cron Trigger entry point — see [triggers] in wrangler.toml.
+  async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext) {
+    ctx.waitUntil(handleScheduled(env));
+  },
+};
