@@ -376,7 +376,14 @@ if(popSpdList){
     if(document.fullscreenElement) document.exitFullscreen();
     else area.requestFullscreen?.();
   });
-  document.addEventListener('fullscreenchange',syncFsIcon);
+  document.addEventListener('fullscreenchange',()=>{
+    syncFsIcon();
+    if(document.fullscreenElement){
+      screen.orientation?.lock?.('landscape').catch(()=>{});
+    } else {
+      screen.orientation?.unlock?.();
+    }
+  });
 
   /* Settings popover */
   function closeSettings(){
