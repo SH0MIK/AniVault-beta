@@ -101,21 +101,45 @@ homeRoutes.get('/', async (c) => {
     requestUrl: c.req.url,
   });
 
-  // Hero slider slides — newly-airing anime (this season, sourced from
-  // AniList since MAL/Jikan's season/now data is frequently stale), matching
-  // Anivexa's "spotlight" behaviour rather than the all-time popular list.
-  const heroPool = (seasonalList.length > 0 ? seasonalList : topList).slice(0, 6);
+  // Hero slider slides. If the admin has curated slides in
+  // home_hero_banners (admin/home_banners.php), those win — in the exact
+  // order set there, with their own banner/logo overrides. Otherwise fall
+  // back to the auto-generated pool: newly-airing anime this season
+  // (sourced from AniList since MAL/Jikan's season/now data is frequently
+  // stale), matching Anivexa's "spotlight" behaviour rather than the
+  // all-time popular list.
+  let heroPool: NormalisedAnime[] = [];
+  let heroBanners: string[] = [];
+  let heroLogos: string[] = [];
 
-  // Desktop shows the wide banner (your own curated upload if you've saved
-  // one for that title, else AniList's, else the poster). Mobile shows the
-  // portrait cover instead — your own saved local cover if there is one,
-  // matching Anivexa's mobile behaviour — via a <picture> breakpoint swap,
-  // no JS needed.
-  const [heroBanners, heroCovers, heroLogos] = await Promise.all([
-    Promise.all(heroPool.map((a) => mal.getLocalAnimeBanner(a.mal_id))),
-    Promise.all(heroPool.map((a) => mal.getLocalAnimeImage(a.mal_id))),
-    Promise.all(heroPool.map((a) => mal.getTitleLogo(a.title_english || a.title))),
-  ]);
+  const curatedRows = await db
+    .fetchAll<any>('SELECT anime_id, banner_image_url, logo_image_url FROM home_hero_banners ORDER BY display_order ASC LIMIT 8')
+    .catch(() => []);
+
+  if (curatedRows.length > 0) {
+    const curatedAnime = await Promise.all(curatedRows.map((r) => mal.getAnime(r.anime_id)));
+    curatedRows.forEach((r, i) => {
+      const anime = curatedAnime[i].data;
+      if (!anime) return; // skip slides whose Anime ID no longer resolves
+      heroPool.push(anime);
+      heroBanners.push(r.banner_image_url || '');
+      heroLogos.push(r.logo_image_url || '');
+    });
+  }
+
+  if (heroPool.length === 0) {
+    heroPool = (seasonalList.length > 0 ? seasonalList : topList).slice(0, 6);
+    // Desktop shows the wide banner (your own curated upload if you've
+    // saved one for that title, else AniList's, else the poster). Mobile
+    // shows the portrait cover instead — your own saved local cover if
+    // there is one, matching Anivexa's mobile behaviour — via a <picture>
+    // breakpoint swap, no JS needed.
+    [heroBanners, heroLogos] = await Promise.all([
+      Promise.all(heroPool.map((a) => mal.getLocalAnimeBanner(a.mal_id))),
+      Promise.all(heroPool.map((a) => mal.getTitleLogo(a.title_english || a.title))),
+    ]);
+  }
+  const heroCovers = await Promise.all(heroPool.map((a) => mal.getLocalAnimeImage(a.mal_id)));
 
   html += `
 <section id="hero">
