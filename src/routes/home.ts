@@ -111,15 +111,16 @@ homeRoutes.get('/', async (c) => {
   // portrait cover instead — your own saved local cover if there is one,
   // matching Anivexa's mobile behaviour — via a <picture> breakpoint swap,
   // no JS needed.
-  const [heroBanners, heroCovers] = await Promise.all([
+  const [heroBanners, heroCovers, heroLogos] = await Promise.all([
     Promise.all(heroPool.map((a) => mal.getLocalAnimeBanner(a.mal_id))),
     Promise.all(heroPool.map((a) => mal.getLocalAnimeImage(a.mal_id))),
+    Promise.all(heroPool.map((a) => mal.getTitleLogo(a.title_english || a.title))),
   ]);
 
   html += `
 <section id="hero">
   <div id="hero-slides">
-    ${heroPool.map((a, i) => renderHeroSlide(a, i, siteUrl, heroBanners[i] || a.banner_image, heroCovers[i])).join('')}
+    ${heroPool.map((a, i) => renderHeroSlide(a, i, siteUrl, heroBanners[i] || a.banner_image, heroCovers[i], heroLogos[i])).join('')}
   </div>
   <div class="hero-indicators" id="hero-dots">
     ${heroPool.map((_, i) => `<button class="hero-dot ${i === 0 ? 'active' : ''}" data-idx="${i}" aria-label="Slide ${i + 1}"></button>`).join('')}
@@ -285,7 +286,11 @@ function sectionHeader(title: string, rowId: string, viewAllHref?: string, viewA
 // poster fallback). `mobileCover` = your own saved local cover, shown
 // instead of the banner on small screens (Anivexa does the same) — falls
 // back to the API poster if you haven't saved one for this title yet.
-function renderHeroSlide(a: NormalisedAnime, i: number, siteUrl: string, banner?: string, mobileCover?: string): string {
+// `logo` = TMDB's transparent title-art image, shown ONLY on mobile in
+// place of the plain text title (Anivexa's desktop still uses plain text —
+// this matches that split exactly). Falls back to plain text if TMDB has
+// no logo for this title.
+function renderHeroSlide(a: NormalisedAnime, i: number, siteUrl: string, banner?: string, mobileCover?: string, logo?: string): string {
   const title = a.title_english && a.title_english !== a.title ? a.title_english : (a.title || 'Unknown');
   const poster = a.images?.jpg?.large_image_url || a.images?.jpg?.image_url || '';
   const bg = banner || poster;
@@ -305,9 +310,10 @@ function renderHeroSlide(a: NormalisedAnime, i: number, siteUrl: string, banner?
   <div class="hero-gradient"></div>
   <div class="hero-content">
     <div class="container">
-      <div class="hero-info">
+      <div class="hero-info${logo ? ' has-logo' : ''}">
         ${genres.length ? `<div class="hero-badges">${genres.map((g) => `<span class="badge badge-accent">${h(g.name)}</span>`).join('')}</div>` : ''}
         <h1 class="hero-title">${h(title)}</h1>
+        ${logo ? `<img class="hero-logo" src="${h(logo)}" alt="${h(title)}" loading="${i === 0 ? 'eager' : 'lazy'}">` : ''}
         ${desc ? `<p class="hero-desc">${h(desc)}</p>` : ''}
         ${genres.length ? `<div class="hero-genres">${genres.map((g) => `<span class="hero-genre-tag">${h(g.name)}</span>`).join('')}</div>` : ''}
         <div class="hero-stat-strip">
