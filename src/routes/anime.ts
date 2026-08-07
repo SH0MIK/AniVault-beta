@@ -12,10 +12,12 @@ import { MalAPI } from '../lib/mal-api';
 import { AnimeTracker } from '../lib/tracker';
 import { Notification } from '../lib/notification';
 import { h, statusBadge } from '../lib/helpers';
+import { icon } from '../lib/icons';
 import { renderHeader, renderFooter, CurrentUser } from '../render/layout';
 import { streamWatchOn } from '../lib/stream-services';
 import { animeTailScript } from '../render/anime-tail';
 import { getBannerData } from '../lib/settings';
+import { rowNavScript } from '../render/home-js';
 
 export const animeRoutes = new Hono<{ Bindings: Env }>();
 
@@ -75,6 +77,13 @@ animeRoutes.get('/anime', async (c) => {
   const image = anime.images?.jpg?.large_image_url ?? '';
   const totalEps = anime.episodes ?? 0;
 
+  // Reuses the same admin-curated banner library as the home page hero
+  // (admin/anime_banners.php) — falls back to a blurred/darkened poster
+  // when nothing's been saved for this title.
+  const bannerInfo = await mal.getLocalAnimeBannerInfo(id);
+  const backdrop = bannerInfo?.image_url || image;
+  const hasBanner = !!bannerInfo?.image_url;
+
   const currentUser = auth.check() ? await auth.getCurrentUser() : null;
   let userEntry: any = null;
   let isFav = false;
@@ -101,41 +110,24 @@ animeRoutes.get('/anime', async (c) => {
   const jImage = JSON.stringify(image);
 
   html += `
-<div class="container section">
-  <div class="anime-detail-header">
-    <style>
-      .anime-detail-header { display: flex; gap: 1.5rem; margin-bottom: 1.5rem; align-items: flex-start; }
-      .anime-poster-col { width: 220px; flex-shrink: 0; }
-      .stream-hidden { display: none !important; }
-      .stream-region-tip { position:relative; display:inline-flex; align-items:center; cursor:default; }
-      .stream-region-tip .stream-tooltip { display:none; position:absolute; bottom:calc(100% + 5px); left:50%; transform:translateX(-50%); background:#1a1a1a; color:#fff; font-size:0.7rem; white-space:nowrap; padding:4px 8px; border-radius:6px; border:1px solid rgba(255,255,255,0.1); pointer-events:none; z-index:99; }
-      .stream-region-tip:hover .stream-tooltip { display:block; }
-      .stream-under-poster { display: block; }
-      .stream-in-overview  { display: none;  }
-      @media (max-width: 600px) {
-        .anime-detail-header { flex-direction: column; gap: 1rem; }
-        .anime-poster-col { width: 100%; }
-        .stream-under-poster { display: none;  }
-        .stream-in-overview  { display: block; }
-      }
-    </style>
+<section class="info-hero">
+  <div class="info-hero-bg" style="background-image:url('${h(backdrop)}');${hasBanner ? '' : 'filter:brightness(.5) blur(2px);'}"></div>
+  <div class="container info-hero-inner">
     ${image ? `
-    <div class="anime-poster-col">
-      <img src="${h(image)}" alt="${h(title)}" style="width:100%;border-radius:var(--radius-lg);border:1px solid var(--border);display:block;">
-      ${streamLinks.length > 0 ? `
-      <div class="stream-under-poster" style="margin-top:12px;">
-        ${streamWatchOn(streamLinks, id, siteUrl)}
-      </div>` : ''}
+    <div class="info-poster">
+      <img src="${h(image)}" alt="${h(title)}">
     </div>` : ''}
 
-    <div style="flex:1;min-width:260px;">
-      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px;">
-        <h1 style="font-size:1.8rem;margin:0;">${h(title)}</h1>
+    <div class="info-head">
+      <div class="info-eyebrow"><span class="dot"></span><span>${h(anime.type || 'Anime')}</span></div>
+
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <h1 class="info-title">${h(title)}</h1>
         ${hasSeriesLinks ? `
         <div id="series-dropdown-wrap" style="position:relative;flex-shrink:0;">
           <button id="series-dropdown-btn" onclick="toggleSeriesDropdown(event)"
-            style="display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,0.07);border:1px solid var(--border);color:var(--text-main);padding:5px 12px 5px 14px;border-radius:8px;font-size:0.85rem;font-weight:600;cursor:pointer;transition:background .15s;white-space:nowrap;"
-            onmouseover="this.style.background='rgba(255,255,255,0.12)'" onmouseout="this.style.background='rgba(255,255,255,0.07)'"
+            style="display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.1);color:#fff;padding:6px 12px 6px 14px;border-radius:8px;font-size:0.85rem;font-weight:600;cursor:pointer;transition:background .15s;white-space:nowrap;"
+            onmouseover="this.style.background='rgba(255,255,255,0.14)'" onmouseout="this.style.background='rgba(255,255,255,0.08)'"
             aria-haspopup="listbox" aria-expanded="false">
             <span id="series-btn-label">Season …</span>
             <svg id="series-dropdown-arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="transition:transform .2s;flex-shrink:0;"><polyline points="6 9 12 15 18 9"/></svg>
@@ -146,32 +138,31 @@ animeRoutes.get('/anime', async (c) => {
         </div>
         <script>window.__seriesData = ${JSON.stringify({ currentId: id, currentTitle: title, siteUrl, entries: seriesEntries })};</script>` : ''}
       </div>
-      ${jpTitle && jpTitle !== title ? `<p class="text-muted mb-1">${h(jpTitle)}</p>` : ''}
+      ${jpTitle && jpTitle !== title ? `<div class="info-subtitle">${h(jpTitle)}</div>` : ''}
 
-      <div class="flex flex-wrap gap-1 mb-2" style="gap:8px;">
-        ${anime.score ? `<span style="background:rgba(245,200,66,0.15);color:var(--gold);padding:4px 12px;border-radius:20px;font-size:0.85rem;font-weight:600;">⭐ ${anime.score.toFixed(2)}/10 <span style="color:var(--text-muted);font-weight:400;">(${(anime.scored_by || anime.members || 0).toLocaleString('en-US')} users)</span></span>` : ''}
-        ${anime.rank ? `<span class="genre-tag">🏆 Rank #${anime.rank}</span>` : ''}
-        ${anime.popularity ? `<span class="genre-tag">🔥 #${anime.popularity} Popular</span>` : ''}
-      </div>
-
-      <div class="anime-detail-meta-grid" style="display:grid;grid-template-columns:130px 1fr;gap:6px 12px;font-size:0.88rem;margin-bottom:1.25rem;">
-        ${renderMetaRows({
-          Type: anime.type || '—', Episodes: totalEps || 'Unknown', Status: anime.status || '—',
-          Aired: anime.aired?.string || '—', Duration: anime.duration || '—', Rating: anime.rating || '—',
-          Studio: (anime.studios ?? []).map((s) => s.name).join(', ') || '—', Source: anime.source || '—',
-        })}
+      <div class="info-meta-row">
+        ${anime.score ? `<span class="meta-pill meta-score">★ ${anime.score.toFixed(2)} <span style="opacity:.65;font-weight:500;">(${(anime.scored_by || anime.members || 0).toLocaleString('en-US')})</span></span>` : ''}
+        ${anime.rank ? `<span class="meta-pill">🏆 #${anime.rank}</span>` : ''}
+        ${anime.popularity ? `<span class="meta-pill">🔥 #${anime.popularity}</span>` : ''}
+        <span class="meta-pill">${h(anime.type || '—')}</span>
+        <span class="meta-pill">${totalEps ? totalEps + ' eps' : 'Unknown eps'}</span>
+        <span class="meta-pill${anime.status === 'Currently Airing' ? ' meta-status-airing' : ''}">${h(anime.status || '—')}</span>
       </div>
 
       ${anime.genres?.length ? `
-      <div class="flex flex-wrap mb-2" style="gap:6px;">
-        ${anime.genres.map((g) => `<a href="${siteUrl}/browse?genre=${g.mal_id}" class="genre-tag">${h(g.name)}</a>`).join('')}
+      <div class="info-genres">
+        ${anime.genres.map((g) => `<a href="${siteUrl}/browse?genre=${g.mal_id}" class="info-genre-tag">${h(g.name)}</a>`).join('')}
       </div>` : ''}
 
-      <div class="flex gap-1 flex-wrap" style="gap:8px;margin-top:1rem;">
-        <button class="btn btn-primary" onclick='addToList(${id}, ${jTitle}, ${jImage}, ${totalEps})'>
+      <div class="info-cta">
+        <a href="#episodes-section" class="btn-watch" onclick="var b=document.getElementById('ep-grid-js'); var s=document.getElementById('episodes-section'); if(s) s.scrollIntoView({behavior:'smooth'});">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
+          Watch Now
+        </a>
+        <button class="btn-secondary" onclick='addToList(${id}, ${jTitle}, ${jImage}, ${totalEps})'>
           ${userEntry ? `✏️ Edit in List` : `+ Add to List`}
         </button>
-        <button class="btn btn-ghost" id="fav-btn" style="${isFav ? 'color:var(--accent)' : ''}" onclick='toggleFavorite(this, ${id}, ${jTitle}, ${jImage})'>
+        <button class="btn-secondary" id="fav-btn" style="${isFav ? 'color:var(--accent-2)' : ''}" onclick='toggleFavorite(this, ${id}, ${jTitle}, ${jImage})'>
           ${isFav ? '♥ Favorited' : '♡ Favorite'}
         </button>
       </div>
@@ -193,76 +184,110 @@ animeRoutes.get('/anime', async (c) => {
         </div>
         <div id="anime-progress-wrap" class="progress-bar mt-1" style="max-width:400px;display:none;"><div id="anime-progress-fill" class="progress-fill" style="width:0%"></div></div>`}
       </div>
+
+      ${streamLinks.length > 0 ? `<div style="margin-top:16px;">${streamWatchOn(streamLinks, id, siteUrl)}</div>` : ''}
+    </div>
+  </div>
+</section>
+
+<div class="container info-body">
+  <div class="info-section">
+    <div class="info-grid-2">
+      <div>
+        <h2 class="info-section-title">Synopsis</h2>
+        ${anime.synopsis ? `<p class="info-desc" id="info-desc">${h(anime.synopsis).replace(/\n/g, '<br>')}</p><button id="info-desc-toggle" class="info-desc-toggle" style="display:none;" type="button" onclick="var d=document.getElementById('info-desc'); d.classList.toggle('expanded'); this.textContent = d.classList.contains('expanded') ? 'Show less' : 'Show more';">Show more</button>
+        <script>(function(){var d=document.getElementById('info-desc'),t=document.getElementById('info-desc-toggle'); if(d&&t&&d.scrollHeight>d.clientHeight+4){t.style.display='inline-block';}})();</script>` : `<p class="text-muted">No synopsis available.</p>`}
+        ${anime.background ? `<h2 class="info-section-title" style="margin-top:28px;">Background</h2><p style="color:var(--text-secondary);line-height:1.75;">${h(anime.background).replace(/\n/g, '<br>')}</p>` : ''}
+      </div>
+      <div>
+        <h2 class="info-section-title">Information</h2>
+        <div class="info-stats">
+          ${infoStatRow('Type', anime.type || '—')}
+          ${infoStatRow('Episodes', totalEps || 'Unknown')}
+          ${infoStatRow('Status', anime.status || '—')}
+          ${infoStatRow('Aired', anime.aired?.string || '—')}
+          ${infoStatRow('Duration', anime.duration || '—')}
+          ${infoStatRow('Rating', anime.rating || '—')}
+          ${infoStatRow('Studio', (anime.studios ?? []).map((s) => s.name).join(', ') || '—')}
+          ${infoStatRow('Source', anime.source || '—')}
+        </div>
+      </div>
     </div>
   </div>
 
-  <div class="tabs-container">
-    <div class="tabs">
-      <button class="tab-btn active" data-tab="overview">Overview</button>
-      <button class="tab-btn" data-tab="episodes" id="ep-tab-btn">Episodes</button>
-      <button class="tab-btn" data-tab="characters">Characters</button>
-      <button class="tab-btn" data-tab="related">Related</button>
-    </div>
+  ${anime.themes?.length ? `
+  <div class="info-section">
+    <h2 class="info-section-title">Themes</h2>
+    <div class="info-tags">${anime.themes.map((t: any) => `<span class="info-tag">${h(t.name)}</span>`).join('')}</div>
+  </div>` : ''}
 
-    <div id="tab-overview" class="tab-content active">
-      ${anime.synopsis ? `<div class="card card-body mb-2"><h3 class="mb-1">Synopsis</h3><p style="color:var(--text-secondary);line-height:1.8;">${h(anime.synopsis).replace(/\n/g, '<br>')}</p></div>` : ''}
-      ${anime.background ? `<div class="card card-body mb-2"><h3 class="mb-1">Background</h3><p style="color:var(--text-secondary);line-height:1.8;">${h(anime.background).replace(/\n/g, '<br>')}</p></div>` : ''}
-      ${anime.themes?.length ? `<div class="mb-2"><div class="section-title">Themes</div><div class="flex flex-wrap" style="gap:6px;">${anime.themes.map((t: any) => `<span class="genre-tag">${h(t.name)}</span>`).join('')}</div></div>` : ''}
-      ${streamLinks.length > 0 ? `<div class="stream-in-overview card card-body mb-2"><h3 class="mb-1">Watch On</h3>${streamWatchOn(streamLinks, id, siteUrl)}</div>` : ''}
+  <div class="info-section" id="episodes-section">
+    <h2 class="info-section-title" id="ep-tab-btn">Episodes</h2>
+    <div id="ep-grid-loading" style="text-align:center;padding:2.5rem 0;color:var(--text-muted);">
+      <div class="av-loader" style="margin:0 auto 1rem;transform:scale(.6);"></div>
+      Loading episodes…
     </div>
+    <div class="ep-grid" id="ep-grid-js" style="display:none;"></div>
+  </div>
 
-    <div id="tab-episodes" class="tab-content">
-      <div id="ep-grid-loading" style="text-align:center;padding:2.5rem 0;color:var(--text-muted);">
-        <div class="av-loader" style="margin:0 auto 1rem;transform:scale(.6);"></div>
-        Loading episodes…
-      </div>
-      <div class="ep-grid" id="ep-grid-js" style="display:none;"></div>
-    </div>
-
-    <div class="modal-overlay" id="ep-modal">
-      <div class="modal" style="max-width:620px;width:100%;">
-        <div class="modal-header" style="padding:1rem 1.25rem;display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;">
-          <div style="flex:1;min-width:0;">
-            <div id="ep-modal-title" style="font-size:1.1rem;font-weight:700;line-height:1.4;"></div>
-            <div style="display:flex;align-items:center;gap:10px;margin-top:5px;flex-wrap:wrap;">
-              <span id="ep-modal-meta" style="font-size:0.82rem;color:var(--text-muted);"></span>
-              <span id="ep-modal-score" style="color:var(--gold);font-size:0.85rem;font-weight:600;"></span>
-            </div>
-          </div>
-          <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
-            ${(layoutUser?.role === 'admin' || layoutUser?.role === 'owner') ? `<button id="ep-modal-edit-btn" class="btn btn-sm btn-secondary" style="font-size:0.78rem;padding:4px 10px;">✏️ Edit</button>` : ''}
-            <button class="modal-close" onclick="closeModal('ep-modal')" style="background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:1.3rem;padding:0;line-height:1;">✕</button>
+  <div class="modal-overlay" id="ep-modal">
+    <div class="modal" style="max-width:620px;width:100%;">
+      <div class="modal-header" style="padding:1rem 1.25rem;display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;">
+        <div style="flex:1;min-width:0;">
+          <div id="ep-modal-title" style="font-size:1.1rem;font-weight:700;line-height:1.4;"></div>
+          <div style="display:flex;align-items:center;gap:10px;margin-top:5px;flex-wrap:wrap;">
+            <span id="ep-modal-meta" style="font-size:0.82rem;color:var(--text-muted);"></span>
+            <span id="ep-modal-score" style="color:var(--gold);font-size:0.85rem;font-weight:600;"></span>
           </div>
         </div>
-        <div id="ep-modal-thumb-wrap" style="display:none;width:100%;aspect-ratio:16/9;background:var(--bg-base);overflow:hidden;">
-          <img id="ep-modal-thumb" src="" alt="" style="width:100%;height:100%;object-fit:cover;display:block;">
-        </div>
-        <div class="modal-body">
-          <p id="ep-modal-synopsis" style="color:var(--text-secondary);line-height:1.8;font-size:0.93rem;margin:0 0 1rem;"></p>
-          <div id="ep-modal-watch"></div>
+        <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+          ${(layoutUser?.role === 'admin' || layoutUser?.role === 'owner') ? `<button id="ep-modal-edit-btn" class="btn btn-sm btn-secondary" style="font-size:0.78rem;padding:4px 10px;">✏️ Edit</button>` : ''}
+          <button class="modal-close" onclick="closeModal('ep-modal')" style="background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:1.3rem;padding:0;line-height:1;">✕</button>
         </div>
       </div>
-    </div>
-
-    ${(layoutUser?.role === 'admin' || layoutUser?.role === 'owner') ? renderEpisodeEditorModal() : ''}
-
-    <div id="tab-characters" class="tab-content">
-      <div id="char-grid-loading" style="text-align:center;padding:2.5rem 0;color:var(--text-muted);">
-        <div class="av-loader" style="margin:0 auto 1rem;transform:scale(.6);"></div>
-        Loading characters…
+      <div id="ep-modal-thumb-wrap" style="display:none;width:100%;aspect-ratio:16/9;background:var(--bg-base);overflow:hidden;">
+        <img id="ep-modal-thumb" src="" alt="" style="width:100%;height:100%;object-fit:cover;display:block;">
       </div>
-      <div class="anime-grid" id="char-grid-js" style="display:none;"></div>
-    </div>
-
-    <div id="tab-related" class="tab-content">
-      <div id="related-grid-loading" style="text-align:center;padding:2.5rem 0;color:var(--text-muted);">
-        <div class="av-loader" style="margin:0 auto 1rem;transform:scale(.6);"></div>
-        Loading recommendations…
+      <div class="modal-body">
+        <p id="ep-modal-synopsis" style="color:var(--text-secondary);line-height:1.8;font-size:0.93rem;margin:0 0 1rem;"></p>
+        <div id="ep-modal-watch"></div>
       </div>
-      <div class="anime-grid" id="related-grid-js" style="display:none;"></div>
     </div>
+  </div>
+
+  ${(layoutUser?.role === 'admin' || layoutUser?.role === 'owner') ? renderEpisodeEditorModal() : ''}
+
+  <div class="info-section">
+    <div class="section-header">
+      <h2 class="info-section-title" style="margin-bottom:0;">Characters</h2>
+      <div style="display:flex;align-items:center;gap:12px;">
+        <button class="btn btn-ghost btn-sm btn-icon row-nav-btn" data-target="char-grid-js" data-dir="prev" aria-label="Previous">${icon('chevron-left', 'icon-small')}</button>
+        <button class="btn btn-ghost btn-sm btn-icon row-nav-btn" data-target="char-grid-js" data-dir="next" aria-label="Next">${icon('chevron-right', 'icon-small')}</button>
+      </div>
+    </div>
+    <div id="char-grid-loading" style="text-align:center;padding:2.5rem 0;color:var(--text-muted);">
+      <div class="av-loader" style="margin:0 auto 1rem;transform:scale(.6);"></div>
+      Loading characters…
+    </div>
+    <div class="scroll-row" id="char-grid-js" style="display:none;"></div>
+  </div>
+
+  <div class="info-section">
+    <div class="section-header">
+      <h2 class="info-section-title" style="margin-bottom:0;">You Might Also Like</h2>
+      <div style="display:flex;align-items:center;gap:12px;">
+        <button class="btn btn-ghost btn-sm btn-icon row-nav-btn" data-target="related-grid-js" data-dir="prev" aria-label="Previous">${icon('chevron-left', 'icon-small')}</button>
+        <button class="btn btn-ghost btn-sm btn-icon row-nav-btn" data-target="related-grid-js" data-dir="next" aria-label="Next">${icon('chevron-right', 'icon-small')}</button>
+      </div>
+    </div>
+    <div id="related-grid-loading" style="text-align:center;padding:2.5rem 0;color:var(--text-muted);">
+      <div class="av-loader" style="margin:0 auto 1rem;transform:scale(.6);"></div>
+      Loading recommendations…
+    </div>
+    <div class="scroll-row" id="related-grid-js" style="display:none;"></div>
   </div>
 </div>
+${rowNavScript()}
 
 <script>window.__animeTitle = ${JSON.stringify(title)};</script>
 <script>window.__animeId   = ${JSON.stringify(id)};</script>
@@ -279,10 +304,8 @@ ${animeTailScript(animeDubConfirmed)}`;
   return c.html(html);
 });
 
-function renderMetaRows(meta: Record<string, string | number>): string {
-  return Object.entries(meta)
-    .map(([k, v]) => `<span style="color:var(--text-muted);font-weight:500;">${h(k)}</span><span>${h(String(v))}</span>`)
-    .join('');
+function infoStatRow(label: string, value: string | number): string {
+  return `<div class="info-stat-row"><span class="label">${h(label)}</span><span class="value">${h(String(value))}</span></div>`;
 }
 
 function renderEpisodeEditorModal(): string {
