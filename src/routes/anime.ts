@@ -115,8 +115,8 @@ animeRoutes.get('/anime', async (c) => {
   const jImage = JSON.stringify(image);
 
   html += `
-<section class="info-hero">
-  <div class="info-hero-bg" style="background-image:url('${h(backdrop)}');${hasBanner ? '' : 'filter:brightness(.5) blur(2px);'}"></div>
+<section class="info-hero${hasBanner ? '' : ' info-hero-no-banner'}">
+  <div class="info-hero-bg${hasBanner ? '' : ' info-hero-bg-fallback'}" style="background-image:url('${h(backdrop)}')"></div>
   <div class="container info-hero-inner">
     ${image ? `
     <div class="info-poster">
