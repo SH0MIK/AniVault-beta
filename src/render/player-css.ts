@@ -52,6 +52,62 @@ export const PLAYER_CSS = `<style id="sp-skin">
 .sp-err-retry{font-family:var(--sp-hud);font-size:.7rem;letter-spacing:.08em;padding:.4rem 1.4rem;background:var(--sp-accent);color:#fff;border:none;border-radius:8px;cursor:pointer;transition:opacity .15s}
 .sp-err-retry:hover{opacity:.85}
 
+/* ─── Pause flash icon ──────────────────────────────────── */
+#sp-pause-icon{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) scale(1.4);width:64px;height:64px;border-radius:50%;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:15;opacity:0;pointer-events:none;transition:opacity .35s,transform .35s}
+#sp-pause-icon.show{opacity:1;transform:translate(-50%,-50%) scale(1)}
+#sp-pause-icon svg{width:28px;height:28px;fill:#fff}
+
+/* ─── Custom control bar ────────────────────────────────────
+   Replaces the native <video controls> UI. Auto-hides via the
+   .sp-hide-ui class toggled from player-script.ts on inactivity. */
+#sp-ctrl-bar{position:absolute;left:0;right:0;bottom:0;z-index:25;padding:22px 14px 10px;background:linear-gradient(180deg,transparent,rgba(0,0,0,.82) 60%,rgba(0,0,0,.92));opacity:1;transition:opacity .25s;font-family:var(--sp-body)}
+#sp-video-area.sp-hide-ui #sp-ctrl-bar{opacity:0;pointer-events:none}
+#sp-video-area.sp-hide-ui{cursor:none}
+
+.sp-progress-wrap{position:relative;height:14px;display:flex;align-items:center;cursor:pointer;margin-bottom:6px}
+.sp-progress-wrap::before{content:'';position:absolute;left:0;right:0;height:4px;border-radius:2px;background:rgba(255,255,255,.18)}
+.sp-buf-fill{position:absolute;left:0;height:4px;width:0;border-radius:2px;background:rgba(255,255,255,.32);pointer-events:none}
+.sp-play-fill{position:absolute;left:0;height:4px;width:0;border-radius:2px;background:var(--sp-accent);box-shadow:0 0 8px var(--sp-accent-glow);pointer-events:none}
+.sp-play-fill::after{content:'';position:absolute;right:-5px;top:50%;transform:translateY(-50%);width:11px;height:11px;border-radius:50%;background:var(--sp-accent);box-shadow:0 0 0 3px rgba(0,0,0,.25);opacity:0;transition:opacity .15s}
+.sp-progress-wrap:hover .sp-play-fill::after{opacity:1}
+.sp-seek{position:absolute;inset:0;width:100%;margin:0;opacity:0;cursor:pointer}
+.sp-seek-tip{position:absolute;bottom:20px;transform:translateX(-50%);background:#0f0f0f;border:1px solid var(--sp-border);color:var(--sp-text);font-size:.68rem;padding:3px 7px;border-radius:6px;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity .15s}
+.sp-progress-wrap:hover .sp-seek-tip{opacity:1}
+
+.sp-ctrl-row{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.sp-ctrl-left,.sp-ctrl-right{display:flex;align-items:center;gap:2px}
+.sp-cbtn{width:34px;height:34px;display:flex;align-items:center;justify-content:center;background:transparent;border:none;color:#fff;cursor:pointer;border-radius:8px;transition:background .15s;flex-shrink:0;position:relative}
+.sp-cbtn:hover{background:rgba(255,255,255,.1)}
+.sp-cbtn svg{width:19px;height:19px}
+.sp-cbtn span{position:absolute;bottom:2px;right:3px;font-size:.5rem;font-weight:800;font-family:var(--sp-hud);pointer-events:none}
+.sp-vol{width:64px;accent-color:var(--sp-accent);margin:0 6px;cursor:pointer}
+.sp-time{font-family:var(--sp-hud);font-size:.68rem;letter-spacing:.03em;color:var(--sp-text-sub);white-space:nowrap;margin-left:4px}
+
+.sp-settings-wrap{position:relative}
+.sp-settings-pop{position:absolute;bottom:44px;right:0;width:200px;background:#111421;border:1px solid var(--sp-border);border-radius:12px;padding:6px;box-shadow:0 10px 32px rgba(0,0,0,.5);display:none;overflow:hidden}
+.sp-settings-pop.show{display:block}
+.sp-sett-item{display:flex;align-items:center;justify-content:space-between;padding:9px 10px;border-radius:8px;cursor:pointer;font-size:.78rem;color:var(--sp-text)}
+.sp-sett-item:hover{background:rgba(124,58,237,.1)}
+.sp-sett-cur{color:var(--sp-text-muted);font-size:.72rem}
+.sp-sett-back{display:flex;align-items:center;gap:6px;padding:8px 6px;margin-bottom:2px;border-bottom:1px solid var(--sp-border2);font-size:.75rem;font-weight:700;color:var(--sp-text);cursor:pointer}
+.sp-sett-back svg{width:14px;height:14px}
+.sp-sett-opts{max-height:220px;overflow-y:auto}
+.sp-sett-opt{padding:8px 10px;border-radius:8px;font-size:.78rem;color:var(--sp-text-sub);cursor:pointer}
+.sp-sett-opt:hover{background:rgba(124,58,237,.08);color:var(--sp-text)}
+.sp-sett-opt.active{background:rgba(124,58,237,.15);color:var(--sp-accent)}
+
+/* Fullscreen: bar/controls scale up slightly for easier hit targets */
+#sp-video-area:fullscreen #sp-ctrl-bar,
+#sp-video-area:-webkit-full-screen #sp-ctrl-bar{padding-bottom:18px}
+
+@media (max-width:640px){
+  .sp-vol{width:44px}
+  .sp-time{font-size:.62rem}
+  #sp-ctrl-bar{padding:16px 8px 8px}
+  .sp-cbtn{width:30px;height:30px}
+  .sp-cbtn svg{width:17px;height:17px}
+}
+
 /* ─── Tap-to-play overlay ───────────────────────────────────
    Shown when the browser blocks autoplay (no recent user-gesture
    context — common right after a page reload) even though the video
