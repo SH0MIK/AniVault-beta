@@ -84,15 +84,16 @@ export const PLAYER_CSS = `<style id="sp-skin">
 .sp-time{font-family:var(--sp-hud);font-size:.68rem;letter-spacing:.03em;color:var(--sp-text-sub);white-space:nowrap;margin-left:4px}
 
 .sp-settings-wrap{position:relative}
-.sp-settings-pop{position:absolute;bottom:44px;right:0;width:200px;background:#111421;border:1px solid var(--sp-border);border-radius:12px;padding:6px;box-shadow:0 10px 32px rgba(0,0,0,.5);display:none;overflow:hidden}
+.sp-settings-pop{position:absolute;bottom:44px;right:0;width:220px;background:#111421;border:1px solid var(--sp-border);border-radius:14px;padding:10px;box-shadow:0 10px 32px rgba(0,0,0,.5);display:none;overflow:hidden}
 .sp-settings-pop.show{display:block}
-.sp-sett-item{display:flex;align-items:center;justify-content:space-between;padding:9px 10px;border-radius:8px;cursor:pointer;font-size:.78rem;color:var(--sp-text)}
+.sp-sett-item{display:flex;align-items:center;justify-content:space-between;padding:11px 14px;margin-bottom:2px;border-radius:9px;cursor:pointer;font-size:.78rem;color:var(--sp-text)}
+.sp-sett-item:last-child{margin-bottom:0}
 .sp-sett-item:hover{background:rgba(124,58,237,.1)}
 .sp-sett-cur{color:var(--sp-text-muted);font-size:.72rem}
-.sp-sett-back{display:flex;align-items:center;gap:6px;padding:8px 6px;margin-bottom:2px;border-bottom:1px solid var(--sp-border2);font-size:.75rem;font-weight:700;color:var(--sp-text);cursor:pointer}
+.sp-sett-back{display:flex;align-items:center;gap:8px;padding:10px 8px;margin-bottom:6px;border-bottom:1px solid var(--sp-border2);font-size:.75rem;font-weight:700;color:var(--sp-text);cursor:pointer}
 .sp-sett-back svg{width:14px;height:14px}
-.sp-sett-opts{max-height:220px;overflow-y:auto}
-.sp-sett-opt{padding:8px 10px;border-radius:8px;font-size:.78rem;color:var(--sp-text-sub);cursor:pointer}
+.sp-sett-opts{max-height:220px;overflow-y:auto;display:flex;flex-direction:column;gap:2px}
+.sp-sett-opt{padding:10px 14px;border-radius:9px;font-size:.78rem;color:var(--sp-text-sub);cursor:pointer}
 .sp-sett-opt:hover{background:rgba(124,58,237,.08);color:var(--sp-text)}
 .sp-sett-opt.active{background:rgba(124,58,237,.15);color:var(--sp-accent)}
 
