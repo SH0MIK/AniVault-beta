@@ -77,12 +77,13 @@ animeRoutes.get('/anime', async (c) => {
   const image = anime.images?.jpg?.large_image_url ?? '';
   const totalEps = anime.episodes ?? 0;
 
-  // Reuses the same admin-curated banner library as the home page hero
-  // (admin/anime_banners.php) — falls back to a blurred/darkened poster
-  // when nothing's been saved for this title.
+  // Backdrop priority: your own admin-saved banner (admin/anime_banners.php)
+  // > AniList's real banner, IF this title happens to be in the current
+  // season cache (see getAniListBannerFromSeasonCache) > blurred poster.
   const bannerInfo = await mal.getLocalAnimeBannerInfo(id);
-  const backdrop = bannerInfo?.image_url || image;
-  const hasBanner = !!bannerInfo?.image_url;
+  const aniListBanner = bannerInfo?.image_url ? '' : await mal.getAniListBannerFromSeasonCache(id);
+  const backdrop = bannerInfo?.image_url || aniListBanner || image;
+  const hasBanner = !!(bannerInfo?.image_url || aniListBanner);
 
   const currentUser = auth.check() ? await auth.getCurrentUser() : null;
   let userEntry: any = null;
