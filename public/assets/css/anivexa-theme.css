@@ -173,6 +173,11 @@ body { font-family: var(--font-body); }
 
 .info-hero { position: relative; width: 100%; min-height: 480px; overflow: hidden; }
 .info-hero-bg { position: absolute; inset: 0; background-position: center; background-size: cover; background-repeat: no-repeat; transform: scale(1.03); }
+/* No real banner on file (neither yours nor AniList's) — using the poster
+   art full-bleed instead, so blur/darken it since it's not composed as a
+   wide banner. Kept as a CSS class (not an inline style) so the mobile
+   override below can cleanly turn it back off. */
+.info-hero-bg.info-hero-bg-fallback { filter: brightness(.5) blur(2px); }
 .info-hero::before, .info-hero::after { content: ''; position: absolute; inset: 0; pointer-events: none; }
 .info-hero::before { background: radial-gradient(120% 80% at 30% 30%, rgba(0,0,0,.25), rgba(0,0,0,.85) 70%, var(--bg-base) 100%); }
 .info-hero::after { background: linear-gradient(180deg, rgba(0,0,0,0) 40%, rgba(0,0,0,.85) 80%, var(--bg-base) 100%); }
@@ -236,5 +241,13 @@ body { font-family: var(--font-body); }
   .info-grid-2 { grid-template-columns: 1fr; }
   .info-hero { min-height: auto; }
   .info-body { padding: 32px 20px 72px; }
+
+  /* No real banner: on mobile a stretched-and-blurred portrait poster looks
+     smeared (it's being upscaled well past its real resolution to cover a
+     landscape strip). Instead hide the small floating poster box and let
+     the poster itself be the sharp, cropped hero image — same idea as the
+     home page's mobile cover swap, and much closer to Anivexa's own look. */
+  .info-hero-no-banner .info-poster { display: none; }
+  .info-hero-no-banner .info-hero-bg { filter: none; background-position: center top; transform: scale(1); }
 }
 
