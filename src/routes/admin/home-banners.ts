@@ -26,6 +26,7 @@ import type { Env } from '../../index';
 import { buildAdminCtx } from '../../lib/admin-ctx';
 import { h } from '../../lib/helpers';
 import { renderAdminHeader, renderAdminFooter } from '../../render/admin-layout';
+import { MalAPI } from '../../lib/mal-api';
 
 export const adminHomeBannersRoutes = new Hono<{ Bindings: Env }>();
 
@@ -86,20 +87,33 @@ adminHomeBannersRoutes.on(['GET', 'POST'], '/admin/home_banners.php', async (c) 
       if (action === 'add_anime') {
         // Step 1: add the anime to the carousel, no image required yet —
         // it lands at the bottom of the order with placeholder slots for
-        // Banner/Logo to be filled in on the row itself.
+        // Banner/Logo to be filled in on the row itself. Title and logo
+        // are auto-filled if left blank: title from the MAL API, logo from
+        // TMDB's clear-logo search (same source home.ts's auto pool uses).
         const animeId = parseInt((formData.get('anime_id') as string) ?? '0', 10) || 0;
-        const title = ((formData.get('anime_title') as string) ?? '').trim();
+        let title = ((formData.get('anime_title') as string) ?? '').trim();
         if (!animeId) throw new Error('Enter a valid Anime ID.');
 
         const existing = await db.fetchOne<any>('SELECT id FROM home_hero_banners WHERE anime_id=?', [animeId]);
         if (existing) throw new Error('That anime is already in the hero carousel.');
 
+        const mal = new MalAPI(c.env, c.env.API_CACHE, db);
+        let logoUrl = '';
+        if (!title) {
+          const fetched = await mal.getAnime(animeId);
+          if (!fetched.data) throw new Error(`No anime found for ID ${animeId}.`);
+          title = fetched.data.title_english || fetched.data.title || '';
+        }
+        if (title) {
+          logoUrl = await mal.getTitleLogo(title).catch(() => '');
+        }
+
         const order = await nextDisplayOrder(db);
         await db.query(
-          `INSERT INTO home_hero_banners (anime_id, anime_title, display_order, source) VALUES (?,?,?,?)`,
-          [animeId, title || null, order, 'url']
+          `INSERT INTO home_hero_banners (anime_id, anime_title, logo_image_url, display_order, source) VALUES (?,?,?,?,?)`,
+          [animeId, title || null, logoUrl || null, order, 'url']
         );
-        session.setFlash('success', 'Anime added — now add its banner and logo below.');
+        session.setFlash('success', 'Anime added — now add its banner below (logo auto-filled from TMDB if available).');
       } else if (action === 'set_banner' || action === 'set_logo') {
         // Step 2: add or replace the banner/logo for a specific row. Keyed
         // by row id, so no need to re-enter the Anime ID.
