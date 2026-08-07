@@ -69,8 +69,8 @@ animeRoutes.get('/anime', async (c) => {
   const title = anime.title_english && anime.title_english !== anime.title ? anime.title_english : anime.title || 'Unknown';
 
   const seriesEntries = (anime.related_anime ?? [])
-    .filter((rel: any) => SERIES_RELATION_TYPES.includes(rel.relation_type_formatted ?? ''))
-    .map((rel: any) => ({ id: rel.entry?.mal_id ?? 0, title: rel.entry?.title ?? '', type: rel.relation_type_formatted ?? '' }));
+    .filter((rel: any) => rel && SERIES_RELATION_TYPES.includes(rel.relation_type_formatted ?? ''))
+    .map((rel: any) => ({ id: rel?.entry?.mal_id ?? 0, title: rel?.entry?.title ?? '', type: rel?.relation_type_formatted ?? '' }));
   const hasSeriesLinks = seriesEntries.length > 0;
 
   const jpTitle = anime.title_japanese || null;
@@ -149,9 +149,9 @@ animeRoutes.get('/anime', async (c) => {
         <span class="meta-pill${anime.status === 'Currently Airing' ? ' meta-status-airing' : ''}">${h(anime.status || '—')}</span>
       </div>
 
-      ${anime.genres?.length ? `
+      ${(anime.genres?.length ?? 0) > 0 ? `
       <div class="info-genres">
-        ${anime.genres.map((g) => `<a href="${siteUrl}/browse?genre=${g.mal_id}" class="info-genre-tag">${h(g.name)}</a>`).join('')}
+        ${anime.genres.filter(Boolean).map((g) => `<a href="${siteUrl}/browse?genre=${g?.mal_id ?? ''}" class="info-genre-tag">${h(g?.name ?? '')}</a>`).join('')}
       </div>` : ''}
 
       <div class="info-cta">
@@ -208,17 +208,17 @@ animeRoutes.get('/anime', async (c) => {
           ${infoStatRow('Aired', anime.aired?.string || '—')}
           ${infoStatRow('Duration', anime.duration || '—')}
           ${infoStatRow('Rating', anime.rating || '—')}
-          ${infoStatRow('Studio', (anime.studios ?? []).map((s) => s.name).join(', ') || '—')}
+          ${infoStatRow('Studio', (anime.studios ?? []).filter(Boolean).map((s) => s?.name ?? '').filter(Boolean).join(', ') || '—')}
           ${infoStatRow('Source', anime.source || '—')}
         </div>
       </div>
     </div>
   </div>
 
-  ${anime.themes?.length ? `
+  ${(anime.themes?.length ?? 0) > 0 ? `
   <div class="info-section">
     <h2 class="info-section-title">Themes</h2>
-    <div class="info-tags">${anime.themes.map((t: any) => `<span class="info-tag">${h(t.name)}</span>`).join('')}</div>
+    <div class="info-tags">${anime.themes.filter(Boolean).map((t: any) => `<span class="info-tag">${h(t?.name ?? '')}</span>`).join('')}</div>
   </div>` : ''}
 
   <div class="info-section" id="episodes-section">
