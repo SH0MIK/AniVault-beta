@@ -78,10 +78,14 @@ animeRoutes.get('/anime', async (c) => {
   const totalEps = anime.episodes ?? 0;
 
   // Backdrop priority: your own admin-saved banner (admin/anime_banners.php)
-  // > AniList's real banner, IF this title happens to be in the current
-  // season cache (see getAniListBannerFromSeasonCache) > blurred poster.
+  // > AniList's real banner from the current-season cache (currently airing
+  // titles only) > AniList's real banner from the all-time top-200 cache
+  // (covers older/finished popular titles) > blurred poster.
   const bannerInfo = await mal.getLocalAnimeBannerInfo(id);
-  const aniListBanner = bannerInfo?.image_url ? '' : await mal.getAniListBannerFromSeasonCache(id);
+  let aniListBanner = '';
+  if (!bannerInfo?.image_url) {
+    aniListBanner = (await mal.getAniListBannerFromSeasonCache(id)) || (await mal.getAniListTopBanner(id));
+  }
   const backdrop = bannerInfo?.image_url || aniListBanner || image;
   const hasBanner = !!(bannerInfo?.image_url || aniListBanner);
 
