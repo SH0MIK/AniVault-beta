@@ -45,7 +45,7 @@ function currentSeason() {
 async function fetchAniListSeason(season, seasonYear) {
   const query = `
     query ($season: MediaSeason, $seasonYear: Int) {
-      Page(page: 1, perPage: 24) {
+      Page(page: 1, perPage: 50) {
         media(season: $season, seasonYear: $seasonYear, type: ANIME, sort: POPULARITY_DESC, isAdult: false) {
           idMal
           title { romaji english }
