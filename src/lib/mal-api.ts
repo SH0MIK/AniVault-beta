@@ -166,6 +166,16 @@ export class MalAPI {
     return cached.data.find((a) => a.mal_id === malId)?.banner_image || '';
   }
 
+  // Second tier: AniList's all-time top-200-by-popularity banner map (also
+  // written by the same GitHub Action, refreshed roughly daily since it's
+  // effectively static). Covers older/finished popular titles that the
+  // season cache above can never include — Attack on Titan, Naruto, etc.
+  async getAniListTopBanner(malId: number): Promise<string> {
+    if (!malId || !this.kv) return '';
+    const map = await this.kv.get('anilist_top_banners', 'json') as Record<string, string> | null;
+    return map?.[malId] || '';
+  }
+
   private seasonCacheKey(): string {
     const now = new Date();
     const month = now.getUTCMonth() + 1; // 1-12
