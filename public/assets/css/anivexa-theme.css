@@ -95,6 +95,13 @@ body { font-family: var(--font-body); }
 .hero-dot { width: 8px; height: 8px; border-radius: 99px; background: rgba(255,255,255,.3); cursor: pointer; transition: var(--trans); border: none; }
 .hero-dot.active { width: 28px; background: var(--accent); }
 
+/* The TMDB logo image (when found) replaces the plain text title on both
+   desktop and mobile — falls back to the plain text automatically when no
+   logo was found for that title (has-logo class only gets added then). */
+.hero-info.has-logo .hero-title { display: none; }
+.hero-logo { display: none; }
+.hero-info.has-logo .hero-logo { display: block; max-width: 420px; max-height: 150px; width: auto; height: auto; object-fit: contain; margin-bottom: 14px; filter: drop-shadow(0 4px 18px rgba(0,0,0,.6)); }
+
 /* Mobile: the <picture> swap serves your local (portrait) cover instead of
    the wide banner — object-position needs to bias toward the top so faces
    aren't cropped out, and per your call, genre tags are hidden here since
@@ -102,6 +109,7 @@ body { font-family: var(--font-body); }
 @media (max-width: 768px) {
   .hero-bg img { object-position: center top; }
   .hero-badges, .hero-genres { display: none; }
+  .hero-info.has-logo .hero-logo { max-width: 78%; max-height: 130px; }
 }
 
 /* -- genre nav bar -- */
