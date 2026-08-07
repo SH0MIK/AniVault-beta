@@ -150,6 +150,22 @@ export class MalAPI {
     return true;
   }
 
+  // AniList blocks requests from Cloudflare Workers outright (confirmed via
+  // a 403 "manually blocked" response) — there's no live single-anime
+  // lookup available here the way there is for MAL/Jikan. But the season
+  // cache your GitHub Action already populates (see
+  // .github/workflows/anilist-cache.yml) carries AniList's real
+  // bannerImage for every title in the current season "for free" — if the
+  // anime being viewed happens to be currently airing, we can pull its
+  // banner out of that cache with zero extra requests. Anything outside
+  // the current season simply isn't covered (returns '').
+  async getAniListBannerFromSeasonCache(malId: number): Promise<string> {
+    if (!malId || !this.kv) return '';
+    const cached = await this.kv.get(this.seasonCacheKey(), 'json') as { data: NormalisedAnime[] } | null;
+    if (!cached?.data) return '';
+    return cached.data.find((a) => a.mal_id === malId)?.banner_image || '';
+  }
+
   private seasonCacheKey(): string {
     const now = new Date();
     const month = now.getUTCMonth() + 1; // 1-12
