@@ -13,6 +13,7 @@ export interface MalEnv {
   MAL_CLIENT_ID?: string;
   API_CACHE_ENABLED?: string; // "1" / "0" via wrangler.toml var
   API_CACHE_TIME?: string; // seconds
+  TMDB_API_KEY?: string;
 }
 
 export interface NormalisedAnime {
@@ -274,6 +275,62 @@ export class MalAPI {
     if (!animeId) return '';
     const row = await this.db.fetchOne<{ image_url: string }>('SELECT image_url FROM anime_banners WHERE anime_id = ?', [animeId]);
     return row ? row.image_url : '';
+  }
+
+  // TMDB stores a "clear logo" per title — transparent-background title art,
+  // which is what Anivexa overlays on the mobile cover instead of plain
+  // text. TMDB has no MAL-id cross-reference, so this matches by title
+  // search (best-effort, first result) — good enough for a hero row of a
+  // handful of titles. Silently returns '' on any failure (missing key,
+  // no match, no logo for that title, network error) since this is purely
+  // a visual enhancement, never something that should break the page.
+  async getTitleLogo(title: string): Promise<string> {
+    if (!this.env.TMDB_API_KEY || !title) return '';
+
+    const cacheKey = 'tmdb_logo_' + (await sha1(title.toLowerCase()));
+    if (this.kv && this.cacheEnabled()) {
+      const cached = await this.kv.get(cacheKey);
+      if (cached !== null) return cached; // cached '' is a valid "no logo found" result
+    }
+
+    const logo = await this.fetchTmdbLogo(title);
+    if (this.kv && this.cacheEnabled()) {
+      // Logos essentially never change — cache for a week either way (even
+      // a "not found" result), so a title with no logo doesn't get
+      // re-searched on every single page load.
+      await this.kv.put(cacheKey, logo, { expirationTtl: 604800 });
+    }
+    return logo;
+  }
+
+  private async fetchTmdbLogo(title: string): Promise<string> {
+    try {
+      const key = this.env.TMDB_API_KEY!;
+      const searchUrl = (kind: 'tv' | 'movie') =>
+        `https://api.themoviedb.org/3/search/${kind}?api_key=${key}&query=${encodeURIComponent(title)}`;
+
+      let id: number | null = null;
+      let kind: 'tv' | 'movie' = 'tv';
+      for (const k of ['tv', 'movie'] as const) {
+        const res = await fetch(searchUrl(k));
+        if (!res.ok) continue;
+        const json: any = await res.json();
+        const first = json?.results?.[0];
+        if (first?.id) { id = first.id; kind = k; break; }
+      }
+      if (!id) return '';
+
+      const imgRes = await fetch(`https://api.themoviedb.org/3/${kind}/${id}/images?api_key=${key}&include_image_language=en,ja,null`);
+      if (!imgRes.ok) return '';
+      const imgJson: any = await imgRes.json();
+      const logos: any[] = imgJson?.logos ?? [];
+      if (logos.length === 0) return '';
+
+      const best = logos.find((l) => l.iso_639_1 === 'en') || logos[0];
+      return best?.file_path ? `https://image.tmdb.org/t/p/w500${best.file_path}` : '';
+    } catch {
+      return '';
+    }
   }
 
   private async normalise(node: any): Promise<NormalisedAnime> {
