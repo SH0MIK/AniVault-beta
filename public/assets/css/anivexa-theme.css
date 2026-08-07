@@ -78,6 +78,12 @@ body { font-family: var(--font-body); }
 .hero-gradient { position: absolute; inset: 0; background: var(--grad-hero); }
 .hero-gradient::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, rgba(8,8,8,.9) 0%, transparent 55%); }
 .hero-content { position: relative; z-index: 2; height: 100%; display: flex; align-items: flex-end; padding-bottom: 40px; }
+/* .container normally centers itself with a max-width (that's what keeps
+   the rest of the site's page content centered) — override that just here
+   so the hero text hugs the banner's actual left edge on every screen
+   size, instead of being inset by however much space is left over around
+   the centered 1280px container on a wide screen. */
+.hero-content .container { max-width: none; margin: 0; padding-left: clamp(20px, 5vw, 64px); padding-right: 20px; }
 .hero-info { max-width: 560px; }
 .hero-badges { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
 .hero-title { font-size: clamp(1.7rem, 4vw, 3rem); font-weight: 800; line-height: 1.15; margin-bottom: 12px; }
@@ -105,20 +111,13 @@ body { font-family: var(--font-body); }
 /* Mobile: the <picture> swap serves your local (portrait) cover instead of
    the wide banner — object-position needs to bias toward the top so faces
    aren't cropped out, and per your call, genre tags are hidden here since
-   the cover art itself is the visual, no badges cluttering it. Everything
-   in the text block is centered here too (logo, synopsis, buttons), same
-   as Anivexa's mobile layout — desktop stays left-aligned. */
+   the cover art itself is the visual, no badges cluttering it. Text block
+   stays left-aligned here too, same as desktop. */
 @media (max-width: 768px) {
   .hero-bg img { object-position: center top; }
   .hero-badges, .hero-genres { display: none; }
   .hero-info.has-logo .hero-logo { max-width: 78%; max-height: 130px; }
-
-  .hero-content { justify-content: center; text-align: center; }
-  .hero-info { max-width: 100%; display: flex; flex-direction: column; align-items: center; }
-  .hero-logo { margin-left: auto; margin-right: auto; }
   .hero-desc { max-width: 90%; -webkit-line-clamp: 3; }
-  .hero-stat-strip { justify-content: center; }
-  .hero-actions { justify-content: center; }
 }
 
 
