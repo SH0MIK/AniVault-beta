@@ -339,7 +339,6 @@ function renderHeroSlide(a: NormalisedAnime, i: number, siteUrl: string, banner?
   <div class="hero-content">
     <div class="container">
       <div class="hero-info${logo ? ' has-logo' : ''}">
-        ${genres.length ? `<div class="hero-badges">${genres.map((g) => `<span class="badge badge-accent">${h(g.name)}</span>`).join('')}</div>` : ''}
         <h1 class="hero-title">${h(title)}</h1>
         ${logo ? `<img class="hero-logo" src="${h(logo)}" alt="${h(title)}" loading="${i === 0 ? 'eager' : 'lazy'}">` : ''}
         ${desc ? `<p class="hero-desc">${h(desc)}</p>` : ''}
