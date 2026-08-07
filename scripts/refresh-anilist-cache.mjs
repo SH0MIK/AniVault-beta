@@ -117,8 +117,45 @@ async function fetchAniListSeason(season, seasonYear) {
     }));
 }
 
-async function writeToKv(key, value) {
-  const url = `https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT_ID}/storage/kv/namespaces/${CF_KV_NAMESPACE_ID}/values/${encodeURIComponent(key)}?expiration_ttl=7200`;
+async function fetchTopPopularityBanners() {
+  // All-time popularity, not season-filtered — this is what covers older/
+  // finished classics (Attack on Titan, Naruto, etc.) that will never show
+  // up in the season query. 4 pages x 50 = top 200 by popularity, which
+  // covers virtually anything a user would actually look up.
+  const query = `
+    query ($page: Int) {
+      Page(page: $page, perPage: 50) {
+        pageInfo { hasNextPage }
+        media(type: ANIME, sort: POPULARITY_DESC, isAdult: false) {
+          idMal
+          bannerImage
+        }
+      }
+    }`;
+
+  const map = {};
+  for (let page = 1; page <= 4; page++) {
+    const res = await fetch('https://graphql.anilist.co', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ query, variables: { page } }),
+    });
+    const text = await res.text();
+    if (!res.ok) throw new Error(`AniList HTTP ${res.status} (top banners, page ${page}): ${text.slice(0, 500)}`);
+    const json = JSON.parse(text);
+    if (json.errors?.length) throw new Error(`AniList GraphQL errors (top banners, page ${page}): ${JSON.stringify(json.errors).slice(0, 500)}`);
+
+    const media = json?.data?.Page?.media ?? [];
+    for (const m of media) {
+      if (m.idMal && m.bannerImage) map[m.idMal] = m.bannerImage;
+    }
+    if (!json?.data?.Page?.pageInfo?.hasNextPage) break;
+  }
+  return map;
+}
+
+async function writeToKv(key, value, ttlSeconds = 7200) {
+  const url = `https://api.cloudflare.com/client/v4/accounts/${CF_ACCOUNT_ID}/storage/kv/namespaces/${CF_KV_NAMESPACE_ID}/values/${encodeURIComponent(key)}?expiration_ttl=${ttlSeconds}`;
   const res = await fetch(url, {
     method: 'PUT',
     headers: {
@@ -140,15 +177,26 @@ async function main() {
   const data = await fetchAniListSeason(season, seasonYear);
 
   if (data.length === 0) {
-    console.error('AniList returned 0 usable entries — not overwriting existing cache.');
-    process.exit(1);
+    console.error('AniList returned 0 usable entries for the season — not overwriting existing cache.');
+  } else {
+    console.log(`Got ${data.length} anime, ${data.filter((a) => a.banner_image).length} with a banner image.`);
+    const key = `anilist_season_${season}_${seasonYear}`;
+    await writeToKv(key, JSON.stringify({ data }), 7200);
+    console.log(`Wrote ${key} to KV.`);
   }
 
-  console.log(`Got ${data.length} anime, ${data.filter((a) => a.banner_image).length} with a banner image.`);
-
-  const key = `anilist_season_${season}_${seasonYear}`;
-  await writeToKv(key, JSON.stringify({ data }));
-  console.log(`Wrote ${key} to KV.`);
+  console.log('Fetching AniList all-time top-200 popularity banners...');
+  const topBanners = await fetchTopPopularityBanners();
+  const topCount = Object.keys(topBanners).length;
+  if (topCount === 0) {
+    console.error('Got 0 top-popularity banners — not overwriting existing cache.');
+    process.exit(data.length === 0 ? 1 : 0);
+  }
+  console.log(`Got ${topCount} banners from the top-popularity list.`);
+  // 30 days — this list is basically static (which anime are all-time
+  // popular, and their banner art, barely change week to week).
+  await writeToKv('anilist_top_banners', JSON.stringify(topBanners), 2592000);
+  console.log('Wrote anilist_top_banners to KV.');
 }
 
 main().catch((err) => {
