@@ -105,12 +105,22 @@ body { font-family: var(--font-body); }
 /* Mobile: the <picture> swap serves your local (portrait) cover instead of
    the wide banner — object-position needs to bias toward the top so faces
    aren't cropped out, and per your call, genre tags are hidden here since
-   the cover art itself is the visual, no badges cluttering it. */
+   the cover art itself is the visual, no badges cluttering it. Everything
+   in the text block is centered here too (logo, synopsis, buttons), same
+   as Anivexa's mobile layout — desktop stays left-aligned. */
 @media (max-width: 768px) {
   .hero-bg img { object-position: center top; }
   .hero-badges, .hero-genres { display: none; }
   .hero-info.has-logo .hero-logo { max-width: 78%; max-height: 130px; }
+
+  .hero-content { justify-content: center; text-align: center; }
+  .hero-info { max-width: 100%; display: flex; flex-direction: column; align-items: center; }
+  .hero-logo { margin-left: auto; margin-right: auto; }
+  .hero-desc { max-width: 90%; -webkit-line-clamp: 3; }
+  .hero-stat-strip { justify-content: center; }
+  .hero-actions { justify-content: center; }
 }
+
 
 /* -- genre nav bar -- */
 .genre-nav-wrap { position: relative; margin-bottom: 40px; }
