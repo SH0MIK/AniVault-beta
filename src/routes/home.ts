@@ -118,13 +118,17 @@ homeRoutes.get('/', async (c) => {
 
   if (curatedRows.length > 0) {
     const curatedAnime = await Promise.all(curatedRows.map((r) => mal.getAnime(r.anime_id)));
-    curatedRows.forEach((r, i) => {
+    for (let i = 0; i < curatedRows.length; i++) {
+      const r = curatedRows[i];
       const anime = curatedAnime[i].data;
-      if (!anime) return; // skip slides whose Anime ID no longer resolves
+      if (!anime) continue; // skip slides whose Anime ID no longer resolves
       heroPool.push(anime);
       heroBanners.push(r.banner_image_url || '');
-      heroLogos.push(r.logo_image_url || '');
-    });
+      // No manually-saved logo on this slide — fall back to the same TMDB
+      // clear-logo lookup the auto pool uses, rather than showing nothing.
+      const logo = r.logo_image_url || (await mal.getTitleLogo(anime.title_english || anime.title).catch(() => ''));
+      heroLogos.push(logo);
+    }
   }
 
   if (heroPool.length === 0) {
