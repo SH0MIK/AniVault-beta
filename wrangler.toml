@@ -41,6 +41,10 @@ DISCORD_REDIRECT_URI = "https://www.anivault.co/pages/oauth_discord.php"
 API_CACHE_ENABLED = "1"
 API_CACHE_TIME = "3600"
 
+[observability.logs]
+enabled = true
+invocation_logs = true
+
 # Secrets (do NOT put real values here — set them with:
 #   wrangler secret put DB_PASS_LEGACY   (only needed if you keep a MySQL fallback)
 #   wrangler secret put GOOGLE_CLIENT_ID
