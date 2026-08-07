@@ -271,23 +271,42 @@ export class MalAPI {
   // table/admin page: anime_banners / admin/anime_banners.php). AniList's
   // bannerImage is community-submitted and often mediocre — this lets you
   // manually curate a nicer banner per title, same as Anivexa does.
-  async getLocalAnimeBanner(animeId: number): Promise<string> {
+  // Returns order_index too, so the home page hero can honour your manual
+  // display order (see getAniListSeasonNow's caller in home.ts).
+  async getLocalAnimeBannerInfo(animeId: number): Promise<{ image_url: string; order_index: number } | null> {
+    if (!animeId) return null;
+    const row = await this.db.fetchOne<{ image_url: string; order_index: number | null }>(
+      'SELECT image_url, order_index FROM anime_banners WHERE anime_id = ?',
+      [animeId]
+    );
+    return row ? { image_url: row.image_url, order_index: row.order_index ?? 0 } : null;
+  }
+
+  // A manually-saved logo (admin/anime_banners.php "Add Logo" button) takes
+  // priority over the automatic TMDB search — lets you fix a wrong/missing
+  // match without waiting on TMDB to have the right one.
+  async getLocalAnimeLogo(animeId: number): Promise<string> {
     if (!animeId) return '';
-    const row = await this.db.fetchOne<{ image_url: string }>('SELECT image_url FROM anime_banners WHERE anime_id = ?', [animeId]);
+    const row = await this.db.fetchOne<{ image_url: string }>('SELECT image_url FROM anime_logos WHERE anime_id = ?', [animeId]);
     return row ? row.image_url : '';
   }
 
   // TMDB stores a "clear logo" per title — transparent-background title art,
   // which is what Anivexa overlays on the mobile cover instead of plain
-  // text. TMDB has no MAL-id cross-reference, so this matches by title
-  // search (best-effort, first result) — good enough for a hero row of a
-  // handful of titles. Silently returns '' on any failure (missing key,
-  // no match, no logo for that title, network error) since this is purely
-  // a visual enhancement, never something that should break the page.
-  async getTitleLogo(title: string): Promise<string> {
+  // text. Checks your manually-saved local logo library first (instant,
+  // always correct); only falls back to a live TMDB title search (best-
+  // effort, first result — good enough for a hero row of a handful of
+  // titles) if you haven't saved one. Silently returns '' on any failure
+  // (missing key, no match, no logo for that title, network error) since
+  // this is purely a visual enhancement, never something that should break
+  // the page.
+  async getTitleLogo(animeId: number, title: string): Promise<string> {
+    const local = await this.getLocalAnimeLogo(animeId);
+    if (local) return local;
+
     if (!this.env.TMDB_API_KEY || !title) return '';
 
-    const cacheKey = 'tmdb_logo_' + (await sha1(title.toLowerCase()));
+    const cacheKey = `tmdb_logo_${animeId || (await sha1(title.toLowerCase()))}`;
     if (this.kv && this.cacheEnabled()) {
       const cached = await this.kv.get(cacheKey);
       if (cached !== null) return cached; // cached '' is a valid "no logo found" result
@@ -339,32 +358,32 @@ export class MalAPI {
     const mediumImage = localImage || node.main_picture?.medium || '';
     const largeImage = localImage || node.main_picture?.large || node.main_picture?.medium || '';
 
-    const genres = (node.genres ?? []).map((g: any) => ({ mal_id: g.id, name: g.name }));
-    const studios = (node.studios ?? []).map((s: any) => ({ mal_id: s.id, name: s.name }));
+    const genres = (node.genres ?? []).filter(Boolean).map((g: any) => ({ mal_id: g?.id ?? 0, name: g?.name ?? '' }));
+    const studios = (node.studios ?? []).filter(Boolean).map((s: any) => ({ mal_id: s?.id ?? 0, name: s?.name ?? '' }));
 
-    const related = await Promise.all((node.related_anime ?? []).map(async (r: any) => {
-      const entry = r.node ?? {};
-      const entryId = Number(entry.id ?? 0);
+    const related = await Promise.all((node.related_anime ?? []).filter(Boolean).map(async (r: any) => {
+      const entry = r?.node ?? {};
+      const entryId = Number(entry?.id ?? 0);
       const entryLocalImage = entryId ? await this.getLocalAnimeImage(entryId) : '';
       return {
         entry: {
           mal_id: entryId,
-          title: entry.title ?? '',
-          images: { jpg: { image_url: entryLocalImage || entry.main_picture?.medium || '' } },
+          title: entry?.title ?? '',
+          images: { jpg: { image_url: entryLocalImage || entry?.main_picture?.medium || '' } },
         },
-        relation_type_formatted: r.relation_type_formatted ?? '',
+        relation_type_formatted: r?.relation_type_formatted ?? '',
       };
     }));
 
-    const recommendations = await Promise.all((node.recommendations ?? []).map(async (r: any) => {
-      const entry = r.node ?? {};
-      const entryId = Number(entry.id ?? 0);
+    const recommendations = await Promise.all((node.recommendations ?? []).filter(Boolean).map(async (r: any) => {
+      const entry = r?.node ?? {};
+      const entryId = Number(entry?.id ?? 0);
       const entryLocalImage = entryId ? await this.getLocalAnimeImage(entryId) : '';
       return {
         entry: {
           mal_id: entryId,
-          title: entry.title ?? '',
-          images: { jpg: { image_url: entryLocalImage || entry.main_picture?.medium || '' } },
+          title: entry?.title ?? '',
+          images: { jpg: { image_url: entryLocalImage || entry?.main_picture?.medium || '' } },
         },
       };
     }));
