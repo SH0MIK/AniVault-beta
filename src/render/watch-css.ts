@@ -207,19 +207,19 @@ export const WATCH_CSS = `/* ═════════════════
   flex-wrap: wrap;
 }
 .wpc-q {
-  padding: .2rem .7rem;
-  border-radius: 20px;
+  padding: .3rem .85rem;
+  border-radius: 999px;
   border: 1px solid rgba(255,255,255,.1);
-  background: rgba(255,255,255,.03);
-  color: var(--text-muted);
+  background: #0f0f0f;
+  color: var(--text-secondary);
   font-size: .72rem;
-  font-weight: 700;
+  font-weight: 600;
   cursor: pointer;
-  transition: all .15s;
+  transition: all .2s cubic-bezier(.4,0,.2,1);
   font-family: var(--font-body);
 }
-.wpc-q:hover { background: rgba(255,255,255,.09); color: var(--text-primary); }
-.wpc-q.on { background: rgba(124,58,237,.15); border-color: rgba(124,58,237,.5); color: var(--accent); }
+.wpc-q:hover { border-color: rgba(124,58,237,.5); color: #c4b5fd; background: rgba(124,58,237,.08); }
+.wpc-q.on { background: rgba(124,58,237,.18); border-color: #7c3aed; color: #c4b5fd; box-shadow: 0 0 0 1px rgba(124,58,237,.3); }
 
 .server-panel {
   background: rgba(12,14,20,0.93);
@@ -263,39 +263,41 @@ export const WATCH_CSS = `/* ═════════════════
   letter-spacing: .02em;
 }
 
-/* Server Panel — SUB/DUB tabs */
+/* Server Panel — SUB/DUB tabs (Anivexa-style pill segmented toggle) */
 .server-panel-body {
   padding: 0;
   display: flex;
   flex-direction: column;
 }
 .server-tabs {
-  display: flex;
-  border-bottom: 1px solid rgba(255,255,255,.06);
+  display: inline-flex;
+  align-self: flex-start;
+  background: rgba(255,255,255,.05);
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 999px;
+  padding: 3px;
+  margin: .7rem .85rem 0;
 }
 .server-tab {
-  flex: 1;
-  padding: .45rem .6rem;
-  font-size: .65rem;
-  font-weight: 800;
+  padding: .35rem .95rem;
+  font-size: .68rem;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: .1em;
+  letter-spacing: .08em;
   cursor: pointer;
   border: none;
+  border-radius: 999px;
   background: transparent;
   color: var(--text-muted);
-  opacity: .45;
-  transition: all .18s;
+  transition: all .2s cubic-bezier(.4,0,.2,1);
   font-family: var(--font-body);
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
 }
 .server-tab.active {
-  opacity: 1;
-  border-bottom-color: currentColor;
+  background: #7c3aed;
+  color: #fff;
+  box-shadow: 0 2px 10px rgba(124,58,237,.4);
 }
-.server-tab[data-tab="sub"]        { color: #7c3aed; }
-.server-tab[data-tab="dub"]        { color: #60a5fa; }
+.server-tab[data-tab="dub"].active { background: #2563eb; box-shadow: 0 2px 10px rgba(37,99,235,.4); }
 .server-tab-panel {
   display: none;
   padding: .7rem .85rem;
@@ -308,12 +310,12 @@ export const WATCH_CSS = `/* ═════════════════
   position: relative;
   display: inline-flex;
   align-items: center;
-  gap: .3rem;
-  padding: .3rem .8rem .3rem .55rem;
-  border-radius: 9px;
+  gap: .35rem;
+  padding: .35rem .85rem .35rem .6rem;
+  border-radius: 999px;
   border: 1px solid rgba(255,255,255,0.08);
-  background: rgba(255,255,255,0.04);
-  color: var(--text-muted);
+  background: #0f0f0f;
+  color: var(--text-secondary);
   font-size: .75rem;
   font-weight: 600;
   cursor: pointer;
@@ -516,16 +518,15 @@ export const WATCH_CSS = `/* ═════════════════
   display: flex;
   align-items: center;
   gap: .55rem;
-  padding: .65rem 1.1rem;
-  border-radius: 11px;
-  border: 1px solid rgba(255,255,255,0.07);
-  background: rgba(22,26,34,0.8);
+  padding: .65rem 1.2rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: #0f0f0f;
   color: var(--text-secondary);
   text-decoration: none;
   font-size: .82rem;
-  font-weight: 600;
+  font-weight: 700;
   transition: all .22s cubic-bezier(.16,1,.3,1);
-  backdrop-filter: blur(6px);
   min-width: 0;
   position: relative;
   overflow: hidden;
