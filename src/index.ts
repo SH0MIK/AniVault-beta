@@ -25,7 +25,6 @@ import { adminMiscSmallRoutes } from './routes/admin/misc-small';
 import { adminAnnouncementsRoutes } from './routes/admin/announcements';
 import { adminAnimeImagesRoutes } from './routes/admin/anime-images';
 import { adminAnimeBannersRoutes } from './routes/admin/anime-banners';
-import { adminHomeBannersRoutes } from './routes/admin/home-banners';
 import { adminMergeUsersRoutes } from './routes/admin/merge-users';
 import { adminUsernameFixerRoutes } from './routes/admin/username-fixer';
 import { adminAnalyticsRoutes } from './routes/admin/analytics';
@@ -95,7 +94,6 @@ app.route('/', adminMiscSmallRoutes);
 app.route('/', adminAnnouncementsRoutes);
 app.route('/', adminAnimeImagesRoutes);
 app.route('/', adminAnimeBannersRoutes);
-app.route('/', adminHomeBannersRoutes);
 app.route('/', adminMergeUsersRoutes);
 app.route('/', adminUsernameFixerRoutes);
 app.route('/', adminAnalyticsRoutes);
@@ -110,6 +108,22 @@ app.route('/', legalRoutes);
 app.route('/', watchNowRoutes);
 app.route('/', legacyRedirectRoutes);
 app.route('/', apiChatRoutes);
+
+// Global error handler — without this, an unhandled exception anywhere just
+// shows a bare "Internal Server Error" with no detail in the logs beyond
+// whatever single stack frame Cloudflare happens to capture. This logs the
+// full error (message + stack + which URL triggered it) and returns a
+// plain but on-brand error page instead of a blank one.
+app.onError((err, c) => {
+  console.error(`[unhandled] ${c.req.method} ${c.req.url} — ${err.message}\n${err.stack ?? ''}`);
+  return c.html(
+    `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Something went wrong</title>
+    <style>body{background:#080808;color:#fff;font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;text-align:center;padding:20px;}
+    h1{font-size:1.3rem;margin-bottom:8px;} p{color:#8a8aa3;font-size:.9rem;} a{color:#9d6ef8;}</style></head>
+    <body><div><h1>Something went wrong</h1><p>This page hit an unexpected error. It's been logged — try again in a moment.</p><p><a href="/">Go home</a></p></div></body></html>`,
+    500
+  );
+});
 
 export default {
   fetch: app.fetch,
