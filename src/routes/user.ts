@@ -106,16 +106,17 @@ userRoutes.get('/u/:username', async (c) => {
       </div>
       ${isProfileOwner ? `<span class="u-role-badge">OWNER</span>` : profileUser.role === 'admin' ? `<span class="u-role-badge">ADMIN</span>` : ''}
     </div>
-    <div class="u-header-text">
-      <div class="u-name-row">
-        <h1 class="u-username username-with-badges">${h(profileUser.username)}${Badge.renderList(profileBadges)}</h1>
-        ${isOwn ? `<a href="${siteUrl}/profile" class="btn btn-ghost btn-sm">${icon('edit', 'icon-small')} Edit Profile</a>`
-          : currentUser ? `<button class="btn ${isFollowing ? 'btn-ghost' : 'btn-primary'} btn-sm" id="follow-btn" onclick="toggleFollow(${profileId}, this)">${isFollowing ? `${icon('check', 'icon-small')} Following` : `${icon('plus', 'icon-small')} Follow`}</button>`
-          : `<button onclick="requireLogin()" class="btn btn-primary btn-sm">${icon('plus', 'icon-small')} Follow</button>`}
-      </div>
-      ${profileUser.bio ? `<p class="u-bio">${h(profileUser.bio).replace(/\n/g, '<br>')}</p>` : ''}
-      <p class="u-joined text-muted">Joined ${joinedDate}${profileUser.last_login ? ` · Last seen ${timeAgo(profileUser.last_login)}` : ''}</p>
+    <h1 class="u-username username-with-badges">${h(profileUser.username)}${Badge.renderList(profileBadges)}</h1>
+    <div class="u-header-actions">
+      ${isOwn ? `<a href="${siteUrl}/profile" class="btn btn-ghost btn-sm">${icon('edit', 'icon-small')} Edit Profile</a>`
+        : currentUser ? `<button class="btn ${isFollowing ? 'btn-ghost' : 'btn-primary'} btn-sm" id="follow-btn" onclick="toggleFollow(${profileId}, this)">${isFollowing ? `${icon('check', 'icon-small')} Following` : `${icon('plus', 'icon-small')} Follow`}</button>`
+        : `<button onclick="requireLogin()" class="btn btn-primary btn-sm">${icon('plus', 'icon-small')} Follow</button>`}
     </div>
+  </div>
+
+  <div class="u-header-meta">
+    ${profileUser.bio ? `<p class="u-bio">${h(profileUser.bio).replace(/\n/g, '<br>')}</p>` : ''}
+    <p class="u-joined text-muted">Joined ${joinedDate}${profileUser.last_login ? ` · Last seen ${timeAgo(profileUser.last_login)}` : ''}</p>
   </div>
 
   <div class="profile-stat-strip u-stat-strip">
