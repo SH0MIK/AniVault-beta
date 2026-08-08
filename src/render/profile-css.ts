@@ -71,5 +71,13 @@ export const PROFILE_CSS = `.avatar-cropper-modal {
 .toggle-switch:checked::after { transform: translateX(18px); }
 
 .danger-zone { border-color: rgba(232,69,60,.35); }
+
+/* Social links inputs — icon-prefixed rows in the Account tab */
+.social-input-row { display: flex; align-items: center; gap: 10px; }
+.social-input-row svg.icon { flex-shrink: 0; width: 18px; height: 18px; color: var(--text-muted); }
+.social-input-row .form-control { flex: 1; }
+.social-input-spacer { display: inline-block; width: 18px; flex-shrink: 0; }
+.social-input-static { flex: 1; font-size: .85rem; color: var(--text-secondary); background: rgba(255,255,255,.03); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 9px 12px; display: flex; align-items: center; gap: 6px; }
+.social-input-static svg.icon { color: var(--accent); }
 </style>
 `;
