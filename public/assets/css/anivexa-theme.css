@@ -309,3 +309,45 @@ body { font-family: var(--font-body); }
   .profile-tabs { max-width: 100%; overflow-x: auto; }
 }
 
+/* ==========================================================================
+   Public user profile ("/u/:username") — banner + header + stat strip
+   ========================================================================== */
+
+.u-hero { position: relative; }
+.u-banner { width: 100%; height: 260px; background-size: cover; background-position: center 35%; position: relative; }
+.u-banner-fallback { background: radial-gradient(120% 140% at 12% 0%, var(--accent-dim) 0%, var(--bg-base) 65%); }
+.u-banner::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(8,8,8,0) 45%, var(--bg-base) 100%); pointer-events: none; }
+.u-banner-edit-btn { position: absolute; top: 16px; right: 16px; z-index: 3; display: flex; align-items: center; gap: 6px; background: rgba(0,0,0,.5); backdrop-filter: blur(8px); border: 1px solid var(--glass-border); color: #fff; padding: 8px 16px; border-radius: var(--radius-pill); font-size: .8rem; font-weight: 600; font-family: var(--font-body); cursor: pointer; transition: var(--trans); }
+.u-banner-edit-btn:hover { background: rgba(0,0,0,.75); border-color: var(--border-accent); }
+.u-banner-status { position: absolute; top: 20px; right: 190px; z-index: 3; font-size: .78rem; color: rgba(255,255,255,.75); }
+
+.u-header { display: flex; gap: 20px; align-items: flex-end; flex-wrap: wrap; margin-top: -56px; position: relative; z-index: 2; padding: 0 0 20px; }
+.u-avatar-wrap { position: relative; flex-shrink: 0; }
+.u-avatar { width: 112px; height: 112px; font-size: 2.4rem; border: 4px solid var(--bg-base); box-shadow: 0 10px 30px rgba(0,0,0,.6); }
+.u-role-badge { position: absolute; bottom: -2px; right: -2px; background: var(--grad-accent); color: #fff; border-radius: 20px; font-size: .62rem; padding: 3px 9px; font-weight: 800; letter-spacing: .04em; border: 2px solid var(--bg-base); }
+.u-header-text { flex: 1; min-width: 220px; padding-bottom: 4px; }
+.u-name-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 6px; }
+.u-username { font-size: clamp(1.3rem, 3vw, 1.6rem); font-weight: 800; margin: 0; display: flex; align-items: center; gap: 8px; }
+.u-bio { color: var(--text-secondary); font-size: .92rem; line-height: 1.65; margin: 0 0 8px; max-width: 560px; }
+.u-joined { font-size: .78rem; margin: 0; }
+
+.u-stat-strip { margin: 24px 0 28px; }
+.profile-stat-box.clickable { cursor: pointer; transition: var(--trans); }
+.profile-stat-box.clickable:hover { background: var(--bg-hover); }
+
+/* Scoped tab restyle — reuses the site's existing .tab-btn/.tab-content
+   JS (app.js toggles by class + data-tab, untouched) but only repaints
+   the look inside .u-tabs so anime/character/list pages elsewhere keep
+   their own tab style. */
+.u-tabs .tabs { display: flex; gap: 4px; background: rgba(255,255,255,.03); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 4px; margin-bottom: 20px; overflow-x: auto; }
+.u-tabs .tab-btn { border-bottom: none !important; border-radius: 8px; padding: 9px 16px; font-size: .85rem; white-space: nowrap; }
+.u-tabs .tab-btn.active { background: var(--accent-glow); color: #fff; }
+
+@media (max-width: 720px) {
+  .u-banner { height: 190px; }
+  .u-header { margin-top: -44px; }
+  .u-avatar { width: 84px; height: 84px; font-size: 1.9rem; }
+  .u-banner-edit-btn { padding: 6px 12px; font-size: .72rem; top: 12px; right: 12px; }
+  .u-banner-status { display: none; }
+}
+
