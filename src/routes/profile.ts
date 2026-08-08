@@ -163,66 +163,58 @@ async function renderProfilePage(c: any, db: Db, session: Session, lifetime: num
   html += renderEmailModal(isPlaceholderEmail);
 
   html += `
-<div class="container section">
-  <div class="layout-sidebar">
-    <aside>
-      <div class="sidebar">
-        <div style="padding:1.5rem;text-align:center;border-bottom:1px solid var(--border);">
-          <div style="position:relative;width:90px;height:90px;margin:0 auto 1rem;cursor:pointer;" onclick="document.getElementById('avatar-file-input').click()" title="Click to change avatar">
-            <div class="nav-avatar" id="sidebar-avatar-wrap" style="width:90px;height:90px;font-size:2.2rem;">
-              ${user.avatar_url
-                ? `<img src="${h(user.avatar_url)}" id="sidebar-avatar-img" alt="avatar" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`
-                : `<span id="sidebar-avatar-initials">${h(user.username.charAt(0).toUpperCase())}</span><img id="sidebar-avatar-img" src="" alt="" style="display:none;width:100%;height:100%;object-fit:cover;border-radius:50%;">`}
-            </div>
-            <div style="position:absolute;inset:0;border-radius:50%;background:rgba(0,0,0,0.55);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:2px;opacity:0;transition:opacity 0.2s;font-size:0.65rem;color:white;line-height:1.2;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0">
-              ${icon('camera', 'icon-small')}<br>Change
-            </div>
-          </div>
-          <input type="file" id="avatar-file-input" accept="image/jpeg,image/png,image/gif,image/webp" style="display:none" onchange="handleAvatarFile(this)">
-          <div id="avatar-status" style="font-size:0.78rem;min-height:16px;color:var(--text-muted);"></div>
-          <h2 class="username-with-badges" style="font-size:1.2rem;margin-top:8px;justify-content:center;gap:6px;">
-            <span id="profile-username-display">${h(user.username)}</span>${Badge.renderList(userBadges)}
-            <button type="button" onclick="openUsernameModal()" title="Edit username" style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:2px;display:inline-flex;">${icon('edit', 'icon-small')}</button>
-          </h2>
-          <p class="text-muted" id="profile-email-display" style="font-size:0.85rem;">
-            ${isPlaceholderEmail
-              ? `<a href="javascript:void(0)" onclick="openEmailModal()" style="color:var(--accent);text-decoration:underline;">${icon('plus', 'icon-small')} Add email</a>`
-              : `${h(user.email)} <button type="button" onclick="openEmailModal()" title="Edit email" style="background:none;border:none;cursor:pointer;color:var(--text-muted);padding:0;vertical-align:middle;">${icon('edit', 'icon-small')}</button>`}
-          </p>
-          ${isOwner ? `<span class="badge" style="background:rgba(232,69,60,0.2);color:var(--accent);margin-top:6px;">${icon('shield', 'icon-small')} OWNER</span>`
-            : user.role === 'admin' ? `<span class="badge" style="background:rgba(232,69,60,0.2);color:var(--accent);margin-top:6px;">${icon('shield', 'icon-small')} Admin</span>` : ''}
-          <p class="text-muted" style="font-size:0.8rem;margin-top:6px;">Member since ${memberSince}</p>
-        </div>
-
-        ${quickStats.map(([l, v, cl, ic]) => `
-        <div style="padding:10px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;">
-          <span class="text-muted" style="font-size:0.85rem;">${icon(ic, 'icon-small')} ${l}</span>
-          <span style="color:var(--${cl});font-weight:600;">${v}</span>
-        </div>`).join('')}
-
-        <div style="padding:1rem;display:flex;flex-direction:column;gap:6px;">
-          <a href="${siteUrl}/mylist" class="btn btn-ghost btn-block btn-sm">${icon('list', 'icon-small')} My List</a>
-          <a href="${siteUrl}/importexport" class="btn btn-ghost btn-block btn-sm">${icon('box', 'icon-small')} Import / Export</a>
-        </div>
+<div class="profile-hero">
+  <div class="profile-hero-bg${user.avatar_url ? '' : ' profile-hero-bg-fallback'}"${user.avatar_url ? ` style="background-image:url('${h(user.avatar_url)}')"` : ''}></div>
+  <div class="profile-hero-inner">
+    <div class="profile-avatar-wrap" onclick="document.getElementById('avatar-file-input').click()" title="Click to change avatar">
+      <div class="nav-avatar profile-avatar-lg" id="sidebar-avatar-wrap">
+        ${user.avatar_url
+          ? `<img src="${h(user.avatar_url)}" id="sidebar-avatar-img" alt="avatar" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`
+          : `<span id="sidebar-avatar-initials">${h(user.username.charAt(0).toUpperCase())}</span><img id="sidebar-avatar-img" src="" alt="" style="display:none;width:100%;height:100%;object-fit:cover;border-radius:50%;">`}
       </div>
-    </aside>
+      <div class="profile-avatar-edit-overlay">${icon('camera', 'icon-small')}<br>Change</div>
+    </div>
+    <input type="file" id="avatar-file-input" accept="image/jpeg,image/png,image/gif,image/webp" style="display:none" onchange="handleAvatarFile(this)">
 
+    <div class="profile-hero-text">
+      <h1 class="profile-hero-name">
+        <span id="profile-username-display">${h(user.username)}</span>${Badge.renderList(userBadges)}
+        <button type="button" onclick="openUsernameModal()" title="Edit username">${icon('edit', 'icon-small')}</button>
+      </h1>
+      <p class="profile-hero-email" id="profile-email-display">
+        ${isPlaceholderEmail
+          ? `<a href="javascript:void(0)" onclick="openEmailModal()" style="color:var(--accent-2);text-decoration:underline;">${icon('plus', 'icon-small')} Add email</a>`
+          : `${h(user.email)} <button type="button" onclick="openEmailModal()" title="Edit email" style="background:none;border:none;cursor:pointer;color:rgba(255,255,255,.6);padding:0;vertical-align:middle;">${icon('edit', 'icon-small')}</button>`}
+      </p>
+      <div class="profile-hero-meta">
+        ${isOwner ? `<span class="badge" style="background:rgba(232,69,60,0.2);color:var(--accent-2);">${icon('shield', 'icon-small')} OWNER</span>`
+          : user.role === 'admin' ? `<span class="badge" style="background:rgba(232,69,60,0.2);color:var(--accent-2);">${icon('shield', 'icon-small')} Admin</span>` : ''}
+        <span class="text-muted" style="font-size:.8rem;">Member since ${memberSince}</span>
+      </div>
+      <div id="avatar-status" style="font-size:0.78rem;min-height:16px;color:rgba(255,255,255,.6);"></div>
+    </div>
+  </div>
+</div>
+
+<div class="profile-stat-strip">
+  ${quickStats.map(([l, v, cl, ic]) => `
+  <div class="profile-stat-box">
+    <span class="profile-stat-val" style="color:var(--${cl});">${v}</span>
+    <span class="profile-stat-label">${icon(ic, 'icon-small')} ${l}</span>
+  </div>`).join('')}
+</div>
+
+<div class="container section">
+  <div class="profile-columns">
     <div>
       ${error ? `<div class="alert alert-error mb-2">${icon('alert', 'icon-small')} ${h(error)}</div>` : ''}
       ${success ? `<div class="alert alert-success mb-2">${icon('check', 'icon-small')} ${h(success)}</div>` : ''}
 
       <div class="card card-body mb-2">
-        <div class="flex-between mb-2">
-          <div>
-            <h2>${icon('camera', 'icon-medium')} Profile Picture</h2>
-            <p class="text-muted" style="font-size:0.85rem;margin-top:4px;">Upload any image — a cropper will open so you can pick exactly what to show.</p>
-          </div>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;">
-            <button type="button" class="btn btn-primary" onclick="document.getElementById('avatar-file-input').click()">${icon('camera', 'icon-small')} Upload Image</button>
-            ${user.avatar_url ? `<button type="button" class="btn btn-danger btn-sm" id="delete-avatar-btn" onclick="deleteAvatar()" title="Remove your current avatar">${icon('trash', 'icon-small')} Remove Avatar</button>` : ''}
-          </div>
+        <div class="flex-between">
+          <p class="text-muted" style="font-size:0.85rem;">${icon('camera', 'icon-small')} Click your avatar above to change it · JPG, PNG, GIF, WEBP · Max 20MB</p>
+          ${user.avatar_url ? `<button type="button" class="btn btn-danger btn-sm" id="delete-avatar-btn" onclick="deleteAvatar()" title="Remove your current avatar">${icon('trash', 'icon-small')} Remove Avatar</button>` : ''}
         </div>
-        <p class="text-muted" style="font-size:0.8rem;">Supported: JPG, PNG, GIF, WEBP · Max 20MB · Output: 300×300px</p>
       </div>
 
       <div class="card card-body mb-2">
@@ -244,7 +236,7 @@ async function renderProfilePage(c: any, db: Db, session: Session, lifetime: num
         <h2 class="mb-1">🔗 Connected Accounts</h2>
         <p class="text-muted" style="font-size:0.88rem;margin-bottom:1.1rem;">Link Google or Discord for one-click sign-in.</p>
 
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:13px 0;border-bottom:1px solid var(--border);">
+        <div class="connected-account-row">
           <div style="display:flex;align-items:center;gap:12px;">
             <svg width="26" height="26" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/><path fill="none" d="M0 0h48v48H0z"/></svg>
             <div><div style="font-weight:600;">Google</div><div style="font-size:0.8rem;color:var(--text-secondary);">${hasGoogle ? '<span style="color:var(--teal);">✓ Connected</span>' : 'Not connected'}</div></div>
@@ -258,7 +250,7 @@ async function renderProfilePage(c: any, db: Db, session: Session, lifetime: num
           </form>
         </div>
 
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:13px 0;">
+        <div class="connected-account-row">
           <div style="display:flex;align-items:center;gap:12px;">
             <svg width="26" height="26" viewBox="0 0 127.14 96.36" fill="#5865F2"><path d="M107.7 8.07A105.15 105.15 0 0 0 81.47 0a72.06 72.06 0 0 0-3.36 6.83 97.68 97.68 0 0 0-29.11 0A72.37 72.37 0 0 0 45.64 0a105.89 105.89 0 0 0-26.25 8.09C2.79 32.65-1.71 56.6.54 80.21a105.73 105.73 0 0 0 32.17 16.15 77.7 77.7 0 0 0 6.89-11.11 68.42 68.42 0 0 1-10.85-5.18c.91-.66 1.8-1.34 2.66-2a75.57 75.57 0 0 0 64.32 0c.87.71 1.76 1.39 2.66 2a68.68 68.68 0 0 1-10.87 5.19 77 77 0 0 0 6.89 11.1 105.25 105.25 0 0 0 32.19-16.14c2.64-27.38-4.51-51.11-18.9-72.15zM42.45 65.69C36.18 65.69 31 60 31 53s5-12.74 11.43-12.74S54 46 53.89 53s-5.05 12.69-11.44 12.69zm42.24 0C78.41 65.69 73.25 60 73.25 53s5-12.74 11.44-12.74S96.23 46 96.12 53s-5.04 12.69-11.43 12.69z"/></svg>
             <div><div style="font-weight:600;">Discord</div><div style="font-size:0.8rem;color:var(--text-secondary);">${hasDiscord ? '<span style="color:var(--teal);">✓ Connected</span>' : 'Not connected'}</div></div>
@@ -270,6 +262,16 @@ async function renderProfilePage(c: any, db: Db, session: Session, lifetime: num
               ? `<button type="submit" class="btn btn-ghost btn-sm" ${(!hasPassword && !hasGoogle) ? `disabled title="Set a password before disconnecting your only login method."` : ''}>Disconnect</button>`
               : `<button type="submit" class="btn btn-ghost btn-sm">Connect</button>`}
           </form>
+        </div>
+      </div>
+    </div>
+
+    <aside class="profile-side">
+      <div class="card card-body mb-2">
+        <div class="section-title" style="margin-bottom:10px;">${icon('list', 'icon-small')} Quick Links</div>
+        <div style="display:flex;flex-direction:column;gap:6px;">
+          <a href="${siteUrl}/mylist" class="btn btn-ghost btn-block btn-sm">${icon('list', 'icon-small')} My List</a>
+          <a href="${siteUrl}/importexport" class="btn btn-ghost btn-block btn-sm">${icon('box', 'icon-small')} Import / Export</a>
         </div>
       </div>
 
@@ -286,7 +288,7 @@ async function renderProfilePage(c: any, db: Db, session: Session, lifetime: num
           </div>`).join('')}
         </div>
       </div>` : ''}
-    </div>
+    </aside>
   </div>
 </div>
 
