@@ -205,93 +205,114 @@ async function renderProfilePage(c: any, db: Db, session: Session, lifetime: num
 </div>
 
 <div class="container section">
-  <div class="profile-columns">
-    <div>
-      ${error ? `<div class="alert alert-error mb-2">${icon('alert', 'icon-small')} ${h(error)}</div>` : ''}
-      ${success ? `<div class="alert alert-success mb-2">${icon('check', 'icon-small')} ${h(success)}</div>` : ''}
+  ${error ? `<div class="alert alert-error mb-2">${icon('alert', 'icon-small')} ${h(error)}</div>` : ''}
+  ${success ? `<div class="alert alert-success mb-2">${icon('check', 'icon-small')} ${h(success)}</div>` : ''}
 
-      <div class="card card-body mb-2">
-        <div class="flex-between">
-          <p class="text-muted" style="font-size:0.85rem;">${icon('camera', 'icon-small')} Click your avatar above to change it · JPG, PNG, GIF, WEBP · Max 20MB</p>
-          ${user.avatar_url ? `<button type="button" class="btn btn-danger btn-sm" id="delete-avatar-btn" onclick="deleteAvatar()" title="Remove your current avatar">${icon('trash', 'icon-small')} Remove Avatar</button>` : ''}
-        </div>
-      </div>
+  <div class="profile-tabs">
+    <button type="button" class="profile-tab-btn active" data-tab="overview" onclick="showProfileTab('overview')">${icon('user', 'icon-small')} Overview</button>
+    <button type="button" class="profile-tab-btn" data-tab="account" onclick="showProfileTab('account')">${icon('edit', 'icon-small')} Account</button>
+    <button type="button" class="profile-tab-btn" data-tab="connections" onclick="showProfileTab('connections')">${icon('globe', 'icon-small')} Connections</button>
+  </div>
 
-      <div class="card card-body mb-2">
-        <h2 class="mb-2">${icon('edit', 'icon-medium')} Edit Profile</h2>
-        <form method="POST">
-          <div class="form-group">
-            <label class="form-label">${icon('message', 'icon-small')} Bio</label>
-            <textarea name="bio" class="form-control" rows="3" placeholder="Tell others about yourself...">${h(user.bio ?? '')}</textarea>
-          </div>
-          <div class="form-group">
-            <label class="form-label">${icon('lock', 'icon-small')} New Password <span class="text-muted">(leave blank to keep current)</span></label>
-            <input type="password" name="new_password" class="form-control" placeholder="Min. 6 characters" minlength="6">
-          </div>
-          <button type="submit" class="btn btn-primary">${icon('check', 'icon-small')} Save Changes</button>
-        </form>
-      </div>
+  <div class="profile-tab-panel active" id="tab-overview">
+    <div class="profile-columns">
+      <div>
+        <div class="info-section-title" style="margin-bottom:14px;">${icon('message', 'icon-medium')} About</div>
+        ${user.bio
+          ? `<p style="color:var(--text-secondary);line-height:1.8;margin-bottom:24px;">${h(user.bio).replace(/\n/g, '<br>')}</p>`
+          : `<p class="text-muted" style="margin-bottom:24px;">No bio yet. <a href="javascript:void(0)" onclick="showProfileTab('account')" style="color:var(--accent-2);">Add one</a> to tell others about yourself.</p>`}
 
-      <div class="card card-body mb-2">
-        <h2 class="mb-1">🔗 Connected Accounts</h2>
-        <p class="text-muted" style="font-size:0.88rem;margin-bottom:1.1rem;">Link Google or Discord for one-click sign-in.</p>
-
-        <div class="connected-account-row">
-          <div style="display:flex;align-items:center;gap:12px;">
-            <svg width="26" height="26" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/><path fill="none" d="M0 0h48v48H0z"/></svg>
-            <div><div style="font-weight:600;">Google</div><div style="font-size:0.8rem;color:var(--text-secondary);">${hasGoogle ? '<span style="color:var(--teal);">✓ Connected</span>' : 'Not connected'}</div></div>
-          </div>
-          <form method="POST">
-            <input type="hidden" name="social_action" value="${hasGoogle ? 'disconnect' : 'connect'}">
-            <input type="hidden" name="provider" value="google">
-            ${hasGoogle
-              ? `<button type="submit" class="btn btn-ghost btn-sm" ${(!hasPassword && !hasDiscord) ? `disabled title="Set a password before disconnecting your only login method."` : ''}>Disconnect</button>`
-              : `<button type="submit" class="btn btn-ghost btn-sm">Connect</button>`}
-          </form>
-        </div>
-
-        <div class="connected-account-row">
-          <div style="display:flex;align-items:center;gap:12px;">
-            <svg width="26" height="26" viewBox="0 0 127.14 96.36" fill="#5865F2"><path d="M107.7 8.07A105.15 105.15 0 0 0 81.47 0a72.06 72.06 0 0 0-3.36 6.83 97.68 97.68 0 0 0-29.11 0A72.37 72.37 0 0 0 45.64 0a105.89 105.89 0 0 0-26.25 8.09C2.79 32.65-1.71 56.6.54 80.21a105.73 105.73 0 0 0 32.17 16.15 77.7 77.7 0 0 0 6.89-11.11 68.42 68.42 0 0 1-10.85-5.18c.91-.66 1.8-1.34 2.66-2a75.57 75.57 0 0 0 64.32 0c.87.71 1.76 1.39 2.66 2a68.68 68.68 0 0 1-10.87 5.19 77 77 0 0 0 6.89 11.1 105.25 105.25 0 0 0 32.19-16.14c2.64-27.38-4.51-51.11-18.9-72.15zM42.45 65.69C36.18 65.69 31 60 31 53s5-12.74 11.43-12.74S54 46 53.89 53s-5.05 12.69-11.44 12.69zm42.24 0C78.41 65.69 73.25 60 73.25 53s5-12.74 11.44-12.74S96.23 46 96.12 53s-5.04 12.69-11.43 12.69z"/></svg>
-            <div><div style="font-weight:600;">Discord</div><div style="font-size:0.8rem;color:var(--text-secondary);">${hasDiscord ? '<span style="color:var(--teal);">✓ Connected</span>' : 'Not connected'}</div></div>
-          </div>
-          <form method="POST">
-            <input type="hidden" name="social_action" value="${hasDiscord ? 'disconnect' : 'connect'}">
-            <input type="hidden" name="provider" value="discord">
-            ${hasDiscord
-              ? `<button type="submit" class="btn btn-ghost btn-sm" ${(!hasPassword && !hasGoogle) ? `disabled title="Set a password before disconnecting your only login method."` : ''}>Disconnect</button>`
-              : `<button type="submit" class="btn btn-ghost btn-sm">Connect</button>`}
-          </form>
-        </div>
-      </div>
-    </div>
-
-    <aside class="profile-side">
-      <div class="card card-body mb-2">
-        <div class="section-title" style="margin-bottom:10px;">${icon('list', 'icon-small')} Quick Links</div>
-        <div style="display:flex;flex-direction:column;gap:6px;">
-          <a href="${siteUrl}/mylist" class="btn btn-ghost btn-block btn-sm">${icon('list', 'icon-small')} My List</a>
-          <a href="${siteUrl}/importexport" class="btn btn-ghost btn-block btn-sm">${icon('box', 'icon-small')} Import / Export</a>
-        </div>
-      </div>
-
-      ${user.bio ? `<div class="card card-body mb-2"><h3>${icon('message', 'icon-medium')} About</h3><p style="color:var(--text-secondary);margin-top:8px;line-height:1.8;">${h(user.bio).replace(/\n/g, '<br>')}</p></div>` : ''}
-
-      ${favs.length > 0 ? `
-      <div class="mb-2">
-        <div class="section-title">${icon('heart', 'icon-small')} Favorites</div>
+        ${favs.length > 0 ? `
+        <div class="info-section-title" style="margin-bottom:14px;">${icon('heart', 'icon-medium')} Favorites</div>
         <div class="anime-grid">
           ${favs.slice(0, 8).map((fav: any) => `
           <div class="anime-card" onclick="window.location.href='${siteUrl}/anime?id=${fav.anime_id}'">
             <div class="anime-card-poster">${fav.anime_image ? `<img src="${h(fav.anime_image)}" alt="${h(fav.anime_title)}" loading="lazy">` : icon('user', 'icon-xl')}</div>
             <div class="anime-card-info"><div class="anime-card-title">${h(fav.anime_title)}</div></div>
           </div>`).join('')}
+        </div>` : ''}
+      </div>
+
+      <aside class="profile-side">
+        <div class="settings-card">
+          <a href="${siteUrl}/mylist" class="settings-row" style="text-decoration:none;color:inherit;">
+            <div class="settings-row-name">${icon('list', 'icon-small')} My List</div>
+            ${icon('chevron-right', 'icon-small')}
+          </a>
+          <a href="${siteUrl}/importexport" class="settings-row" style="text-decoration:none;color:inherit;">
+            <div class="settings-row-name">${icon('box', 'icon-small')} Import / Export</div>
+            ${icon('chevron-right', 'icon-small')}
+          </a>
         </div>
-      </div>` : ''}
-    </aside>
+      </aside>
+    </div>
+  </div>
+
+  <div class="profile-tab-panel" id="tab-account" hidden>
+    <div class="settings-card mb-2">
+      <div class="settings-row">
+        <div class="settings-row-label">
+          <div class="settings-row-name">${icon('camera', 'icon-small')} Profile Picture</div>
+          <div class="settings-row-desc">Click your avatar at the top of the page to change it · JPG, PNG, GIF, WEBP · Max 20MB</div>
+        </div>
+        ${user.avatar_url ? `<button type="button" class="btn btn-ghost btn-sm" id="delete-avatar-btn" onclick="deleteAvatar()" title="Remove your current avatar">${icon('trash', 'icon-small')} Remove</button>` : ''}
+      </div>
+    </div>
+
+    <form method="POST" class="settings-card">
+      <div class="settings-row" style="flex-direction:column;align-items:stretch;gap:8px;">
+        <label class="settings-row-name" for="bio-input">${icon('message', 'icon-small')} Bio</label>
+        <textarea id="bio-input" name="bio" class="form-control" rows="3" placeholder="Tell others about yourself...">${h(user.bio ?? '')}</textarea>
+      </div>
+      <div class="settings-row" style="flex-direction:column;align-items:stretch;gap:8px;">
+        <label class="settings-row-name" for="password-input">${icon('lock', 'icon-small')} New Password</label>
+        <div class="settings-row-desc" style="margin:-4px 0 4px;">Leave blank to keep your current password</div>
+        <input id="password-input" type="password" name="new_password" class="form-control" placeholder="Min. 6 characters" minlength="6">
+      </div>
+      <div class="settings-row" style="justify-content:flex-end;">
+        <button type="submit" class="btn btn-primary">${icon('check', 'icon-small')} Save Changes</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="profile-tab-panel" id="tab-connections" hidden>
+    <div class="settings-card">
+      <div class="settings-row">
+        <div class="settings-row-label">
+          <div class="settings-row-name"><svg width="18" height="18" viewBox="0 0 48 48" style="vertical-align:-3px;"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/><path fill="none" d="M0 0h48v48H0z"/></svg> Google</div>
+          <div class="settings-row-desc">${hasGoogle ? '<span style="color:var(--teal);">✓ Connected</span>' : 'Not connected'}</div>
+        </div>
+        <form method="POST" style="margin:0;">
+          <input type="hidden" name="social_action" value="${hasGoogle ? 'disconnect' : 'connect'}">
+          <input type="hidden" name="provider" value="google">
+          ${hasGoogle
+            ? `<button type="submit" class="btn btn-ghost btn-sm" ${(!hasPassword && !hasDiscord) ? `disabled title="Set a password before disconnecting your only login method."` : ''}>Disconnect</button>`
+            : `<button type="submit" class="btn btn-ghost btn-sm">Connect</button>`}
+        </form>
+      </div>
+      <div class="settings-row">
+        <div class="settings-row-label">
+          <div class="settings-row-name"><svg width="18" height="18" viewBox="0 0 127.14 96.36" fill="#5865F2" style="vertical-align:-3px;"><path d="M107.7 8.07A105.15 105.15 0 0 0 81.47 0a72.06 72.06 0 0 0-3.36 6.83 97.68 97.68 0 0 0-29.11 0A72.37 72.37 0 0 0 45.64 0a105.89 105.89 0 0 0-26.25 8.09C2.79 32.65-1.71 56.6.54 80.21a105.73 105.73 0 0 0 32.17 16.15 77.7 77.7 0 0 0 6.89-11.11 68.42 68.42 0 0 1-10.85-5.18c.91-.66 1.8-1.34 2.66-2a75.57 75.57 0 0 0 64.32 0c.87.71 1.76 1.39 2.66 2a68.68 68.68 0 0 1-10.87 5.19 77 77 0 0 0 6.89 11.1 105.25 105.25 0 0 0 32.19-16.14c2.64-27.38-4.51-51.11-18.9-72.15zM42.45 65.69C36.18 65.69 31 60 31 53s5-12.74 11.43-12.74S54 46 53.89 53s-5.05 12.69-11.44 12.69zm42.24 0C78.41 65.69 73.25 60 73.25 53s5-12.74 11.44-12.74S96.23 46 96.12 53s-5.04 12.69-11.43 12.69z"/></svg> Discord</div>
+          <div class="settings-row-desc">${hasDiscord ? '<span style="color:var(--teal);">✓ Connected</span>' : 'Not connected'}</div>
+        </div>
+        <form method="POST" style="margin:0;">
+          <input type="hidden" name="social_action" value="${hasDiscord ? 'disconnect' : 'connect'}">
+          <input type="hidden" name="provider" value="discord">
+          ${hasDiscord
+            ? `<button type="submit" class="btn btn-ghost btn-sm" ${(!hasPassword && !hasGoogle) ? `disabled title="Set a password before disconnecting your only login method."` : ''}>Disconnect</button>`
+            : `<button type="submit" class="btn btn-ghost btn-sm">Connect</button>`}
+        </form>
+      </div>
+    </div>
   </div>
 </div>
 
+<script>
+function showProfileTab(name){
+  document.querySelectorAll('.profile-tab-panel').forEach(function(p){ p.hidden = (p.id !== 'tab-' + name); });
+  document.querySelectorAll('.profile-tab-btn').forEach(function(b){ b.classList.toggle('active', b.dataset.tab === name); });
+}
+</script>
 <script>${PROFILE_SCRIPT}</script>`;
 
   html += renderFooter({ siteUrl, currentUser: layoutUser });
