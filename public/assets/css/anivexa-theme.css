@@ -266,8 +266,17 @@ body { font-family: var(--font-body); }
 .u-tagline-empty a { color: var(--accent-2); text-decoration: none; display: inline-flex; align-items: center; gap: 4px; }
 .u-tagline-empty a:hover { text-decoration: underline; }
 .u-social-links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
-.u-social-link { display: inline-flex; align-items: center; gap: 6px; font-size: .78rem; font-weight: 600; color: var(--text-secondary); background: rgba(255,255,255,.04); border: 1px solid var(--border); border-radius: var(--radius-pill); padding: 6px 12px; text-decoration: none; transition: var(--trans); }
-.u-social-link:hover { color: #fff; border-color: var(--border-accent); background: rgba(255,255,255,.08); }
+.u-social-link { display: inline-flex; align-items: center; gap: 7px; font-size: .78rem; font-weight: 600; color: var(--text-secondary); background: rgba(255,255,255,.04); border: 1px solid var(--border); border-radius: var(--radius-pill); padding: 7px 13px; text-decoration: none; transition: var(--trans); }
+.u-social-link svg.icon { flex-shrink: 0; width: 15px; height: 15px; transition: color .15s ease; }
+.u-social-link:hover { color: #fff; border-color: var(--platform-color, var(--border-accent)); background: color-mix(in srgb, var(--platform-color, var(--accent)) 18%, transparent); }
+.u-social-link:hover svg.icon { color: var(--platform-color, #fff); }
+
+@media (max-width: 480px) {
+  /* Collapse to icon-only circles once there isn't room for 6-8 labelled
+     pills on one line — title attribute still gives the name on long-press. */
+  .u-social-link { width: 38px; height: 38px; padding: 0; justify-content: center; border-radius: 50%; }
+  .u-social-link span { display: none; }
+}
 
 .profile-stat-strip { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; margin: 24px clamp(20px, 5vw, 64px) 28px; position: relative; z-index: 3; }
 .profile-stat-box { background: var(--bg-surface); padding: 14px 10px; text-align: center; }
