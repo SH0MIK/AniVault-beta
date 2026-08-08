@@ -36,7 +36,7 @@ userRoutes.get('/u/:username', async (c) => {
     : null;
 
   const profileUser = await db.fetchOne<any>(
-    'SELECT id, username, email, avatar_url, banner_url, bio, role, created_at, last_login FROM users WHERE username = ? AND is_active = 1',
+    'SELECT id, username, email, avatar_url, banner_url, bio, role, created_at, last_login, pronouns, tagline, social_twitter, social_mal, social_website, privacy_hide_followers, privacy_hide_following, privacy_hide_favorites FROM users WHERE username = ? AND is_active = 1',
     [username]
   );
 
@@ -58,6 +58,10 @@ userRoutes.get('/u/:username', async (c) => {
   const profileBadges = await Badge.getForUser(db, profileId);
   const isOwn = !!currentUser && currentUser.id === profileId;
   const isFollowing = currentUser && !isOwn ? await Follow.isFollowing(db, currentUser.id, profileId) : false;
+  const canViewFollowers = isOwn || !profileUser.privacy_hide_followers;
+  const canViewFollowing = isOwn || !profileUser.privacy_hide_following;
+  const canViewFavorites = isOwn || !profileUser.privacy_hide_favorites;
+  const privateNotice = (what: string) => `<div class="flex-center" style="padding:3rem;flex-direction:column;gap:1rem;">${icon('lock', 'icon-large')}<p class="text-muted">${h(profileUser.username)} has hidden their ${what}.</p></div>`;
 
   const filterStatus = c.req.query('status') ?? '';
   const listPage = Math.max(1, parseInt(c.req.query('page') ?? '1', 10) || 1);
@@ -107,7 +111,8 @@ userRoutes.get('/u/:username', async (c) => {
       ${isProfileOwner ? `<span class="u-role-badge">OWNER</span>` : profileUser.role === 'admin' ? `<span class="u-role-badge">ADMIN</span>` : ''}
     </div>
     <div class="u-name-block">
-      <h1 class="u-username username-with-badges">${h(profileUser.username)}${Badge.renderList(profileBadges)}</h1>
+      <h1 class="u-username username-with-badges">${h(profileUser.username)}${Badge.renderList(profileBadges)}${profileUser.pronouns ? `<span class="u-pronouns">${h(profileUser.pronouns)}</span>` : ''}</h1>
+      ${profileUser.tagline ? `<p class="u-tagline">${h(profileUser.tagline)}</p>` : ''}
       <p class="u-joined text-muted">Joined ${joinedDate}${profileUser.last_login ? ` · Last seen ${timeAgo(profileUser.last_login)}` : ''}</p>
     </div>
     <div class="u-header-actions">
@@ -119,6 +124,15 @@ userRoutes.get('/u/:username', async (c) => {
 
   <div class="u-header-meta">
     ${profileUser.bio ? `<p class="u-bio">${h(profileUser.bio).replace(/\n/g, '<br>')}</p>` : ''}
+    ${(() => {
+      const links: [string, string, string][] = [
+        ...(profileUser.social_twitter ? [['twitter', `https://twitter.com/${profileUser.social_twitter}`, `@${profileUser.social_twitter}`] as [string, string, string]] : []),
+        ...(profileUser.social_mal ? [['tv', `https://myanimelist.net/profile/${profileUser.social_mal}`, 'MyAnimeList'] as [string, string, string]] : []),
+        ...(profileUser.social_website ? [['globe', /^https?:\/\//i.test(profileUser.social_website) ? profileUser.social_website : `https://${profileUser.social_website}`, 'Website'] as [string, string, string]] : []),
+      ];
+      if (!links.length) return '';
+      return `<div class="u-social-links">${links.map(([ic, url, label]) => `<a href="${h(url)}" target="_blank" rel="noopener noreferrer nofollow" class="u-social-link">${icon(ic, 'icon-small')} ${h(label)}</a>`).join('')}</div>`;
+    })()}
   </div>
 
   <div class="profile-stat-strip u-stat-strip">
@@ -193,7 +207,7 @@ userRoutes.get('/u/:username', async (c) => {
     </div>
 
     <div id="tab-favorites" class="tab-content">
-      ${favs.length === 0 ? `<div class="flex-center" style="padding:3rem;flex-direction:column;gap:1rem;"><span style="font-size:2.5rem;">♡</span><p class="text-muted">No favorites yet.</p></div>`
+      ${!canViewFavorites ? privateNotice('favorites') : favs.length === 0 ? `<div class="flex-center" style="padding:3rem;flex-direction:column;gap:1rem;"><span style="font-size:2.5rem;">♡</span><p class="text-muted">No favorites yet.</p></div>`
         : `<div class="anime-grid">${favs.map((fav: any) => renderAnimeCard({
             mal_id: fav.anime_id, title: fav.anime_title, title_english: fav.anime_title,
             images: { jpg: { image_url: fav.anime_image, large_image_url: fav.anime_image } }, type: '', score: null, episodes: 0,
@@ -201,11 +215,11 @@ userRoutes.get('/u/:username', async (c) => {
     </div>
 
     <div id="tab-followers" class="tab-content">
-      ${followers.length === 0 ? `<div class="flex-center" style="padding:3rem;flex-direction:column;gap:1rem;"><span style="font-size:2.5rem;">👥</span><p class="text-muted">No followers yet.</p></div>`
+      ${!canViewFollowers ? privateNotice('followers list') : followers.length === 0 ? `<div class="flex-center" style="padding:3rem;flex-direction:column;gap:1rem;"><span style="font-size:2.5rem;">👥</span><p class="text-muted">No followers yet.</p></div>`
         : `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:1rem;">${followers.map((u) => renderUserCard(u, modalUserBadges, siteUrl)).join('')}</div>`}
     </div>
     <div id="tab-following" class="tab-content">
-      ${following.length === 0 ? `<div class="flex-center" style="padding:3rem;flex-direction:column;gap:1rem;"><span style="font-size:2.5rem;">👤</span><p class="text-muted">Not following anyone yet.</p></div>`
+      ${!canViewFollowing ? privateNotice('following list') : following.length === 0 ? `<div class="flex-center" style="padding:3rem;flex-direction:column;gap:1rem;"><span style="font-size:2.5rem;">👤</span><p class="text-muted">Not following anyone yet.</p></div>`
         : `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:1rem;">${following.map((u) => renderUserCard(u, modalUserBadges, siteUrl)).join('')}</div>`}
     </div>
   </div>
@@ -215,8 +229,8 @@ userRoutes.get('/u/:username', async (c) => {
   <div class="modal" style="max-width:400px;">
     <div class="modal-header"><h3>👥 Followers (${followerCount})</h3><button class="modal-close">✕</button></div>
     <div class="modal-body" id="followers-list" style="padding:0.5rem;max-height:420px;overflow-y:auto;">
-      ${followers.length === 0 ? `<p class="text-muted text-center" style="padding:1.5rem;">No followers yet.</p>` : followers.map((u) => renderModalUserRow(u, modalUserBadges, siteUrl, 'Followed')).join('')}
-      <div id="followers-loader" style="text-align:center;padding:10px;display:none;color:var(--text-muted);font-size:0.85rem;">Loading…</div>
+      ${!canViewFollowers ? privateNotice('followers list') : followers.length === 0 ? `<p class="text-muted text-center" style="padding:1.5rem;">No followers yet.</p>` : followers.map((u) => renderModalUserRow(u, modalUserBadges, siteUrl, 'Followed')).join('')}
+      ${canViewFollowers ? `<div id="followers-loader" style="text-align:center;padding:10px;display:none;color:var(--text-muted);font-size:0.85rem;">Loading…</div>` : ''}
     </div>
   </div>
 </div>
@@ -224,8 +238,8 @@ userRoutes.get('/u/:username', async (c) => {
   <div class="modal" style="max-width:400px;">
     <div class="modal-header"><h3>👤 Following (${followingCount})</h3><button class="modal-close">✕</button></div>
     <div class="modal-body" id="following-list" style="padding:0.5rem;max-height:420px;overflow-y:auto;">
-      ${following.length === 0 ? `<p class="text-muted text-center" style="padding:1.5rem;">Not following anyone.</p>` : following.map((u) => renderModalUserRow(u, modalUserBadges, siteUrl, 'Following since')).join('')}
-      <div id="following-loader" style="text-align:center;padding:10px;display:none;color:var(--text-muted);font-size:0.85rem;">Loading…</div>
+      ${!canViewFollowing ? privateNotice('following list') : following.length === 0 ? `<p class="text-muted text-center" style="padding:1.5rem;">Not following anyone.</p>` : following.map((u) => renderModalUserRow(u, modalUserBadges, siteUrl, 'Following since')).join('')}
+      ${canViewFollowing ? `<div id="following-loader" style="text-align:center;padding:10px;display:none;color:var(--text-muted);font-size:0.85rem;">Loading…</div>` : ''}
     </div>
   </div>
 </div>
@@ -233,6 +247,7 @@ userRoutes.get('/u/:username', async (c) => {
 <script>
 (function () {
   const PROFILE_ID = ${profileId};
+  const CAN_VIEW = { followers: ${canViewFollowers ? 'true' : 'false'}, following: ${canViewFollowing ? 'true' : 'false'} };
   const state = {
     followers: { offset: ${followers.length}, loading: false, done: ${followers.length < 12 ? 'true' : 'false'} },
     following: { offset: ${following.length}, loading: false, done: ${following.length < 12 ? 'true' : 'false'} },
@@ -247,6 +262,7 @@ userRoutes.get('/u/:username', async (c) => {
     </a>\`;
   }
   async function loadMore(type) {
+    if (!CAN_VIEW[type]) return;
     const s = state[type];
     if (s.loading || s.done) return;
     s.loading = true;
