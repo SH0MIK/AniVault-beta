@@ -277,15 +277,35 @@ body { font-family: var(--font-body); }
 .profile-stat-val { font-size: 1.25rem; font-weight: 800; display: block; }
 .profile-stat-label { font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted); margin-top: 2px; }
 
-.profile-columns { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 24px; align-items: start; }
+.profile-columns { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 32px; align-items: start; }
 .profile-side { min-width: 0; }
-.connected-account-row { display: flex; align-items: center; justify-content: space-between; padding: 13px 0; border-bottom: 1px solid var(--border); }
-.connected-account-row:last-child { border-bottom: none; }
+
+/* Reuse the anime-page section-title bar generically (it's normally scoped
+   to .info-body, but the profile tabs live outside that wrapper). */
+.info-section-title { display: flex; align-items: center; gap: 10px; font-size: 1.05rem; font-weight: 700; margin: 0 0 14px; }
+.info-section-title::before { content: ''; width: 4px; height: 18px; border-radius: 2px; background: var(--grad-accent); flex-shrink: 0; }
+
+/* -- tabs -- */
+.profile-tabs { display: flex; gap: 4px; background: rgba(255,255,255,.03); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 4px; margin-bottom: 24px; max-width: fit-content; }
+.profile-tab-btn { display: flex; align-items: center; gap: 7px; background: none; border: none; padding: 9px 18px; border-radius: 8px; color: var(--text-secondary); font-family: var(--font-body); font-weight: 600; font-size: .85rem; cursor: pointer; transition: var(--trans); white-space: nowrap; }
+.profile-tab-btn:hover { color: var(--text-primary); }
+.profile-tab-btn.active { background: var(--accent-glow); color: #fff; }
+.profile-tab-panel[hidden] { display: none; }
+
+/* -- settings rows (Account / Connections tabs) -- */
+.settings-card { background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; }
+.settings-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 18px; border-bottom: 1px solid var(--border); }
+.settings-row:last-child { border-bottom: none; }
+.settings-row:is(a):hover { background: var(--bg-hover); }
+.settings-row-label { min-width: 0; }
+.settings-row-name { font-weight: 600; font-size: .92rem; display: flex; align-items: center; gap: 8px; }
+.settings-row-desc { font-size: .8rem; color: var(--text-secondary); margin-top: 3px; }
 
 @media (max-width: 900px) {
   .profile-columns { grid-template-columns: minmax(0, 1fr); }
   .profile-stat-strip { grid-template-columns: repeat(2, 1fr); margin-left: 16px; margin-right: 16px; }
   .profile-hero-inner { padding: 0 16px 18px; }
   .profile-avatar-lg { width: 96px; height: 96px; font-size: 2.1rem; }
+  .profile-tabs { max-width: 100%; overflow-x: auto; }
 }
 
