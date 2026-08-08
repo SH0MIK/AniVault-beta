@@ -86,6 +86,29 @@ profileRoutes.post('/api/delete_account.php', async (c) => {
   return c.json({ success: true, message: 'Account deleted.' });
 });
 
+// ── api/list_sync_connect.php — kicks off the MAL/AniList OAuth flow ─────
+profileRoutes.get('/api/list_sync_connect.php', async (c) => {
+  const { auth, session, lifetime } = await buildAuth(c);
+  const siteUrl = c.env.SITE_URL;
+  if (!auth.check()) { await session.save(c, lifetime); return c.redirect(`${siteUrl}/login`); }
+
+  const provider = c.req.query('provider');
+  if (provider === 'mal') {
+    const { MalSync } = await import('../lib/list-sync');
+    const url = MalSync.getAuthUrl(c.env as any, session);
+    await session.save(c, lifetime);
+    return c.redirect(url);
+  }
+  if (provider === 'anilist') {
+    const { AniListSync } = await import('../lib/list-sync');
+    const url = AniListSync.getAuthUrl(c.env as any, session);
+    await session.save(c, lifetime);
+    return c.redirect(url);
+  }
+  await session.save(c, lifetime);
+  return c.redirect(`${siteUrl}/profile?tab=connections`);
+});
+
 profileRoutes.on(['GET', 'POST'], '/profile', async (c) => {
   const db = new Db(c.env.DB);
   const lifetime = Number(c.env.SESSION_LIFETIME_SECONDS ?? 86400);
@@ -124,6 +147,24 @@ profileRoutes.on(['GET', 'POST'], '/profile', async (c) => {
       if (provider) {
         const result = await auth.disconnectSocial(user.id, provider);
         if (result.success) success = result.message ?? null; else error = result.message ?? null;
+        user = await auth.getCurrentUser();
+      }
+    } else if (body.list_sync_action) {
+      const { MalSync, AniListSync } = await import('../lib/list-sync');
+      const action = body.list_sync_action as string;
+      if (action === 'mal_sync_now') {
+        const r = await MalSync.pullMerge(c.env as any, db, user.id);
+        if (r.error) error = r.error; else success = r.added ? `Imported ${r.added} new anime from MAL.` : 'Already up to date — nothing new to import.';
+      } else if (action === 'mal_disconnect') {
+        await MalSync.disconnect(db, user.id);
+        success = 'Disconnected from MyAnimeList.';
+        user = await auth.getCurrentUser();
+      } else if (action === 'anilist_sync_now') {
+        const r = await AniListSync.pullMerge(db, user.id);
+        if (r.error) error = r.error; else success = r.added ? `Imported ${r.added} new anime from AniList.` : 'Already up to date — nothing new to import.';
+      } else if (action === 'anilist_disconnect') {
+        await AniListSync.disconnect(db, user.id);
+        success = 'Disconnected from AniList.';
         user = await auth.getCurrentUser();
       }
     } else if (!body.social_action) {
@@ -452,6 +493,37 @@ async function renderProfilePage(c: any, db: Db, session: Session, lifetime: num
         </form>
       </div>
     </div>
+
+    <div class="settings-card mt-2">
+      <div class="settings-row" style="display:block;">
+        <div class="settings-row-name" style="margin-bottom:2px;">${icon('list', 'icon-small')} List Sync</div>
+        <div class="settings-row-desc">Connect MyAnimeList and/or AniList to keep your list in sync both ways — updates you make here get pushed there, and connecting pulls in anything from there that isn't on your site list yet.</div>
+      </div>
+      <div class="settings-row">
+        <div class="settings-row-label">
+          <div class="settings-row-name">${icon('tv', 'icon-small')} MyAnimeList</div>
+          <div class="settings-row-desc">${user.mal_sync_username ? `<span style="color:var(--teal);">✓ Connected as ${h(user.mal_sync_username)}</span>` : 'Not connected'}</div>
+        </div>
+        <div style="display:flex;gap:6px;">
+          ${user.mal_sync_username ? `
+          <form method="POST" style="margin:0;"><input type="hidden" name="list_sync_action" value="mal_sync_now"><button type="submit" class="btn btn-ghost btn-sm" title="Pull in anything new from MAL">${icon('download', 'icon-small')} Sync Now</button></form>
+          <form method="POST" style="margin:0;"><input type="hidden" name="list_sync_action" value="mal_disconnect"><button type="submit" class="btn btn-ghost btn-sm">Disconnect</button></form>`
+            : `<a href="${siteUrl}/api/list_sync_connect.php?provider=mal" class="btn btn-ghost btn-sm">Connect</a>`}
+        </div>
+      </div>
+      <div class="settings-row">
+        <div class="settings-row-label">
+          <div class="settings-row-name">${icon('anilist', 'icon-small')} AniList</div>
+          <div class="settings-row-desc">${user.anilist_sync_username ? `<span style="color:var(--teal);">✓ Connected as ${h(user.anilist_sync_username)}</span>` : 'Not connected'}</div>
+        </div>
+        <div style="display:flex;gap:6px;">
+          ${user.anilist_sync_username ? `
+          <form method="POST" style="margin:0;"><input type="hidden" name="list_sync_action" value="anilist_sync_now"><button type="submit" class="btn btn-ghost btn-sm" title="Pull in anything new from AniList">${icon('download', 'icon-small')} Sync Now</button></form>
+          <form method="POST" style="margin:0;"><input type="hidden" name="list_sync_action" value="anilist_disconnect"><button type="submit" class="btn btn-ghost btn-sm">Disconnect</button></form>`
+            : `<a href="${siteUrl}/api/list_sync_connect.php?provider=anilist" class="btn btn-ghost btn-sm">Connect</a>`}
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -460,6 +532,11 @@ function showProfileTab(name){
   document.querySelectorAll('.profile-tab-panel').forEach(function(p){ p.hidden = (p.id !== 'tab-' + name); });
   document.querySelectorAll('.profile-tab-btn').forEach(function(b){ b.classList.toggle('active', b.dataset.tab === name); });
 }
+(function () {
+  var params = new URLSearchParams(window.location.search);
+  var tab = params.get('tab');
+  if (tab && document.getElementById('tab-' + tab)) showProfileTab(tab);
+})();
 </script>
 <script>${PROFILE_SCRIPT}</script>`;
 
