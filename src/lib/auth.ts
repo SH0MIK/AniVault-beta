@@ -485,6 +485,9 @@ export class Auth {
       bio?: string; avatar_url?: string; new_password?: string; username?: string; email?: string;
       pronouns?: string; tagline?: string;
       social_twitter?: string; social_mal?: string; social_website?: string;
+      social_facebook?: string; social_instagram?: string; social_anilist?: string;
+      social_youtube?: string; social_reddit?: string;
+      social_discord_id?: string; social_discord_label?: string;
       privacy_hide_followers?: boolean; privacy_hide_following?: boolean; privacy_hide_favorites?: boolean;
     }
   ): Promise<AuthResult & { username?: string; email?: string }> {
@@ -530,6 +533,34 @@ export class Auth {
     if (data.social_website !== undefined) {
       fields.push('social_website = ?');
       params.push(data.social_website.trim().substring(0, 200) || null);
+    }
+    if (data.social_facebook !== undefined) {
+      fields.push('social_facebook = ?');
+      params.push(data.social_facebook.trim().substring(0, 100) || null);
+    }
+    if (data.social_instagram !== undefined) {
+      fields.push('social_instagram = ?');
+      params.push(data.social_instagram.trim().replace(/^@/, '').substring(0, 100) || null);
+    }
+    if (data.social_anilist !== undefined) {
+      fields.push('social_anilist = ?');
+      params.push(data.social_anilist.trim().substring(0, 100) || null);
+    }
+    if (data.social_youtube !== undefined) {
+      fields.push('social_youtube = ?');
+      params.push(data.social_youtube.trim().substring(0, 100) || null);
+    }
+    if (data.social_reddit !== undefined) {
+      fields.push('social_reddit = ?');
+      params.push(data.social_reddit.trim().replace(/^u\//, '').substring(0, 100) || null);
+    }
+    if (data.social_discord_id !== undefined) {
+      fields.push('social_discord_id = ?');
+      params.push(data.social_discord_id.trim().substring(0, 40) || null);
+    }
+    if (data.social_discord_label !== undefined) {
+      fields.push('social_discord_label = ?');
+      params.push(data.social_discord_label.trim().substring(0, 60) || null);
     }
     if (data.privacy_hide_followers !== undefined) {
       fields.push('privacy_hide_followers = ?');
