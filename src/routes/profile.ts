@@ -554,7 +554,7 @@ function renderCropperModal(): string {
       </div>
       <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:1rem;">
         <button type="button" class="btn btn-ghost" onclick="closeCropper()">${icon('x', 'icon-small')} Cancel</button>
-        <button type="button" class="btn btn-primary" id="crop-save-btn" onclick="saveCroppedAvatar()">${icon('check', 'icon-small')} Save Avatar</button>
+        <button type="button" class="btn btn-primary" id="save-crop-btn" onclick="saveCrop()">${icon('check', 'icon-small')} Save Avatar</button>
       </div>
     </div>
   </div>
