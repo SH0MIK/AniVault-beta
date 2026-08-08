@@ -329,10 +329,11 @@ body { font-family: var(--font-body); }
 .u-avatar-wrap { position: relative; flex-shrink: 0; }
 .u-avatar { width: 112px; height: 112px; font-size: 2.4rem; border: 4px solid var(--bg-base); box-shadow: 0 10px 30px rgba(0,0,0,.6); }
 .u-role-badge { position: absolute; bottom: -2px; right: -2px; background: var(--grad-accent); color: #fff; border-radius: 20px; font-size: .62rem; padding: 3px 9px; font-weight: 800; letter-spacing: .04em; border: 2px solid var(--bg-base); }
-.u-username { font-size: clamp(1.3rem, 3vw, 1.6rem); font-weight: 800; margin: 0; display: flex; align-items: center; gap: 8px; flex: 1; min-width: 140px; }
+.u-username { font-size: clamp(1.3rem, 3vw, 1.6rem); font-weight: 800; margin: 0; display: flex; align-items: center; gap: 8px; }
+.u-name-block { flex: 1; min-width: 140px; display: flex; flex-direction: column; gap: 4px; }
 .u-header-actions { align-self: flex-end; padding-bottom: 6px; }
 .u-header-meta { margin: 4px 0 20px; }
-.u-bio { color: var(--text-secondary); font-size: .92rem; line-height: 1.65; margin: 0 0 8px; max-width: 560px; }
+.u-bio { color: var(--text-secondary); font-size: .92rem; line-height: 1.65; margin: 0; max-width: 560px; }
 .u-joined { font-size: .78rem; margin: 0; }
 
 @media (max-width: 560px) {
