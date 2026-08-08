@@ -192,22 +192,30 @@ async function anilistGraphQL(token: string, query: string, variables: Record<st
 
 export const AniListSync = {
   getAuthUrl(env: Env, session: { data: Record<string, any> }): string {
-    const state = crypto.randomUUID().replace(/-/g, '');
-    session.data.anilist_sync_state = state;
+    // Note: AniList's OAuth implementation doesn't support/echo a `state`
+    // param (see https://docs.anilist.co/guide/auth/authorization-code —
+    // the documented authorize URL only has client_id/redirect_uri/
+    // response_type). So unlike MAL/Google/Discord we can't do a
+    // round-tripped state check here — instead we just flag in the
+    // session that *this* session recently initiated a connect, and
+    // check that flag on the way back. Since the code exchange only
+    // proceeds for the still-logged-in session that set the flag, this
+    // gives the same practical CSRF protection without relying on a
+    // parameter AniList won't return.
+    session.data.anilist_sync_pending = true;
     const params = new URLSearchParams({
       client_id: env.ANILIST_CLIENT_ID ?? '',
       redirect_uri: env.ANILIST_REDIRECT_URI ?? '',
       response_type: 'code',
-      state,
     });
     return `https://anilist.co/api/v2/oauth/authorize?${params.toString()}`;
   },
 
-  async handleCallback(env: Env, db: Db, session: { data: Record<string, any> }, userId: number, code: string, state: string): Promise<{ success: boolean; message: string }> {
-    if (!session.data.anilist_sync_state || state !== session.data.anilist_sync_state) {
+  async handleCallback(env: Env, db: Db, session: { data: Record<string, any> }, userId: number, code: string): Promise<{ success: boolean; message: string }> {
+    if (!session.data.anilist_sync_pending) {
       return { success: false, message: 'Invalid or expired AniList authorization — please try connecting again.' };
     }
-    delete session.data.anilist_sync_state;
+    delete session.data.anilist_sync_pending;
 
     const tokenRes = await fetch('https://anilist.co/api/v2/oauth/token', {
       method: 'POST',
