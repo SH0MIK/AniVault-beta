@@ -216,7 +216,6 @@ authRoutes.get('/pages/oauth_anilist_sync.php', async (c) => {
   if (!auth.check()) { await session.save(c, lifetime); return c.redirect(`${siteUrl}/login`); }
 
   const code = c.req.query('code') ?? '';
-  const state = c.req.query('state') ?? '';
   const error = c.req.query('error') ?? '';
   if (error || !code) {
     session.setFlash('error', 'AniList connection was cancelled.');
@@ -225,7 +224,7 @@ authRoutes.get('/pages/oauth_anilist_sync.php', async (c) => {
   }
 
   const { AniListSync } = await import('../lib/list-sync');
-  const result = await AniListSync.handleCallback(c.env as any, db, session, session.user_id!, code, state);
+  const result = await AniListSync.handleCallback(c.env as any, db, session, session.user_id!, code);
   if (result.success) {
     const pull = await AniListSync.pullMerge(db, session.user_id!);
     session.setFlash('success', pull.added ? `${result.message} Imported ${pull.added} new anime from your AniList list.` : result.message);
