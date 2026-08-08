@@ -62,5 +62,14 @@ export const PROFILE_CSS = `.avatar-cropper-modal {
   .avatar-crop-actions { justify-content: stretch; margin-left: 0; }
   .avatar-crop-actions .btn { flex: 1; }
 }
+
+/* Privacy tab toggle switches */
+.toggle-row { cursor: pointer; }
+.toggle-switch { appearance: none; -webkit-appearance: none; width: 42px; height: 24px; border-radius: 999px; background: rgba(255,255,255,.12); border: 1px solid var(--border); position: relative; flex-shrink: 0; cursor: pointer; transition: background .15s ease; }
+.toggle-switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: transform .15s ease; }
+.toggle-switch:checked { background: var(--accent); border-color: var(--accent); }
+.toggle-switch:checked::after { transform: translateX(18px); }
+
+.danger-zone { border-color: rgba(232,69,60,.35); }
 </style>
 `;
