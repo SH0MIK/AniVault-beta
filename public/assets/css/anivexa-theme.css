@@ -251,3 +251,41 @@ body { font-family: var(--font-body); }
   .info-hero-no-banner .info-hero-bg { filter: none; background-position: center top; transform: scale(1); }
 }
 
+/* ==========================================================================
+   Profile page ("/profile") — Anivexa-style layout
+   ========================================================================== */
+
+.profile-hero { position: relative; height: 260px; overflow: hidden; border-radius: 0 0 var(--radius-lg) var(--radius-lg); }
+.profile-hero-bg { position: absolute; inset: 0; background-size: cover; background-position: center 30%; filter: blur(22px) brightness(.45) saturate(1.1); transform: scale(1.15); }
+/* No avatar on file — fall back to a plain accent gradient wash instead of blurring nothing. */
+.profile-hero-bg.profile-hero-bg-fallback { background: radial-gradient(120% 140% at 20% 0%, var(--accent-dim) 0%, var(--bg-base) 62%); filter: none; transform: none; }
+.profile-hero::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(8,8,8,.15) 0%, rgba(8,8,8,.55) 60%, var(--bg-base) 100%); }
+.profile-hero-inner { position: relative; z-index: 2; height: 100%; display: flex; align-items: flex-end; gap: 22px; padding: 0 clamp(20px, 5vw, 64px) 22px; }
+.profile-avatar-wrap { position: relative; flex-shrink: 0; cursor: pointer; }
+.profile-avatar-lg { width: 128px; height: 128px; border-radius: 50%; border: 4px solid var(--bg-base); box-shadow: 0 12px 34px rgba(0,0,0,.7); font-size: 2.8rem; }
+.profile-avatar-edit-overlay { position: absolute; inset: 4px; border-radius: 50%; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 2px; opacity: 0; transition: opacity .2s; font-size: .65rem; color: #fff; line-height: 1.2; pointer-events: none; text-align: center; }
+.profile-avatar-wrap:hover .profile-avatar-edit-overlay { opacity: 1; }
+.profile-hero-text { flex: 1; min-width: 0; padding-bottom: 2px; }
+.profile-hero-name { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: clamp(1.3rem, 3vw, 1.9rem); font-weight: 800; text-shadow: 0 4px 18px rgba(0,0,0,.6); margin: 0; }
+.profile-hero-name button { background: none; border: none; cursor: pointer; color: rgba(255,255,255,.65); padding: 2px; display: inline-flex; }
+.profile-hero-name button:hover { color: #fff; }
+.profile-hero-email { font-size: .88rem; color: rgba(255,255,255,.7); margin-top: 4px; }
+.profile-hero-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+
+.profile-stat-strip { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; margin: -18px clamp(20px, 5vw, 64px) 28px; position: relative; z-index: 3; }
+.profile-stat-box { background: var(--bg-surface); padding: 14px 10px; text-align: center; }
+.profile-stat-val { font-size: 1.25rem; font-weight: 800; display: block; }
+.profile-stat-label { font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted); margin-top: 2px; }
+
+.profile-columns { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 24px; align-items: start; }
+.profile-side { min-width: 0; }
+.connected-account-row { display: flex; align-items: center; justify-content: space-between; padding: 13px 0; border-bottom: 1px solid var(--border); }
+.connected-account-row:last-child { border-bottom: none; }
+
+@media (max-width: 900px) {
+  .profile-columns { grid-template-columns: minmax(0, 1fr); }
+  .profile-stat-strip { grid-template-columns: repeat(2, 1fr); margin-left: 16px; margin-right: 16px; }
+  .profile-hero-inner { padding: 0 16px 18px; }
+  .profile-avatar-lg { width: 96px; height: 96px; font-size: 2.1rem; }
+}
+
