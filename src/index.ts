@@ -65,6 +65,10 @@ export interface Env {
   BOT_SECRET?: string;
   MAL_CLIENT_ID?: string;
   MAL_CLIENT_SECRET?: string;
+  MAL_REDIRECT_URI?: string;
+  ANILIST_CLIENT_ID?: string;
+  ANILIST_CLIENT_SECRET?: string;
+  ANILIST_REDIRECT_URI?: string;
   TMDB_API_KEY?: string;
 }
 
