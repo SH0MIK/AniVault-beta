@@ -255,27 +255,28 @@ body { font-family: var(--font-body); }
    Profile page ("/profile") — Anivexa-style layout
    ========================================================================== */
 
-.profile-hero { position: relative; height: 260px; overflow: hidden; border-radius: 0 0 var(--radius-lg) var(--radius-lg); }
-.profile-hero-bg { position: absolute; inset: 0; background-size: cover; background-position: center 30%; filter: blur(22px) brightness(.45) saturate(1.1); transform: scale(1.15); }
-/* No avatar on file — fall back to a plain accent gradient wash instead of blurring nothing. */
-.profile-hero-bg.profile-hero-bg-fallback { background: radial-gradient(120% 140% at 20% 0%, var(--accent-dim) 0%, var(--bg-base) 62%); filter: none; transform: none; }
-.profile-hero::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(8,8,8,.15) 0%, rgba(8,8,8,.55) 60%, var(--bg-base) 100%); }
-.profile-hero-inner { position: relative; z-index: 2; height: 100%; display: flex; align-items: flex-end; gap: 22px; padding: 0 clamp(20px, 5vw, 64px) 22px; }
-.profile-avatar-wrap { position: relative; flex-shrink: 0; cursor: pointer; }
-.profile-avatar-lg { width: 128px; height: 128px; border-radius: 50%; border: 4px solid var(--bg-base); box-shadow: 0 12px 34px rgba(0,0,0,.7); font-size: 2.8rem; }
+.profile-avatar-wrap { cursor: pointer; }
 .profile-avatar-edit-overlay { position: absolute; inset: 4px; border-radius: 50%; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 2px; opacity: 0; transition: opacity .2s; font-size: .65rem; color: #fff; line-height: 1.2; pointer-events: none; text-align: center; }
 .profile-avatar-wrap:hover .profile-avatar-edit-overlay { opacity: 1; }
-.profile-hero-text { flex: 1; min-width: 0; padding-bottom: 2px; }
-.profile-hero-name { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: clamp(1.3rem, 3vw, 1.9rem); font-weight: 800; text-shadow: 0 4px 18px rgba(0,0,0,.6); margin: 0; }
-.profile-hero-name button { background: none; border: none; cursor: pointer; color: rgba(255,255,255,.65); padding: 2px; display: inline-flex; }
-.profile-hero-name button:hover { color: #fff; }
-.profile-hero-email { font-size: .88rem; color: rgba(255,255,255,.7); margin-top: 4px; }
-.profile-hero-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.profile-hero-email { font-size: .88rem; color: var(--text-secondary); margin: 0; }
+.u-banner-remove-btn { position: absolute; top: 16px; right: 168px; z-index: 3; display: flex; align-items: center; justify-content: center; width: 34px; height: 34px; background: rgba(0,0,0,.5); backdrop-filter: blur(8px); border: 1px solid var(--glass-border); color: #fff; border-radius: 50%; cursor: pointer; transition: var(--trans); }
+.u-banner-remove-btn:hover { background: rgba(232,69,60,.7); border-color: var(--accent-2); }
+.u-pronouns { font-size: .8rem; font-weight: 600; color: var(--text-muted); }
+.u-tagline { font-size: .88rem; color: var(--text-secondary); margin: 2px 0 0; }
+.u-tagline-empty a { color: var(--accent-2); text-decoration: none; display: inline-flex; align-items: center; gap: 4px; }
+.u-tagline-empty a:hover { text-decoration: underline; }
+.u-social-links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.u-social-link { display: inline-flex; align-items: center; gap: 6px; font-size: .78rem; font-weight: 600; color: var(--text-secondary); background: rgba(255,255,255,.04); border: 1px solid var(--border); border-radius: var(--radius-pill); padding: 6px 12px; text-decoration: none; transition: var(--trans); }
+.u-social-link:hover { color: #fff; border-color: var(--border-accent); background: rgba(255,255,255,.08); }
 
-.profile-stat-strip { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; margin: -18px clamp(20px, 5vw, 64px) 28px; position: relative; z-index: 3; }
+.profile-stat-strip { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: var(--radius-md); overflow: hidden; margin: 24px clamp(20px, 5vw, 64px) 28px; position: relative; z-index: 3; }
 .profile-stat-box { background: var(--bg-surface); padding: 14px 10px; text-align: center; }
 .profile-stat-val { font-size: 1.25rem; font-weight: 800; display: block; }
 .profile-stat-label { font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted); margin-top: 2px; }
+
+@media (max-width: 560px) {
+  .u-banner-remove-btn { display: none; }
+}
 
 .profile-columns { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 32px; align-items: start; }
 .profile-side { min-width: 0; }
@@ -304,8 +305,7 @@ body { font-family: var(--font-body); }
 @media (max-width: 900px) {
   .profile-columns { grid-template-columns: minmax(0, 1fr); }
   .profile-stat-strip { grid-template-columns: repeat(2, 1fr); margin-left: 16px; margin-right: 16px; }
-  .profile-hero-inner { padding: 0 16px 18px; }
-  .profile-avatar-lg { width: 96px; height: 96px; font-size: 2.1rem; }
+  .u-avatar { width: 96px; height: 96px; font-size: 2.1rem; }
   .profile-tabs { max-width: 100%; overflow-x: auto; }
 }
 
@@ -330,6 +330,8 @@ body { font-family: var(--font-body); }
 .u-avatar { width: 112px; height: 112px; font-size: 2.4rem; border: 4px solid var(--bg-base); box-shadow: 0 10px 30px rgba(0,0,0,.6); }
 .u-role-badge { position: absolute; bottom: -2px; right: -2px; background: var(--grad-accent); color: #fff; border-radius: 20px; font-size: .62rem; padding: 3px 9px; font-weight: 800; letter-spacing: .04em; border: 2px solid var(--bg-base); }
 .u-username { font-size: clamp(1.3rem, 3vw, 1.6rem); font-weight: 800; margin: 0; display: flex; align-items: center; gap: 8px; }
+.u-username button { background: none; border: none; cursor: pointer; color: var(--text-muted); padding: 2px; display: inline-flex; }
+.u-username button:hover { color: #fff; }
 .u-name-block { flex: 1; min-width: 140px; display: flex; flex-direction: column; gap: 4px; }
 .u-header-actions { align-self: flex-end; padding-bottom: 6px; }
 .u-header-meta { margin: 4px 0 20px; }
