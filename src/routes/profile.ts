@@ -17,6 +17,7 @@ import { renderHeader, renderFooter, CurrentUser } from '../render/layout';
 import { PROFILE_CSS } from '../render/profile-css';
 import { PROFILE_SCRIPT } from '../render/profile-script';
 import { getBannerData } from '../lib/settings';
+import { buildSocialLinks, platformColor } from '../lib/social';
 
 export const profileRoutes = new Hono<{ Bindings: Env }>();
 
@@ -133,6 +134,15 @@ profileRoutes.on(['GET', 'POST'], '/profile', async (c) => {
       if (body.social_twitter !== undefined) data.social_twitter = body.social_twitter;
       if (body.social_mal !== undefined) data.social_mal = body.social_mal;
       if (body.social_website !== undefined) data.social_website = body.social_website;
+      if (body.social_facebook !== undefined) data.social_facebook = body.social_facebook;
+      if (body.social_instagram !== undefined) data.social_instagram = body.social_instagram;
+      if (body.social_anilist !== undefined) data.social_anilist = body.social_anilist;
+      if (body.social_youtube !== undefined) data.social_youtube = body.social_youtube;
+      if (body.social_reddit !== undefined) data.social_reddit = body.social_reddit;
+      if (!user.discord_id) {
+        if (body.social_discord_id !== undefined) data.social_discord_id = body.social_discord_id;
+      }
+      if (body.social_discord_label !== undefined) data.social_discord_label = body.social_discord_label;
       if (body.privacy_form === '1') {
         data.privacy_hide_followers = body.privacy_hide_followers === '1';
         data.privacy_hide_following = body.privacy_hide_following === '1';
@@ -160,6 +170,10 @@ profileRoutes.on(['GET', 'POST'], '/profile', async (c) => {
 
 async function renderProfilePage(c: any, db: Db, session: Session, lifetime: number, auth: Auth, user: any, error: string | null, success: string | null) {
   const siteUrl = c.env.SITE_URL;
+  // Overview tab is parked for now — flip to true to bring it back.
+  const ENABLE_OVERVIEW_TAB = false;
+  // Tagline field is parked for now — flip to true to bring it back.
+  const ENABLE_TAGLINE = false;
   const userBadges = await Badge.getForUser(db, user.id);
   const stats = await AnimeTracker.getStats(db, user.id);
   const favs = await AnimeTracker.getFavorites(db, user.id);
@@ -194,11 +208,7 @@ async function renderProfilePage(c: any, db: Db, session: Session, lifetime: num
   html += renderEmailModal(isPlaceholderEmail);
   html += renderDeleteAccountModal(hasPassword, siteUrl);
 
-  const socialLinks: [string, string, string][] = [
-    ...(user.social_twitter ? [['twitter', `https://twitter.com/${user.social_twitter}`, `@${user.social_twitter}`] as [string, string, string]] : []),
-    ...(user.social_mal ? [['tv', `https://myanimelist.net/profile/${user.social_mal}`, 'MyAnimeList'] as [string, string, string]] : []),
-    ...(user.social_website ? [['globe', /^https?:\/\//i.test(user.social_website) ? user.social_website : `https://${user.social_website}`, 'Website'] as [string, string, string]] : []),
-  ];
+  const socialLinks = buildSocialLinks(user);
 
   html += `
 <div class="u-hero">
@@ -228,9 +238,10 @@ async function renderProfilePage(c: any, db: Db, session: Session, lifetime: num
         <button type="button" onclick="openUsernameModal()" title="Edit username">${icon('edit', 'icon-small')}</button>
         ${user.pronouns ? `<span class="u-pronouns">${h(user.pronouns)}</span>` : ''}
       </h1>
-      ${user.tagline
+      <!-- Tagline disabled for now — flip ENABLE_TAGLINE below to bring it back. -->
+      ${ENABLE_TAGLINE && user.tagline
         ? `<p class="u-tagline">${h(user.tagline)}</p>`
-        : `<p class="u-tagline u-tagline-empty"><a href="javascript:void(0)" onclick="showProfileTab('account')">${icon('plus', 'icon-small')} Add a tagline</a></p>`}
+        : ENABLE_TAGLINE ? `<p class="u-tagline u-tagline-empty"><a href="javascript:void(0)" onclick="showProfileTab('account')">${icon('plus', 'icon-small')} Add a tagline</a></p>` : ''}
       <p class="u-joined text-muted">Member since ${memberSince}</p>
     </div>
   </div>
@@ -243,7 +254,7 @@ async function renderProfilePage(c: any, db: Db, session: Session, lifetime: num
     </p>
     ${socialLinks.length ? `
     <div class="u-social-links">
-      ${socialLinks.map(([ic, url, label]) => `<a href="${h(url)}" target="_blank" rel="noopener noreferrer nofollow" class="u-social-link">${icon(ic, 'icon-small')} ${h(label)}</a>`).join('')}
+      ${socialLinks.map(([ic, url, label]) => `<a href="${h(url)}" target="_blank" rel="noopener noreferrer nofollow" class="u-social-link" style="--platform-color:${platformColor(ic)}" title="${h(label)}">${icon(ic, 'icon-small')}<span>${h(label)}</span></a>`).join('')}
     </div>` : ''}
     <div id="avatar-status" style="font-size:0.78rem;min-height:16px;color:rgba(255,255,255,.6);"></div>
   </div>
@@ -262,12 +273,14 @@ async function renderProfilePage(c: any, db: Db, session: Session, lifetime: num
   ${success ? `<div class="alert alert-success mb-2">${icon('check', 'icon-small')} ${h(success)}</div>` : ''}
 
   <div class="profile-tabs">
-    <button type="button" class="profile-tab-btn active" data-tab="overview" onclick="showProfileTab('overview')">${icon('user', 'icon-small')} Overview</button>
-    <button type="button" class="profile-tab-btn" data-tab="account" onclick="showProfileTab('account')">${icon('edit', 'icon-small')} Account</button>
+    <!-- Overview tab disabled for now — flip ENABLE_OVERVIEW_TAB below to bring it back -->
+    ${ENABLE_OVERVIEW_TAB ? `<button type="button" class="profile-tab-btn active" data-tab="overview" onclick="showProfileTab('overview')">${icon('user', 'icon-small')} Overview</button>` : ''}
+    <button type="button" class="profile-tab-btn${ENABLE_OVERVIEW_TAB ? '' : ' active'}" data-tab="account" onclick="showProfileTab('account')">${icon('edit', 'icon-small')} Account</button>
     <button type="button" class="profile-tab-btn" data-tab="connections" onclick="showProfileTab('connections')">${icon('globe', 'icon-small')} Connections</button>
     <button type="button" class="profile-tab-btn" data-tab="privacy" onclick="showProfileTab('privacy')">${icon('shield', 'icon-small')} Privacy</button>
   </div>
 
+  ${ENABLE_OVERVIEW_TAB ? `
   <div class="profile-tab-panel active" id="tab-overview">
     <div class="profile-columns">
       <div>
@@ -300,9 +313,9 @@ async function renderProfilePage(c: any, db: Db, session: Session, lifetime: num
         </div>
       </aside>
     </div>
-  </div>
+  </div>` : ''}
 
-  <div class="profile-tab-panel" id="tab-account" hidden>
+  <div class="profile-tab-panel${ENABLE_OVERVIEW_TAB ? '' : ' active'}" id="tab-account"${ENABLE_OVERVIEW_TAB ? ' hidden' : ''}>
     <div class="settings-card mb-2">
       <div class="settings-row">
         <div class="settings-row-label">
@@ -328,20 +341,36 @@ async function renderProfilePage(c: any, db: Db, session: Session, lifetime: num
         </div>
         <textarea id="bio-input" name="bio" class="form-control" rows="3" maxlength="500" placeholder="Tell others about yourself..." oninput="document.getElementById('bio-char-count').textContent=this.value.length+'/500'">${h(user.bio ?? '')}</textarea>
       </div>
+      ${ENABLE_TAGLINE ? `
       <div class="settings-row" style="flex-direction:column;align-items:stretch;gap:8px;">
         <label class="settings-row-name" for="tagline-input">${icon('edit', 'icon-small')} Tagline</label>
         <div class="settings-row-desc" style="margin:-4px 0 4px;">A short status line shown right under your name</div>
         <input id="tagline-input" type="text" name="tagline" class="form-control" maxlength="80" placeholder="e.g. Currently marathoning Fall 2026" value="${h(user.tagline ?? '')}">
-      </div>
+      </div>` : ''}
       <div class="settings-row" style="flex-direction:column;align-items:stretch;gap:8px;">
         <label class="settings-row-name" for="pronouns-input">${icon('user', 'icon-small')} Pronouns</label>
         <input id="pronouns-input" type="text" name="pronouns" class="form-control" maxlength="30" placeholder="e.g. she/her" value="${h(user.pronouns ?? '')}">
       </div>
       <div class="settings-row" style="flex-direction:column;align-items:stretch;gap:10px;">
         <label class="settings-row-name">${icon('globe', 'icon-small')} Social Links</label>
-        <input type="text" name="social_twitter" class="form-control" maxlength="100" placeholder="Twitter/X username (no @)" value="${h(user.social_twitter ?? '')}">
-        <input type="text" name="social_mal" class="form-control" maxlength="100" placeholder="MyAnimeList username" value="${h(user.social_mal ?? '')}">
-        <input type="text" name="social_website" class="form-control" maxlength="200" placeholder="Website URL" value="${h(user.social_website ?? '')}">
+        <div class="social-input-row">
+          ${icon('discord', 'icon-small')}
+          ${user.discord_id
+            ? `<div class="social-input-static">${icon('check', 'icon-small')} Connected via Discord login <span class="text-muted">(ID: ${h(user.discord_id)})</span></div>`
+            : `<input type="text" name="social_discord_id" class="form-control" maxlength="40" placeholder="Discord User ID (User Settings → right-click your name → Copy User ID)" value="${h(user.social_discord_id ?? '')}">`}
+        </div>
+        <div class="social-input-row">
+          <span class="social-input-spacer"></span>
+          <input type="text" name="social_discord_label" class="form-control" maxlength="60" placeholder="Discord display name to show" value="${h(user.social_discord_label ?? '')}">
+        </div>
+        <div class="social-input-row">${icon('twitter', 'icon-small')}<input type="text" name="social_twitter" class="form-control" maxlength="100" placeholder="Twitter/X username (no @)" value="${h(user.social_twitter ?? '')}"></div>
+        <div class="social-input-row">${icon('instagram', 'icon-small')}<input type="text" name="social_instagram" class="form-control" maxlength="100" placeholder="Instagram username (no @)" value="${h(user.social_instagram ?? '')}"></div>
+        <div class="social-input-row">${icon('facebook', 'icon-small')}<input type="text" name="social_facebook" class="form-control" maxlength="100" placeholder="Facebook username or profile ID" value="${h(user.social_facebook ?? '')}"></div>
+        <div class="social-input-row">${icon('youtube', 'icon-small')}<input type="text" name="social_youtube" class="form-control" maxlength="100" placeholder="YouTube handle (without @)" value="${h(user.social_youtube ?? '')}"></div>
+        <div class="social-input-row">${icon('reddit', 'icon-small')}<input type="text" name="social_reddit" class="form-control" maxlength="100" placeholder="Reddit username (no u/)" value="${h(user.social_reddit ?? '')}"></div>
+        <div class="social-input-row">${icon('tv', 'icon-small')}<input type="text" name="social_mal" class="form-control" maxlength="100" placeholder="MyAnimeList username" value="${h(user.social_mal ?? '')}"></div>
+        <div class="social-input-row">${icon('anilist', 'icon-small')}<input type="text" name="social_anilist" class="form-control" maxlength="100" placeholder="AniList username" value="${h(user.social_anilist ?? '')}"></div>
+        <div class="social-input-row">${icon('globe', 'icon-small')}<input type="text" name="social_website" class="form-control" maxlength="200" placeholder="Website URL" value="${h(user.social_website ?? '')}"></div>
       </div>
       <div class="settings-row" style="flex-direction:column;align-items:stretch;gap:8px;">
         <label class="settings-row-name" for="password-input">${icon('lock', 'icon-small')} New Password</label>

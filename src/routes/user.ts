@@ -16,6 +16,7 @@ import { icon } from '../lib/icons';
 import { renderAnimeCard } from '../lib/anime-card';
 import { renderHeader, renderFooter, CurrentUser } from '../render/layout';
 import { getBannerData } from '../lib/settings';
+import { buildSocialLinks, platformColor } from '../lib/social';
 
 export const userRoutes = new Hono<{ Bindings: Env }>();
 
@@ -36,7 +37,7 @@ userRoutes.get('/u/:username', async (c) => {
     : null;
 
   const profileUser = await db.fetchOne<any>(
-    'SELECT id, username, email, avatar_url, banner_url, bio, role, created_at, last_login, pronouns, tagline, social_twitter, social_mal, social_website, privacy_hide_followers, privacy_hide_following, privacy_hide_favorites FROM users WHERE username = ? AND is_active = 1',
+    'SELECT id, username, email, avatar_url, banner_url, bio, role, created_at, last_login, pronouns, tagline, discord_id, social_twitter, social_mal, social_website, social_facebook, social_instagram, social_anilist, social_youtube, social_reddit, social_discord_id, social_discord_label, privacy_hide_followers, privacy_hide_following, privacy_hide_favorites FROM users WHERE username = ? AND is_active = 1',
     [username]
   );
 
@@ -96,10 +97,6 @@ userRoutes.get('/u/:username', async (c) => {
   html += `
 <div class="u-hero">
   <div class="u-banner${profileUser.banner_url ? '' : ' u-banner-fallback'}"${profileUser.banner_url ? ` style="background-image:url('${h(profileUser.banner_url)}')"` : ''} id="u-banner-el"></div>
-  ${isOwn ? `
-  <button type="button" class="u-banner-edit-btn" onclick="document.getElementById('banner-file-input').click()">${icon('camera', 'icon-small')} ${profileUser.banner_url ? 'Change Banner' : 'Add Banner'}</button>
-  <input type="file" id="banner-file-input" accept="image/jpeg,image/png,image/gif,image/webp" style="display:none" onchange="handleBannerFile(this)">
-  <div id="banner-status" class="u-banner-status"></div>` : ''}
 </div>
 
 <div class="container section" style="padding-top:0;">
@@ -112,7 +109,7 @@ userRoutes.get('/u/:username', async (c) => {
     </div>
     <div class="u-name-block">
       <h1 class="u-username username-with-badges">${h(profileUser.username)}${Badge.renderList(profileBadges)}${profileUser.pronouns ? `<span class="u-pronouns">${h(profileUser.pronouns)}</span>` : ''}</h1>
-      ${profileUser.tagline ? `<p class="u-tagline">${h(profileUser.tagline)}</p>` : ''}
+      <!-- Tagline disabled for now -->
       <p class="u-joined text-muted">Joined ${joinedDate}${profileUser.last_login ? ` · Last seen ${timeAgo(profileUser.last_login)}` : ''}</p>
     </div>
     <div class="u-header-actions">
@@ -125,13 +122,9 @@ userRoutes.get('/u/:username', async (c) => {
   <div class="u-header-meta">
     ${profileUser.bio ? `<p class="u-bio">${h(profileUser.bio).replace(/\n/g, '<br>')}</p>` : ''}
     ${(() => {
-      const links: [string, string, string][] = [
-        ...(profileUser.social_twitter ? [['twitter', `https://twitter.com/${profileUser.social_twitter}`, `@${profileUser.social_twitter}`] as [string, string, string]] : []),
-        ...(profileUser.social_mal ? [['tv', `https://myanimelist.net/profile/${profileUser.social_mal}`, 'MyAnimeList'] as [string, string, string]] : []),
-        ...(profileUser.social_website ? [['globe', /^https?:\/\//i.test(profileUser.social_website) ? profileUser.social_website : `https://${profileUser.social_website}`, 'Website'] as [string, string, string]] : []),
-      ];
+      const links = buildSocialLinks(profileUser);
       if (!links.length) return '';
-      return `<div class="u-social-links">${links.map(([ic, url, label]) => `<a href="${h(url)}" target="_blank" rel="noopener noreferrer nofollow" class="u-social-link">${icon(ic, 'icon-small')} ${h(label)}</a>`).join('')}</div>`;
+      return `<div class="u-social-links">${links.map(([ic, url, label]) => `<a href="${h(url)}" target="_blank" rel="noopener noreferrer nofollow" class="u-social-link" style="--platform-color:${platformColor(ic)}" title="${h(label)}">${icon(ic, 'icon-small')}<span>${h(label)}</span></a>`).join('')}</div>`;
     })()}
   </div>
 
@@ -314,35 +307,6 @@ async function toggleFollow(userId, btn) {
     }
   } catch(e) { showToast('Error', 'error'); }
   btn.disabled = false;
-}
-
-async function handleBannerFile(input) {
-  const file = input.files && input.files[0];
-  if (!file) return;
-  const statusEl = document.getElementById('banner-status');
-  const bannerEl = document.getElementById('u-banner-el');
-  if (statusEl) statusEl.textContent = 'Uploading…';
-  const fd = new FormData();
-  fd.append('banner', file);
-  try {
-    const res = await fetch('/api/upload_banner.php', { method: 'POST', body: fd });
-    const data = await res.json();
-    if (data.success) {
-      if (bannerEl) {
-        bannerEl.style.backgroundImage = \`url('\${data.banner_url}')\`;
-        bannerEl.classList.remove('u-banner-fallback');
-      }
-      if (statusEl) statusEl.textContent = '';
-      showToast(data.message, 'success');
-    } else {
-      if (statusEl) statusEl.textContent = '';
-      showToast(data.message, 'error');
-    }
-  } catch (e) {
-    if (statusEl) statusEl.textContent = '';
-    showToast('Upload failed', 'error');
-  }
-  input.value = '';
 }
 </script>`;
 
