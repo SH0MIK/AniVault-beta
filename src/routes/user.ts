@@ -36,7 +36,7 @@ userRoutes.get('/u/:username', async (c) => {
     : null;
 
   const profileUser = await db.fetchOne<any>(
-    'SELECT id, username, email, avatar_url, bio, role, created_at, last_login FROM users WHERE username = ? AND is_active = 1',
+    'SELECT id, username, email, avatar_url, banner_url, bio, role, created_at, last_login FROM users WHERE username = ? AND is_active = 1',
     [username]
   );
 
@@ -90,51 +90,54 @@ userRoutes.get('/u/:username', async (c) => {
   const joinedDate = profileUser.created_at ? new Date(profileUser.created_at.replace(' ', 'T') + 'Z').toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' }) : '';
 
   html += `
-<div class="container section">
-  <div style="background:linear-gradient(135deg,rgba(232,69,60,0.12),rgba(162,155,254,0.08));border:1px solid var(--border);border-radius:var(--radius-xl);padding:2rem;margin-bottom:1.5rem;position:relative;overflow:hidden;">
-    <div style="position:absolute;top:-40px;right:-40px;width:200px;height:200px;border-radius:50%;background:radial-gradient(rgba(232,69,60,0.08),transparent);pointer-events:none;"></div>
-    <div class="flex" style="gap:1.5rem;align-items:flex-start;flex-wrap:wrap;">
-      <div style="position:relative;flex-shrink:0;">
-        <div class="nav-avatar" style="width:100px;height:100px;font-size:2.5rem;border:3px solid var(--border-accent);">
-          ${profileUser.avatar_url ? `<img src="${h(profileUser.avatar_url)}" alt="${h(profileUser.username)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">` : h(profileUser.username.charAt(0).toUpperCase())}
-        </div>
-        ${isProfileOwner ? `<span style="position:absolute;bottom:-4px;right:-4px;background:var(--accent);color:white;border-radius:20px;font-size:0.65rem;padding:2px 7px;font-weight:700;letter-spacing:0.5px;">OWNER</span>`
-          : profileUser.role === 'admin' ? `<span style="position:absolute;bottom:-4px;right:-4px;background:var(--accent);color:white;border-radius:20px;font-size:0.65rem;padding:2px 7px;font-weight:700;letter-spacing:0.5px;">ADMIN</span>` : ''}
+<div class="u-hero">
+  <div class="u-banner${profileUser.banner_url ? '' : ' u-banner-fallback'}"${profileUser.banner_url ? ` style="background-image:url('${h(profileUser.banner_url)}')"` : ''} id="u-banner-el"></div>
+  ${isOwn ? `
+  <button type="button" class="u-banner-edit-btn" onclick="document.getElementById('banner-file-input').click()">${icon('camera', 'icon-small')} ${profileUser.banner_url ? 'Change Banner' : 'Add Banner'}</button>
+  <input type="file" id="banner-file-input" accept="image/jpeg,image/png,image/gif,image/webp" style="display:none" onchange="handleBannerFile(this)">
+  <div id="banner-status" class="u-banner-status"></div>` : ''}
+</div>
+
+<div class="container section" style="padding-top:0;">
+  <div class="u-header">
+    <div class="u-avatar-wrap">
+      <div class="nav-avatar u-avatar">
+        ${profileUser.avatar_url ? `<img src="${h(profileUser.avatar_url)}" alt="${h(profileUser.username)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">` : h(profileUser.username.charAt(0).toUpperCase())}
       </div>
-      <div style="flex:1;min-width:200px;">
-        <div class="flex" style="align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px;">
-          <h1 class="username-with-badges" style="font-size:1.6rem;">${h(profileUser.username)}${Badge.renderList(profileBadges)}</h1>
-          ${isOwn ? `<a href="${siteUrl}/profile" class="btn btn-ghost btn-sm">✏️ Edit Profile</a>`
-            : currentUser ? `<button class="btn ${isFollowing ? 'btn-ghost' : 'btn-primary'} btn-sm" id="follow-btn" onclick="toggleFollow(${profileId}, this)">${isFollowing ? '✓ Following' : '+ Follow'}</button>`
-            : `<button onclick="requireLogin()" class="btn btn-primary btn-sm">+ Follow</button>`}
-        </div>
-        ${profileUser.bio ? `<p style="color:var(--text-secondary);font-size:0.95rem;margin-bottom:10px;max-width:500px;">${h(profileUser.bio).replace(/\n/g, '<br>')}</p>` : ''}
-        <div class="flex flex-wrap" style="gap:1.25rem;">
-          <button onclick="openModal('followers-modal')" style="background:none;border:none;cursor:pointer;text-align:left;padding:0;">
-            <span class="follower-count" style="font-family:var(--font-display);font-size:1.2rem;font-weight:700;color:var(--text-primary);">${followerCount.toLocaleString('en-US')}</span>
-            <span class="text-muted" style="font-size:0.85rem;margin-left:4px;">Followers</span>
-          </button>
-          <button onclick="openModal('following-modal')" style="background:none;border:none;cursor:pointer;text-align:left;padding:0;">
-            <span style="font-family:var(--font-display);font-size:1.2rem;font-weight:700;color:var(--text-primary);">${followingCount.toLocaleString('en-US')}</span>
-            <span class="text-muted" style="font-size:0.85rem;margin-left:4px;">Following</span>
-          </button>
-          <div><span style="font-family:var(--font-display);font-size:1.2rem;font-weight:700;color:var(--text-primary);">${stats.total.toLocaleString('en-US')}</span><span class="text-muted" style="font-size:0.85rem;margin-left:4px;">Anime</span></div>
-        </div>
-        <p class="text-muted" style="font-size:0.78rem;margin-top:10px;">Joined ${joinedDate}${profileUser.last_login ? ` · Last seen ${timeAgo(profileUser.last_login)}` : ''}</p>
+      ${isProfileOwner ? `<span class="u-role-badge">OWNER</span>` : profileUser.role === 'admin' ? `<span class="u-role-badge">ADMIN</span>` : ''}
+    </div>
+    <div class="u-header-text">
+      <div class="u-name-row">
+        <h1 class="u-username username-with-badges">${h(profileUser.username)}${Badge.renderList(profileBadges)}</h1>
+        ${isOwn ? `<a href="${siteUrl}/profile" class="btn btn-ghost btn-sm">${icon('edit', 'icon-small')} Edit Profile</a>`
+          : currentUser ? `<button class="btn ${isFollowing ? 'btn-ghost' : 'btn-primary'} btn-sm" id="follow-btn" onclick="toggleFollow(${profileId}, this)">${isFollowing ? `${icon('check', 'icon-small')} Following` : `${icon('plus', 'icon-small')} Follow`}</button>`
+          : `<button onclick="requireLogin()" class="btn btn-primary btn-sm">${icon('plus', 'icon-small')} Follow</button>`}
       </div>
+      ${profileUser.bio ? `<p class="u-bio">${h(profileUser.bio).replace(/\n/g, '<br>')}</p>` : ''}
+      <p class="u-joined text-muted">Joined ${joinedDate}${profileUser.last_login ? ` · Last seen ${timeAgo(profileUser.last_login)}` : ''}</p>
     </div>
   </div>
 
-  <div class="grid-4 mb-3" style="gap:12px;">
-    ${[
-      [stats.watching, '▶️ Watching', 'blue'],
-      [stats.completed, '✅ Completed', 'teal'],
-      [stats.plan_to_watch, '📅 Planning', 'purple'],
-      [stats.avg_score || '—', '⭐ Avg Score', 'gold'],
-    ].map(([v, l, cl]) => `<div class="stat-card"><div class="stat-value" style="color:var(--${cl})">${v}</div><div class="stat-label">${l}</div></div>`).join('')}
+  <div class="profile-stat-strip u-stat-strip">
+    <div class="profile-stat-box clickable" onclick="openModal('followers-modal')">
+      <span class="profile-stat-val follower-count">${followerCount.toLocaleString('en-US')}</span>
+      <span class="profile-stat-label">${icon('users', 'icon-small')} Followers</span>
+    </div>
+    <div class="profile-stat-box clickable" onclick="openModal('following-modal')">
+      <span class="profile-stat-val">${followingCount.toLocaleString('en-US')}</span>
+      <span class="profile-stat-label">${icon('users', 'icon-small')} Following</span>
+    </div>
+    <div class="profile-stat-box">
+      <span class="profile-stat-val" style="color:var(--text-primary);">${stats.total.toLocaleString('en-US')}</span>
+      <span class="profile-stat-label">${icon('list', 'icon-small')} Anime</span>
+    </div>
+    <div class="profile-stat-box">
+      <span class="profile-stat-val" style="color:var(--gold);">${stats.avg_score || '—'}</span>
+      <span class="profile-stat-label">${icon('star', 'icon-small')} Avg Score</span>
+    </div>
   </div>
 
-  <div class="tabs-container">
+  <div class="tabs-container u-tabs">
     <div class="tabs">
       <button class="tab-btn active" data-tab="animelist">Anime List</button>
       <button class="tab-btn" data-tab="favorites">Favorites (${favs.length})</button>
@@ -292,6 +295,35 @@ async function toggleFollow(userId, btn) {
     }
   } catch(e) { showToast('Error', 'error'); }
   btn.disabled = false;
+}
+
+async function handleBannerFile(input) {
+  const file = input.files && input.files[0];
+  if (!file) return;
+  const statusEl = document.getElementById('banner-status');
+  const bannerEl = document.getElementById('u-banner-el');
+  if (statusEl) statusEl.textContent = 'Uploading…';
+  const fd = new FormData();
+  fd.append('banner', file);
+  try {
+    const res = await fetch('/api/upload_banner.php', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (data.success) {
+      if (bannerEl) {
+        bannerEl.style.backgroundImage = \`url('\${data.banner_url}')\`;
+        bannerEl.classList.remove('u-banner-fallback');
+      }
+      if (statusEl) statusEl.textContent = '';
+      showToast(data.message, 'success');
+    } else {
+      if (statusEl) statusEl.textContent = '';
+      showToast(data.message, 'error');
+    }
+  } catch (e) {
+    if (statusEl) statusEl.textContent = '';
+    showToast('Upload failed', 'error');
+  }
+  input.value = '';
 }
 </script>`;
 
