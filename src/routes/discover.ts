@@ -41,13 +41,18 @@ discoverRoutes.get('/seasonal', async (c) => {
 
   const __banner = await getBannerData(db);
   let html = renderHeader({ ...__banner, siteUrl, siteName: c.env.SITE_NAME, pageTitle: 'Seasonal Anime', currentPage: 'seasonal', currentUser: layoutUser, unreadCount, requestUrl: c.req.url });
+  const seasonYear = new Date().getUTCFullYear();
+  const seasonLabel = mal.currentSeasonPublic().replace(/^./, (c) => c.toUpperCase());
   html += `
 <div class="container section">
-  <div class="flex-between mb-3">
-    <h1>🌸 Seasonal Anime</h1>
+  <div class="flex-between mb-3" style="flex-wrap:wrap;gap:1rem;">
+    <div>
+      <h1>🌸 Seasonal Anime</h1>
+      <p class="text-muted" style="font-size:.85rem;margin-top:2px;">${season === 'upcoming' ? 'Next season' : `${seasonLabel} ${seasonYear}`}</p>
+    </div>
     <div class="flex gap-1">
-      <a href="/seasonal?season=now" class="btn ${season !== 'upcoming' ? 'btn-primary' : 'btn-ghost'} btn-sm">Airing Now</a>
-      <a href="/seasonal?season=upcoming" class="btn ${season === 'upcoming' ? 'btn-primary' : 'btn-ghost'} btn-sm">Upcoming</a>
+      <a href="/seasonal?season=now" class="filter-pill ${season !== 'upcoming' ? 'active' : ''}">Airing Now</a>
+      <a href="/seasonal?season=upcoming" class="filter-pill ${season === 'upcoming' ? 'active' : ''}">Upcoming</a>
     </div>
   </div>
   ${items.length === 0 ? `<p class="text-muted text-center">API may be rate-limited. Please wait a moment and refresh.</p>` : `
@@ -92,7 +97,7 @@ discoverRoutes.get('/top', async (c) => {
   <div class="flex-between mb-3" style="flex-wrap:wrap;gap:1rem;">
     <h1>🏆 Top Anime</h1>
     <div class="flex gap-1 flex-wrap">
-      ${Object.entries(TOP_FILTERS).map(([k, v]) => `<a href="/top?filter=${k}" class="btn ${filter === k ? 'btn-primary' : 'btn-ghost'} btn-sm">${v}</a>`).join('')}
+      ${Object.entries(TOP_FILTERS).map(([k, v]) => `<a href="/top?filter=${k}" class="filter-pill ${filter === k ? 'active' : ''}">${v}</a>`).join('')}
     </div>
   </div>
 
