@@ -385,3 +385,60 @@ body { font-family: var(--font-body); }
   .u-banner-status { display: none; }
 }
 
+/* ── Browse/Discover filter components ───────────────────────────────
+   Shared pill-toggle group + active-filter chips + mobile filter drawer,
+   used by /browse and echoed lightly on /top, /seasonal for a consistent
+   filtering feel across the discovery pages. */
+
+.filter-pill-group { display: flex; flex-wrap: wrap; gap: 8px; }
+.filter-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 14px; border-radius: var(--radius-pill, 999px);
+  background: rgba(255,255,255,.03); border: 1px solid var(--border);
+  color: var(--text-secondary); font-size: .83rem; font-weight: 600;
+  cursor: pointer; transition: var(--trans); user-select: none; text-decoration: none;
+}
+.filter-pill:hover { border-color: var(--border-accent); color: var(--text-primary); }
+.filter-pill.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+.filter-section { padding: 16px; border-bottom: 1px solid var(--border); }
+.filter-section:last-child { border-bottom: none; }
+.filter-section-label { font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted); margin-bottom: 10px; }
+.filter-search-wrap { position: relative; }
+.filter-search-wrap svg.icon { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); width: 15px; height: 15px; color: var(--text-muted); pointer-events: none; }
+.filter-search-wrap input { padding-left: 34px; }
+
+.filter-panel-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid var(--border); }
+.filter-panel-title { font-size: .88rem; font-weight: 800; display: flex; align-items: center; gap: 8px; }
+.filter-clear-link { font-size: .76rem; color: var(--accent); text-decoration: none; font-weight: 600; }
+.filter-clear-link:hover { text-decoration: underline; }
+
+/* Active filter chips shown above the results grid */
+.active-filters-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
+.active-filter-chip {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 6px 8px 6px 12px; border-radius: var(--radius-pill, 999px);
+  background: var(--accent-glow); border: 1px solid var(--border-accent);
+  color: var(--text-primary); font-size: .78rem; font-weight: 600; text-decoration: none;
+}
+.active-filter-chip svg.icon { width: 13px; height: 13px; opacity: .8; }
+.active-filter-chip:hover svg.icon { opacity: 1; }
+
+/* Mobile filter toggle button — hidden on desktop where the sidebar is
+   always visible; shown only under the breakpoint where layout-sidebar
+   collapses to a single column (see style.css @720/900px rules). */
+.filter-toggle-btn { display: none; align-items: center; gap: 8px; margin-bottom: 16px; }
+.filter-toggle-count { background: var(--accent); color: #fff; border-radius: 999px; font-size: .68rem; font-weight: 800; padding: 1px 7px; }
+
+.filter-drawer-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 900; }
+.filter-drawer-backdrop.open { display: block; }
+
+@media (max-width: 900px) {
+  .filter-toggle-btn { display: inline-flex; }
+  /* On mobile the sidebar becomes a slide-in drawer instead of a block
+     that pushes the results down the page. */
+  .layout-sidebar > aside { position: fixed; top: 0; left: 0; bottom: 0; width: min(340px, 86vw); z-index: 901; transform: translateX(-100%); transition: transform .25s ease; overflow-y: auto; }
+  .layout-sidebar > aside.open { transform: translateX(0); }
+  .layout-sidebar > aside .sidebar { border-radius: 0; height: 100%; position: static; top: 0; }
+}
+
