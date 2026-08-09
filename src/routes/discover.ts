@@ -314,6 +314,16 @@ discoverRoutes.get('/schedule', async (c) => {
   if (!rows.length) return;
   const now = new Date();
   let dividerPlaced = false;
+  let nextUpRow = null;
+
+  function formatCountdown(ms) {
+    const mins = Math.max(0, Math.round(ms / 60000));
+    if (mins < 60) return 'in ' + mins + 'm';
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return 'in ' + hrs + 'h ' + (mins % 60) + 'm';
+    return 'in ' + Math.floor(hrs / 24) + 'd ' + (hrs % 24) + 'h';
+  }
+
   rows.forEach(row => {
     const timeEl = row.querySelector('.local-time[data-jst]');
     if (!timeEl) return;
@@ -326,6 +336,13 @@ discoverRoutes.get('/schedule', async (c) => {
       row.classList.add('sched-aired');
       return;
     }
+
+    // Every still-upcoming row gets its own countdown, not just the next one.
+    const badge = document.createElement('small');
+    badge.className = 'sched-countdown';
+    badge.textContent = formatCountdown(airDate - now);
+    timeEl.closest('.schedule-time')?.appendChild(badge);
+
     if (!dividerPlaced) {
       const divider = document.createElement('div');
       divider.className = 'sched-now-divider';
@@ -333,15 +350,19 @@ discoverRoutes.get('/schedule', async (c) => {
       row.parentNode.insertBefore(divider, row);
       row.classList.add('sched-next-up');
       dividerPlaced = true;
-
-      const mins = Math.max(0, Math.round((airDate - now) / 60000));
-      const label = mins < 60 ? ('in ' + mins + 'm') : ('in ' + Math.floor(mins / 60) + 'h ' + (mins % 60) + 'm');
-      const badge = document.createElement('small');
-      badge.className = 'sched-countdown';
-      badge.textContent = label;
-      timeEl.closest('.schedule-time')?.appendChild(badge);
+      nextUpRow = row;
     }
   });
+
+  // Jump straight to what's next instead of making people scroll past
+  // everything that's already aired today.
+  if (nextUpRow) {
+    requestAnimationFrame(() => {
+      const headerOffset = 90; // clears the sticky site header + day-tabs
+      const y = nextUpRow.getBoundingClientRect().top + window.scrollY - headerOffset;
+      window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' });
+    });
+  }
 })();
 </script>`;
 
@@ -396,15 +417,18 @@ function renderScheduleRow(a: NormalisedAnime, day: string, userStatus: string |
     }
   }
 
-  // Next occurrence of this broadcast day, in JST, as ISO — for client-side tz conversion.
+  // This broadcast's actual instant in JST, as ISO — used both for the
+  // client-side tz conversion AND (as of the NOW-divider feature) for
+  // deciding whether it's already aired. That second use is why we must
+  // NOT force same-day broadcasts a week ahead: today's occurrence needs
+  // to resolve to today's actual instant, even if that's already passed.
   let jstIso = '';
   if (btime) {
     const dayIdx: Record<string, number> = { sunday: 0, monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6 };
     const targetDay = dayIdx[day] ?? 1;
     const now = new Date();
     const nowJstDay = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Tokyo' })).getDay();
-    let daysAhead = (targetDay - nowJstDay + 7) % 7;
-    if (daysAhead === 0) daysAhead = 7;
+    const daysAhead = (targetDay - nowJstDay + 7) % 7;
     const [hh, mm] = btime.split(':').map(Number);
     const next = new Date();
     next.setUTCDate(next.getUTCDate() + daysAhead);
