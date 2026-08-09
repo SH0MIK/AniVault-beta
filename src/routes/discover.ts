@@ -419,9 +419,16 @@ function renderScheduleRow(a: NormalisedAnime, day: string, userStatus: string |
 
   // This broadcast's actual instant in JST, as ISO — used both for the
   // client-side tz conversion AND (as of the NOW-divider feature) for
-  // deciding whether it's already aired. That second use is why we must
-  // NOT force same-day broadcasts a week ahead: today's occurrence needs
-  // to resolve to today's actual instant, even if that's already passed.
+  // deciding whether it's already aired.
+  //
+  // JST runs far enough ahead (UTC+9) that "today" in JST can already be
+  // tomorrow for viewers west of it — e.g. 10:48 PM in GMT+6 is already
+  // 1:48 AM the next day in Tokyo. So "the next occurrence going forward"
+  // is the wrong question once that's happened: JST's Sunday slot may
+  // have technically just ended, and jumping forward lands 6 days away
+  // instead of recognizing it aired a few hours ago. Instead, compute
+  // both the forward and the week-earlier occurrence and take whichever
+  // is actually closest to right now — that's the one a viewer means.
   let jstIso = '';
   if (btime) {
     const dayIdx: Record<string, number> = { sunday: 0, monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6 };
@@ -430,10 +437,17 @@ function renderScheduleRow(a: NormalisedAnime, day: string, userStatus: string |
     const nowJstDay = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Tokyo' })).getDay();
     const daysAhead = (targetDay - nowJstDay + 7) % 7;
     const [hh, mm] = btime.split(':').map(Number);
-    const next = new Date();
-    next.setUTCDate(next.getUTCDate() + daysAhead);
-    next.setUTCHours((hh ?? 0) - 9, mm ?? 0, 0, 0); // JST is UTC+9
-    jstIso = next.toISOString();
+
+    const forward = new Date();
+    forward.setUTCDate(forward.getUTCDate() + daysAhead);
+    forward.setUTCHours((hh ?? 0) - 9, mm ?? 0, 0, 0); // JST is UTC+9
+
+    const backward = new Date(forward);
+    backward.setUTCDate(backward.getUTCDate() - 7);
+
+    const nowMs = now.getTime();
+    const closest = Math.abs(forward.getTime() - nowMs) <= Math.abs(backward.getTime() - nowMs) ? forward : backward;
+    jstIso = closest.toISOString();
   }
 
   const startDate = a.start_date;
