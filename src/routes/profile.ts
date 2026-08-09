@@ -216,6 +216,9 @@ async function renderProfilePage(c: any, db: Db, session: Session, lifetime: num
   const ENABLE_OVERVIEW_TAB = false;
   // Tagline field is parked for now — flip to true to bring it back.
   const ENABLE_TAGLINE = false;
+  // AniList sync doesn't work yet (graphql.anilist.co relay isn't
+  // reliable) — flip to true to bring the Connect button back once fixed.
+  const ENABLE_ANILIST_SYNC = false;
   const userBadges = await Badge.getForUser(db, user.id);
   const stats = await AnimeTracker.getStats(db, user.id);
   const favs = await AnimeTracker.getFavorites(db, user.id);
@@ -512,6 +515,8 @@ async function renderProfilePage(c: any, db: Db, session: Session, lifetime: num
             : `<a href="${siteUrl}/api/list_sync_connect.php?provider=mal" class="btn btn-ghost btn-sm">Connect</a>`}
         </div>
       </div>
+      <!-- AniList sync disabled for now — flip ENABLE_ANILIST_SYNC below to bring it back. -->
+      ${ENABLE_ANILIST_SYNC ? `
       <div class="settings-row">
         <div class="settings-row-label">
           <div class="settings-row-name">${icon('anilist', 'icon-small')} AniList</div>
@@ -527,7 +532,7 @@ async function renderProfilePage(c: any, db: Db, session: Session, lifetime: num
           <form method="POST" style="margin:0;"><input type="hidden" name="list_sync_action" value="anilist_disconnect"><button type="submit" class="btn btn-ghost btn-sm">Disconnect</button></form>`
             : `<a href="${siteUrl}/api/list_sync_connect.php?provider=anilist" class="btn btn-ghost btn-sm">Connect</a>`}
         </div>
-      </div>
+      </div>` : ''}
     </div>
   </div>
 </div>
