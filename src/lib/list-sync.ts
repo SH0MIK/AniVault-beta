@@ -78,7 +78,10 @@ export const MalSync = {
       }),
     });
     const token = await tokenRes.json<any>().catch(() => null);
-    if (!token?.access_token) return { success: false, message: 'MyAnimeList did not return an access token. Double check your MAL_CLIENT_ID / MAL_CLIENT_SECRET / MAL_REDIRECT_URI.' };
+    if (!token?.access_token) {
+      const detail = token?.error_description || token?.error || `HTTP ${tokenRes.status}`;
+      return { success: false, message: `MAL token exchange failed: ${detail}` };
+    }
 
     const meRes = await fetch('https://api.myanimelist.net/v2/users/@me?fields=id,name', {
       headers: { Authorization: `Bearer ${token.access_token}` },
@@ -229,7 +232,10 @@ export const AniListSync = {
       }),
     });
     const token = await tokenRes.json<any>().catch(() => null);
-    if (!token?.access_token) return { success: false, message: 'AniList did not return an access token. Double check your ANILIST_CLIENT_ID / ANILIST_CLIENT_SECRET / ANILIST_REDIRECT_URI.' };
+    if (!token?.access_token) {
+      const detail = token?.error_description || token?.error || `HTTP ${tokenRes.status}`;
+      return { success: false, message: `AniList token exchange failed: ${detail}` };
+    }
 
     const me = await anilistGraphQL(token.access_token, `query { Viewer { id name } }`, {});
     const viewer = me?.data?.Viewer;
