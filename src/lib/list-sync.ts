@@ -21,10 +21,9 @@ import { Db } from './db';
 export const LOCAL_STATUSES = ['watching', 'completed', 'plan_to_watch', 'dropped', 'on_hold'] as const;
 type LocalStatus = (typeof LOCAL_STATUSES)[number];
 
-const ANILIST_STATUS_TO_LOCAL: Record<string, LocalStatus> = {
-  CURRENT: 'watching', REPEATING: 'watching', PLANNING: 'plan_to_watch',
-  COMPLETED: 'completed', DROPPED: 'dropped', PAUSED: 'on_hold',
-};
+// AniList status <-> local status mapping is duplicated in
+// scripts/anilist-sync-relay.mjs (the relay does the actual AniList-side
+// pull, not this file) — keep the two in sync if either changes.
 const LOCAL_STATUS_TO_ANILIST: Record<LocalStatus, string> = {
   watching: 'CURRENT', plan_to_watch: 'PLANNING', completed: 'COMPLETED', dropped: 'DROPPED', on_hold: 'PAUSED',
 };
@@ -184,15 +183,6 @@ export const MalSync = {
 // AniList
 // =====================================================================
 
-async function anilistGraphQL(token: string, query: string, variables: Record<string, any>): Promise<any> {
-  const res = await fetch('https://graphql.anilist.co', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify({ query, variables }),
-  });
-  return res.json().catch(() => null);
-}
-
 export const AniListSync = {
   getAuthUrl(env: Env, session: { data: Record<string, any> }): string {
     // Note: AniList's OAuth implementation doesn't support/echo a `state`
@@ -214,6 +204,11 @@ export const AniListSync = {
     return `https://anilist.co/api/v2/oauth/authorize?${params.toString()}`;
   },
 
+  // Token exchange happens against anilist.co (not graphql.anilist.co) —
+  // that host isn't blocked, only the GraphQL API is — so this part can
+  // stay in the Worker. Everything past this point (fetching the
+  // username, pulling/pushing list data) has to go through the GitHub
+  // Actions relay instead; see requestPull()/queuePush() below.
   async handleCallback(env: Env, db: Db, session: { data: Record<string, any> }, userId: number, code: string): Promise<{ success: boolean; message: string }> {
     if (!session.data.anilist_sync_pending) {
       return { success: false, message: 'Invalid or expired AniList authorization — please try connecting again.' };
@@ -237,96 +232,43 @@ export const AniListSync = {
       return { success: false, message: `AniList token exchange failed: ${detail}` };
     }
 
-    const me = await anilistGraphQL(token.access_token, `query { Viewer { id name } }`, {});
-    const viewer = me?.data?.Viewer;
-    if (!viewer?.name) return { success: false, message: 'Connected, but could not fetch your AniList username.' };
-
+    // We deliberately do NOT call graphql.anilist.co here (see note
+    // above) — just store the token and flag this account for the relay
+    // to pick up on its next run.
     const expiresAt = Math.floor(Date.now() / 1000) + Number(token.expires_in ?? 31536000);
     await db.query(
-      `UPDATE users SET anilist_sync_username=?, anilist_sync_user_id=?, anilist_sync_access_token=?, anilist_sync_token_expires=? WHERE id=?`,
-      [viewer.name, viewer.id, token.access_token, expiresAt, userId]
+      `UPDATE users SET anilist_sync_access_token=?, anilist_sync_token_expires=?, anilist_sync_pending_pull=1 WHERE id=?`,
+      [token.access_token, expiresAt, userId]
     );
-    return { success: true, message: `Connected to AniList as ${viewer.name}!` };
+    return { success: true, message: 'Connected! Fetching your AniList username and list now — this runs on a short delay (check back in a few minutes), refresh this page to see it.' };
   },
 
   async disconnect(db: Db, userId: number): Promise<void> {
     await db.query(
-      `UPDATE users SET anilist_sync_username=NULL, anilist_sync_user_id=NULL, anilist_sync_access_token=NULL, anilist_sync_token_expires=NULL WHERE id=?`,
+      `UPDATE users SET anilist_sync_username=NULL, anilist_sync_user_id=NULL, anilist_sync_access_token=NULL, anilist_sync_token_expires=NULL, anilist_sync_pending_pull=0 WHERE id=?`,
       [userId]
     );
+    await db.query('DELETE FROM anilist_push_queue WHERE user_id=?', [userId]);
   },
 
-  /** No refresh-token dance for AniList's standard auth-code grant — the token is just valid or it isn't. */
-  async getValidToken(db: Db, userId: number): Promise<string | null> {
-    const user = await db.fetchOne<any>('SELECT anilist_sync_access_token, anilist_sync_token_expires FROM users WHERE id=?', [userId]);
-    if (!user?.anilist_sync_access_token) return null;
-    if (Number(user.anilist_sync_token_expires ?? 0) < Math.floor(Date.now() / 1000)) return null;
-    return user.anilist_sync_access_token;
+  /** "Sync Now" — re-flags the account for the relay's next run rather than pulling inline (can't reach graphql.anilist.co from the Worker). */
+  async requestPull(db: Db, userId: number): Promise<{ success: boolean; message: string }> {
+    const user = await db.fetchOne<any>('SELECT anilist_sync_access_token FROM users WHERE id=?', [userId]);
+    if (!user?.anilist_sync_access_token) return { success: false, message: 'Not connected.' };
+    await db.query('UPDATE users SET anilist_sync_pending_pull=1 WHERE id=?', [userId]);
+    return { success: true, message: 'Sync requested — the relay picks this up within a few minutes.' };
   },
 
-  async pullMerge(db: Db, userId: number): Promise<{ added: number; error?: string }> {
-    const user = await db.fetchOne<any>('SELECT anilist_sync_access_token, anilist_sync_user_id FROM users WHERE id=?', [userId]);
-    const token = await this.getValidToken(db, userId);
-    if (!token || !user?.anilist_sync_user_id) return { added: 0, error: 'Not connected.' };
-
-    const query = `
-      query ($userId: Int) {
-        MediaListCollection(userId: $userId, type: ANIME) {
-          lists {
-            entries {
-              status
-              score(format: POINT_10)
-              progress
-              media { idMal title { romaji english } coverImage { large medium } }
-            }
-          }
-        }
-      }`;
-    const result = await anilistGraphQL(token, query, { userId: user.anilist_sync_user_id });
-    const lists = result?.data?.MediaListCollection?.lists ?? [];
-
-    let added = 0;
-    for (const list of lists) {
-      for (const entry of list.entries ?? []) {
-        const animeId = Number(entry.media?.idMal ?? 0);
-        const status = ANILIST_STATUS_TO_LOCAL[entry.status as string];
-        if (!animeId || !status) continue;
-
-        const exists = await db.fetchOne('SELECT id FROM anime_list WHERE user_id=? AND anime_id=?', [userId, animeId]);
-        if (exists) continue;
-
-        const localImage = await getLocalAnimeImage(db, animeId);
-        const image = localImage || entry.media?.coverImage?.large || entry.media?.coverImage?.medium || '';
-        await db.insert(
-          `INSERT INTO anime_list (user_id, anime_id, anime_title, anime_image, status, episodes_watched, score, updated_at)
-           VALUES (?,?,?,?,?,?,?,datetime('now'))`,
-          [userId, animeId, entry.media?.title?.english || entry.media?.title?.romaji || '', image, status,
-            Number(entry.progress ?? 0), entry.score ? Number(entry.score) : null]
-        );
-        added++;
-      }
-    }
-    return { added };
-  },
-
-  /** Push a single entry's status/progress/score to AniList. Best-effort — errors are swallowed by the caller. */
+  /** Push a single entry's status/progress/score to AniList — queued for the relay, never called directly from the Worker. */
   async pushUpdate(db: Db, userId: number, animeId: number, status: string, episodesWatched: number, score: number | null): Promise<void> {
-    const token = await this.getValidToken(db, userId);
-    if (!token) return;
-    const aniStatus = LOCAL_STATUS_TO_ANILIST[status as LocalStatus];
-    if (!aniStatus) return;
-    const mutation = `
-      mutation ($mediaId: Int, $status: MediaListStatus, $progress: Int, $score: Float) {
-        SaveMediaListEntry(mediaId: $mediaId, status: $status, progress: $progress, score: $score) { id }
-      }`;
-    // AniList's mediaId here is its own internal ID, not idMal — we only
-    // have idMal locally, so resolve it via a quick lookup first.
-    const lookup = await anilistGraphQL(token, `query ($idMal: Int) { Media(idMal: $idMal, type: ANIME) { id } }`, { idMal: animeId });
-    const mediaId = lookup?.data?.Media?.id;
-    if (!mediaId) return;
-    await anilistGraphQL(token, mutation, { mediaId, status: aniStatus, progress: episodesWatched, score: score ?? undefined });
+    if (!LOCAL_STATUS_TO_ANILIST[status as LocalStatus]) return;
+    await db.query(
+      `INSERT INTO anilist_push_queue (user_id, anime_id, status, episodes_watched, score) VALUES (?,?,?,?,?)`,
+      [userId, animeId, status, episodesWatched, score]
+    );
   },
 };
+
 
 /** Fire-and-forget push to whichever of MAL/AniList the user has connected. Never throws. */
 export async function pushListSync(env: Env, db: Db, userId: number, animeId: number, status: string, episodesWatched: number, score: number | null): Promise<void> {
