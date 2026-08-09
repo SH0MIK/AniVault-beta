@@ -160,8 +160,9 @@ profileRoutes.on(['GET', 'POST'], '/profile', async (c) => {
         success = 'Disconnected from MyAnimeList.';
         user = await auth.getCurrentUser();
       } else if (action === 'anilist_sync_now') {
-        const r = await AniListSync.pullMerge(db, user.id);
-        if (r.error) error = r.error; else success = r.added ? `Imported ${r.added} new anime from AniList.` : 'Already up to date — nothing new to import.';
+        const r = await AniListSync.requestPull(db, user.id);
+        if (r.success) success = r.message; else error = r.message;
+        user = await auth.getCurrentUser();
       } else if (action === 'anilist_disconnect') {
         await AniListSync.disconnect(db, user.id);
         success = 'Disconnected from AniList.';
@@ -514,10 +515,14 @@ async function renderProfilePage(c: any, db: Db, session: Session, lifetime: num
       <div class="settings-row">
         <div class="settings-row-label">
           <div class="settings-row-name">${icon('anilist', 'icon-small')} AniList</div>
-          <div class="settings-row-desc">${user.anilist_sync_username ? `<span style="color:var(--teal);">✓ Connected as ${h(user.anilist_sync_username)}</span>` : 'Not connected'}</div>
+          <div class="settings-row-desc">
+            ${user.anilist_sync_username ? `<span style="color:var(--teal);">✓ Connected as ${h(user.anilist_sync_username)}</span>`
+              : user.anilist_sync_access_token ? `<span class="text-muted">Connected — fetching your username &amp; list (runs on a short delay, refresh in a few minutes)</span>`
+              : 'Not connected'}
+          </div>
         </div>
         <div style="display:flex;gap:6px;">
-          ${user.anilist_sync_username ? `
+          ${user.anilist_sync_access_token ? `
           <form method="POST" style="margin:0;"><input type="hidden" name="list_sync_action" value="anilist_sync_now"><button type="submit" class="btn btn-ghost btn-sm" title="Pull in anything new from AniList">${icon('download', 'icon-small')} Sync Now</button></form>
           <form method="POST" style="margin:0;"><input type="hidden" name="list_sync_action" value="anilist_disconnect"><button type="submit" class="btn btn-ghost btn-sm">Disconnect</button></form>`
             : `<a href="${siteUrl}/api/list_sync_connect.php?provider=anilist" class="btn btn-ghost btn-sm">Connect</a>`}

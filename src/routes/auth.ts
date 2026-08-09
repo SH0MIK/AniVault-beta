@@ -226,8 +226,7 @@ authRoutes.get('/pages/oauth_anilist_sync.php', async (c) => {
   const { AniListSync } = await import('../lib/list-sync');
   const result = await AniListSync.handleCallback(c.env as any, db, session, session.user_id!, code);
   if (result.success) {
-    const pull = await AniListSync.pullMerge(db, session.user_id!);
-    session.setFlash('success', pull.added ? `${result.message} Imported ${pull.added} new anime from your AniList list.` : result.message);
+    session.setFlash('success', result.message);
   } else {
     session.setFlash('error', result.message);
   }
