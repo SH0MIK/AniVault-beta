@@ -207,6 +207,13 @@ discoverRoutes.get('/schedule', async (c) => {
 .day-tab.active{background:var(--accent);border-color:var(--accent);color:#fff;}
 .day-tab.today-tab{position:relative;}
 .today-dot{display:inline-block;width:6px;height:6px;background:var(--gold);border-radius:50%;margin-left:5px;vertical-align:middle;}
+.sched-now-divider{display:flex;align-items:center;gap:10px;padding:8px 16px;background:rgba(232,69,60,0.04);}
+.sched-now-divider::before,.sched-now-divider::after{content:'';flex:1;height:1px;background:var(--accent);opacity:.45;}
+.sched-now-divider span{font-size:.66rem;font-weight:800;letter-spacing:.1em;color:var(--accent);white-space:nowrap;}
+.schedule-row.sched-aired{opacity:.5;}
+.schedule-row.sched-aired:hover{opacity:.8;}
+.schedule-row.sched-next-up{background:rgba(232,69,60,.07);box-shadow:inset 3px 0 0 var(--accent);}
+.sched-countdown{display:block;font-size:.65rem;color:var(--accent);font-weight:700;margin-top:3px;white-space:nowrap;}
 @media(max-width:640px){.schedule-row{grid-template-columns:44px 60px 1fr auto;gap:10px;}.schedule-score,.schedule-eps{display:none;}.schedule-thumb{width:44px;height:62px;}.schedule-thumb-placeholder{width:44px;height:62px;}}
 </style>
 
@@ -297,6 +304,44 @@ discoverRoutes.get('/schedule', async (c) => {
       if (tzEl && tzEl.classList.contains('local-tz')) tzEl.textContent = shortTz;
     });
   } catch(e) {}
+})();
+(function() {
+  // Rows are already sorted by broadcast time server-side, and each
+  // carries the exact broadcast instant in data-jst — so a straight
+  // chronological walk tells us what's already aired vs what's next,
+  // regardless of the viewer's timezone or which day is being browsed.
+  const rows = Array.from(document.querySelectorAll('.schedule-row'));
+  if (!rows.length) return;
+  const now = new Date();
+  let dividerPlaced = false;
+  rows.forEach(row => {
+    const timeEl = row.querySelector('.local-time[data-jst]');
+    if (!timeEl) return;
+    const iso = timeEl.getAttribute('data-jst');
+    if (!iso) return;
+    const airDate = new Date(iso);
+    if (isNaN(airDate)) return;
+
+    if (airDate < now) {
+      row.classList.add('sched-aired');
+      return;
+    }
+    if (!dividerPlaced) {
+      const divider = document.createElement('div');
+      divider.className = 'sched-now-divider';
+      divider.innerHTML = '<span>NOW</span>';
+      row.parentNode.insertBefore(divider, row);
+      row.classList.add('sched-next-up');
+      dividerPlaced = true;
+
+      const mins = Math.max(0, Math.round((airDate - now) / 60000));
+      const label = mins < 60 ? ('in ' + mins + 'm') : ('in ' + Math.floor(mins / 60) + 'h ' + (mins % 60) + 'm');
+      const badge = document.createElement('small');
+      badge.className = 'sched-countdown';
+      badge.textContent = label;
+      timeEl.closest('.schedule-time')?.appendChild(badge);
+    }
+  });
 })();
 </script>`;
 
