@@ -214,6 +214,7 @@ discoverRoutes.get('/schedule', async (c) => {
 .schedule-row.sched-aired:hover{opacity:.8;}
 .schedule-row.sched-next-up{background:rgba(232,69,60,.07);box-shadow:inset 3px 0 0 var(--accent);}
 .sched-countdown{display:block;font-size:.65rem;color:var(--accent);font-weight:700;margin-top:3px;white-space:nowrap;}
+.sched-countdown.sched-elapsed{color:var(--text-muted);font-weight:600;}
 @media(max-width:640px){.schedule-row{grid-template-columns:44px 60px 1fr auto;gap:10px;}.schedule-score,.schedule-eps{display:none;}.schedule-thumb{width:44px;height:62px;}.schedule-thumb-placeholder{width:44px;height:62px;}}
 </style>
 
@@ -323,6 +324,13 @@ discoverRoutes.get('/schedule', async (c) => {
     if (hrs < 24) return 'in ' + hrs + 'h ' + (mins % 60) + 'm';
     return 'in ' + Math.floor(hrs / 24) + 'd ' + (hrs % 24) + 'h';
   }
+  function formatElapsed(ms) {
+    const mins = Math.max(0, Math.round(ms / 60000));
+    if (mins < 60) return 'Aired ' + mins + 'm ago';
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return 'Aired ' + hrs + 'h ' + (mins % 60) + 'm ago';
+    return 'Aired ' + Math.floor(hrs / 24) + 'd ' + (hrs % 24) + 'h ago';
+  }
 
   rows.forEach(row => {
     const timeEl = row.querySelector('.local-time[data-jst]');
@@ -332,14 +340,19 @@ discoverRoutes.get('/schedule', async (c) => {
     const airDate = new Date(iso);
     if (isNaN(airDate)) return;
 
+    // Every row gets a status label — aired X ago, or upcoming in X —
+    // so it's never ambiguous why a row is faded or highlighted.
+    const badge = document.createElement('small');
+    badge.className = 'sched-countdown';
+
     if (airDate < now) {
       row.classList.add('sched-aired');
+      badge.classList.add('sched-elapsed');
+      badge.textContent = formatElapsed(now - airDate);
+      timeEl.closest('.schedule-time')?.appendChild(badge);
       return;
     }
 
-    // Every still-upcoming row gets its own countdown, not just the next one.
-    const badge = document.createElement('small');
-    badge.className = 'sched-countdown';
     badge.textContent = formatCountdown(airDate - now);
     timeEl.closest('.schedule-time')?.appendChild(badge);
 
