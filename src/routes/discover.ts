@@ -214,7 +214,6 @@ discoverRoutes.get('/schedule', async (c) => {
 .schedule-row.sched-aired:hover{opacity:.8;}
 .schedule-row.sched-next-up{background:rgba(232,69,60,.07);box-shadow:inset 3px 0 0 var(--accent);}
 .sched-countdown{display:block;font-size:.65rem;color:var(--accent);font-weight:700;margin-top:3px;white-space:nowrap;}
-.sched-countdown.sched-elapsed{color:var(--text-muted);font-weight:600;}
 @media(max-width:640px){.schedule-row{grid-template-columns:44px 60px 1fr auto;gap:10px;}.schedule-score,.schedule-eps{display:none;}.schedule-thumb{width:44px;height:62px;}.schedule-thumb-placeholder{width:44px;height:62px;}}
 </style>
 
@@ -315,23 +314,6 @@ discoverRoutes.get('/schedule', async (c) => {
   if (!rows.length) return;
   const now = new Date();
   let dividerPlaced = false;
-  let nextUpRow = null;
-
-  function formatCountdown(ms) {
-    const mins = Math.max(0, Math.round(ms / 60000));
-    if (mins < 60) return 'in ' + mins + 'm';
-    const hrs = Math.floor(mins / 60);
-    if (hrs < 24) return 'in ' + hrs + 'h ' + (mins % 60) + 'm';
-    return 'in ' + Math.floor(hrs / 24) + 'd ' + (hrs % 24) + 'h';
-  }
-  function formatElapsed(ms) {
-    const mins = Math.max(0, Math.round(ms / 60000));
-    if (mins < 60) return 'Aired ' + mins + 'm ago';
-    const hrs = Math.floor(mins / 60);
-    if (hrs < 24) return 'Aired ' + hrs + 'h ' + (mins % 60) + 'm ago';
-    return 'Aired ' + Math.floor(hrs / 24) + 'd ' + (hrs % 24) + 'h ago';
-  }
-
   rows.forEach(row => {
     const timeEl = row.querySelector('.local-time[data-jst]');
     if (!timeEl) return;
@@ -340,22 +322,10 @@ discoverRoutes.get('/schedule', async (c) => {
     const airDate = new Date(iso);
     if (isNaN(airDate)) return;
 
-    // Every row gets a status label — aired X ago, or upcoming in X —
-    // so it's never ambiguous why a row is faded or highlighted.
-    const badge = document.createElement('small');
-    badge.className = 'sched-countdown';
-
     if (airDate < now) {
       row.classList.add('sched-aired');
-      badge.classList.add('sched-elapsed');
-      badge.textContent = formatElapsed(now - airDate);
-      timeEl.closest('.schedule-time')?.appendChild(badge);
       return;
     }
-
-    badge.textContent = formatCountdown(airDate - now);
-    timeEl.closest('.schedule-time')?.appendChild(badge);
-
     if (!dividerPlaced) {
       const divider = document.createElement('div');
       divider.className = 'sched-now-divider';
@@ -363,19 +333,15 @@ discoverRoutes.get('/schedule', async (c) => {
       row.parentNode.insertBefore(divider, row);
       row.classList.add('sched-next-up');
       dividerPlaced = true;
-      nextUpRow = row;
+
+      const mins = Math.max(0, Math.round((airDate - now) / 60000));
+      const label = mins < 60 ? ('in ' + mins + 'm') : ('in ' + Math.floor(mins / 60) + 'h ' + (mins % 60) + 'm');
+      const badge = document.createElement('small');
+      badge.className = 'sched-countdown';
+      badge.textContent = label;
+      timeEl.closest('.schedule-time')?.appendChild(badge);
     }
   });
-
-  // Jump straight to what's next instead of making people scroll past
-  // everything that's already aired today.
-  if (nextUpRow) {
-    requestAnimationFrame(() => {
-      const headerOffset = 90; // clears the sticky site header + day-tabs
-      const y = nextUpRow.getBoundingClientRect().top + window.scrollY - headerOffset;
-      window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' });
-    });
-  }
 })();
 </script>`;
 
@@ -430,37 +396,20 @@ function renderScheduleRow(a: NormalisedAnime, day: string, userStatus: string |
     }
   }
 
-  // This broadcast's actual instant in JST, as ISO — used both for the
-  // client-side tz conversion AND (as of the NOW-divider feature) for
-  // deciding whether it's already aired.
-  //
-  // JST runs far enough ahead (UTC+9) that "today" in JST can already be
-  // tomorrow for viewers west of it — e.g. 10:48 PM in GMT+6 is already
-  // 1:48 AM the next day in Tokyo. So "the next occurrence going forward"
-  // is the wrong question once that's happened: JST's Sunday slot may
-  // have technically just ended, and jumping forward lands 6 days away
-  // instead of recognizing it aired a few hours ago. Instead, compute
-  // both the forward and the week-earlier occurrence and take whichever
-  // is actually closest to right now — that's the one a viewer means.
+  // Next occurrence of this broadcast day, in JST, as ISO — for client-side tz conversion.
   let jstIso = '';
   if (btime) {
     const dayIdx: Record<string, number> = { sunday: 0, monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6 };
     const targetDay = dayIdx[day] ?? 1;
     const now = new Date();
     const nowJstDay = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Tokyo' })).getDay();
-    const daysAhead = (targetDay - nowJstDay + 7) % 7;
+    let daysAhead = (targetDay - nowJstDay + 7) % 7;
+    if (daysAhead === 0) daysAhead = 7;
     const [hh, mm] = btime.split(':').map(Number);
-
-    const forward = new Date();
-    forward.setUTCDate(forward.getUTCDate() + daysAhead);
-    forward.setUTCHours((hh ?? 0) - 9, mm ?? 0, 0, 0); // JST is UTC+9
-
-    const backward = new Date(forward);
-    backward.setUTCDate(backward.getUTCDate() - 7);
-
-    const nowMs = now.getTime();
-    const closest = Math.abs(forward.getTime() - nowMs) <= Math.abs(backward.getTime() - nowMs) ? forward : backward;
-    jstIso = closest.toISOString();
+    const next = new Date();
+    next.setUTCDate(next.getUTCDate() + daysAhead);
+    next.setUTCHours((hh ?? 0) - 9, mm ?? 0, 0, 0); // JST is UTC+9
+    jstIso = next.toISOString();
   }
 
   const startDate = a.start_date;
