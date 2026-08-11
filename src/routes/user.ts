@@ -13,7 +13,7 @@ import { Follow } from '../lib/follow';
 import { Notification } from '../lib/notification';
 import { h, timeAgo, statusBadge } from '../lib/helpers';
 import { icon } from '../lib/icons';
-import { renderAnimeCard } from '../lib/anime-card';
+import { renderAnimeCard, buildCardMetaMap } from '../lib/anime-card';
 import { renderHeader, renderFooter, CurrentUser } from '../render/layout';
 import { getBannerData } from '../lib/settings';
 import { buildSocialLinks, platformColor } from '../lib/social';
@@ -72,6 +72,10 @@ userRoutes.get('/u/:username', async (c) => {
   const stats = await AnimeTracker.getStats(db, profileId);
   const favs = await AnimeTracker.getFavorites(db, profileId);
   const recentList = await AnimeTracker.getUserList(db, profileId, filterStatus, listPage);
+  const cardMeta = await buildCardMetaMap(db, [
+    ...favs.map((f: any) => ({ mal_id: f.anime_id } as any)),
+    ...recentList.items.map((it: any) => ({ mal_id: it.anime_id } as any)),
+  ]);
   const followers = await Follow.getFollowers(db, profileId, 12);
   const following = await Follow.getFollowing(db, profileId, 12);
   const modalUserIds = [...followers.map((f) => f.id), ...following.map((f) => f.id)];
@@ -173,7 +177,8 @@ userRoutes.get('/u/:username', async (c) => {
           <thead><tr><th>#</th><th>Anime</th><th>Status</th><th>Progress</th><th>Score</th><th>Updated</th>${isOwn ? '<th>Actions</th>' : ''}</tr></thead>
           <tbody>
             ${recentList.items.map((item, i) => {
-              const eps = item.anime_episodes ?? 0;
+              const meta = cardMeta.get(item.anime_id);
+              const eps = (meta?.airedInfo?.total ?? item.anime_episodes) ?? 0;
               const jt = JSON.stringify(item.anime_title ?? '');
               const ji = JSON.stringify(item.anime_image ?? '');
               return `
@@ -204,7 +209,7 @@ userRoutes.get('/u/:username', async (c) => {
         : `<div class="anime-grid">${favs.map((fav: any) => renderAnimeCard({
             mal_id: fav.anime_id, title: fav.anime_title, title_english: fav.anime_title,
             images: { jpg: { image_url: fav.anime_image, large_image_url: fav.anime_image } }, type: '', score: null, episodes: 0,
-          } as any, siteUrl, null)).join('')}</div>`}
+          } as any, siteUrl, null, cardMeta.get(fav.anime_id))).join('')}</div>`}
     </div>
 
     <div id="tab-followers" class="tab-content">

@@ -13,7 +13,7 @@ import { Notification } from '../lib/notification';
 import { getUserAnimeStatuses } from '../lib/user-list';
 import { icon } from '../lib/icons';
 import { h } from '../lib/helpers';
-import { renderAnimeCard } from '../lib/anime-card';
+import { renderAnimeCard, buildCardMetaMap } from '../lib/anime-card';
 import { renderHeader, renderFooter } from '../render/layout';
 import { CONTINUE_WATCHING_CSS } from '../render/home-css';
 import { continueWatchingScript, heroSliderScript, rowNavScript } from '../render/home-js';
@@ -84,6 +84,7 @@ homeRoutes.get('/', async (c) => {
 
   const unreadCount = currentUser ? await Notification.unreadCount(db, currentUser.id) : 0;
   const userStatuses = currentUser ? await getUserAnimeStatuses(db, currentUser.id) : {};
+  const cardMeta = await buildCardMetaMap(db, [...watchNowList, ...seasonalList, ...topList, ...upcomingList]);
 
   const layoutUser = currentUser
     ? { id: currentUser.id, username: currentUser.username, avatar_url: currentUser.avatar_url, role: currentUser.role }
@@ -212,7 +213,7 @@ ${heroSliderScript(heroPool.length)}
       <section class="content-section">
         ${sectionHeader('Watch Now', 'row-watchnow', `${siteUrl}/watch-now`)}
         <div class="scroll-row" id="row-watchnow">
-          ${watchNowList.map((a) => renderAnimeCard(a, siteUrl, userStatuses[a.mal_id] ?? null)).join('')}
+          ${watchNowList.map((a) => renderAnimeCard(a, siteUrl, userStatuses[a.mal_id] ?? null, cardMeta.get(a.mal_id))).join('')}
         </div>
       </section>`;
   }
@@ -223,19 +224,19 @@ ${heroSliderScript(heroPool.length)}
         ${sectionHeader('Trending Now', 'row-trending', `${siteUrl}/seasonal`)}
         ${seasonalList.length === 0
           ? `<p class="text-muted text-center">Could not load seasonal anime. API may be rate limited — try again shortly.</p>`
-          : `<div class="scroll-row" id="row-trending">${seasonalList.map((a) => renderAnimeCard(a, siteUrl, userStatuses[a.mal_id] ?? null)).join('')}</div>`}
+          : `<div class="scroll-row" id="row-trending">${seasonalList.map((a) => renderAnimeCard(a, siteUrl, userStatuses[a.mal_id] ?? null, cardMeta.get(a.mal_id))).join('')}</div>`}
       </section>
 
       <section class="content-section">
         ${sectionHeader('Most Popular', 'row-popular', `${siteUrl}/top`, 'View Full Rankings')}
-        <div class="scroll-row" id="row-popular">${topList.map((a) => renderAnimeCard(a, siteUrl, userStatuses[a.mal_id] ?? null)).join('')}</div>
+        <div class="scroll-row" id="row-popular">${topList.map((a) => renderAnimeCard(a, siteUrl, userStatuses[a.mal_id] ?? null, cardMeta.get(a.mal_id))).join('')}</div>
       </section>`;
 
   if (upcomingList.length > 0) {
     html += `
       <section class="content-section">
         ${sectionHeader('Coming Soon', 'row-upcoming')}
-        <div class="scroll-row" id="row-upcoming">${upcomingList.map((a) => renderAnimeCard(a, siteUrl, userStatuses[a.mal_id] ?? null)).join('')}</div>
+        <div class="scroll-row" id="row-upcoming">${upcomingList.map((a) => renderAnimeCard(a, siteUrl, userStatuses[a.mal_id] ?? null, cardMeta.get(a.mal_id))).join('')}</div>
       </section>`;
   }
 

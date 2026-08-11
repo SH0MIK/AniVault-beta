@@ -18,6 +18,8 @@ import { streamWatchOn } from '../lib/stream-services';
 import { animeTailScript } from '../render/anime-tail';
 import { getBannerData } from '../lib/settings';
 import { rowNavScript } from '../render/home-js';
+import { EpisodeAir } from '../lib/episode-air';
+import { DubStatus, DUB_LANGUAGES } from '../lib/dub-status';
 
 export const animeRoutes = new Hono<{ Bindings: Env }>();
 
@@ -75,7 +77,16 @@ animeRoutes.get('/anime', async (c) => {
 
   const jpTitle = anime.title_japanese || null;
   const image = anime.images?.jpg?.large_image_url ?? '';
-  const totalEps = anime.episodes ?? 0;
+
+  // MAL's own episode count only firms up once a show finishes airing —
+  // prefer the Jikan-derived "aired so far" count when we have it. This is
+  // the one page where the extra round trip on a cache miss is worth it
+  // (single anime, not a grid), so it's a live refresh-if-stale rather
+  // than a cache-only lookup.
+  const airedInfo = await EpisodeAir.get(db, mal, id);
+  const totalEps = airedInfo?.total ?? anime.episodes ?? 0;
+  const airedSoFar = airedInfo?.aired ?? null;
+  const dubbedLangs = await DubStatus.getFor(db, id);
 
   // Backdrop priority: your own admin-saved banner (admin/anime_banners.php)
   // > AniList's real banner from the current-season cache (currently airing
@@ -150,9 +161,15 @@ animeRoutes.get('/anime', async (c) => {
         ${anime.rank ? `<span class="meta-pill">🏆 #${anime.rank}</span>` : ''}
         ${anime.popularity ? `<span class="meta-pill">🔥 #${anime.popularity}</span>` : ''}
         <span class="meta-pill">${h(anime.type || '—')}</span>
-        <span class="meta-pill">${totalEps ? totalEps + ' eps' : 'Unknown eps'}</span>
+        <span class="meta-pill">${airedSoFar !== null && airedSoFar > 0 && airedSoFar !== totalEps ? `Ep ${airedSoFar}/${totalEps || '?'} aired` : (totalEps ? totalEps + ' eps' : 'Unknown eps')}</span>
         <span class="meta-pill${anime.status === 'Currently Airing' ? ' meta-status-airing' : ''}">${h(anime.status || '—')}</span>
       </div>
+
+      ${dubbedLangs.length > 0 ? `
+      <div class="info-dub-row" style="display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-top:8px;">
+        ${dubbedLangs.map((l) => `<span class="meta-pill" style="color:var(--teal,#2dd4bf);">🎙️ ${h(DUB_LANGUAGES[l] ?? l)}</span>`).join('')}
+        <span style="font-size:0.7rem;color:var(--text-muted);">Dub data © <a href="https://mydublist.com" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline;">MyDubList</a></span>
+      </div>` : ''}
 
       ${(anime.genres?.length ?? 0) > 0 ? `
       <div class="info-genres">
@@ -208,7 +225,7 @@ animeRoutes.get('/anime', async (c) => {
         <h2 class="info-section-title">Information</h2>
         <div class="info-stats">
           ${infoStatRow('Type', anime.type || '—')}
-          ${infoStatRow('Episodes', totalEps || 'Unknown')}
+          ${infoStatRow('Episodes', airedSoFar !== null && airedSoFar > 0 && airedSoFar !== totalEps ? `${airedSoFar} aired${totalEps ? ' / ' + totalEps + ' total' : ''}` : (totalEps || 'Unknown'))}
           ${infoStatRow('Status', anime.status || '—')}
           ${infoStatRow('Aired', anime.aired?.string || '—')}
           ${infoStatRow('Duration', anime.duration || '—')}

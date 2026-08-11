@@ -8,7 +8,7 @@ import { Notification } from '../lib/notification';
 import { getUserAnimeStatuses } from '../lib/user-list';
 import { icon } from '../lib/icons';
 import { h } from '../lib/helpers';
-import { renderAnimeCard } from '../lib/anime-card';
+import { renderAnimeCard, buildCardMetaMap } from '../lib/anime-card';
 import { renderHeader, renderFooter } from '../render/layout';
 import { getBannerData } from '../lib/settings';
 
@@ -46,6 +46,7 @@ browseRoutes.get('/browse', async (c) => {
   const items = result.data ?? [];
   const pagination = result.pagination ?? {};
   const totalPages = pagination.last_visible_page ?? 1;
+  const cardMeta = await buildCardMetaMap(db, items);
   const genreList = mal.getAnimeGenres().data;
 
   const currentUser = auth.check() ? await auth.getCurrentUser() : null;
@@ -158,7 +159,7 @@ browseRoutes.get('/browse', async (c) => {
         <p class="text-muted">No results found. Try a different search.</p>
       </div>` : `
       <div class="anime-grid">
-        ${items.map((a) => renderAnimeCard(a, siteUrl, userStatuses[a.mal_id] ?? null)).join('')}
+        ${items.map((a) => renderAnimeCard(a, siteUrl, userStatuses[a.mal_id] ?? null, cardMeta.get(a.mal_id))).join('')}
       </div>
       ${totalPages > 1 ? renderPagination(q, type, status, genres, page, totalPages) : ''}`}
     </div>
