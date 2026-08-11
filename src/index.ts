@@ -136,7 +136,7 @@ app.onError((err, c) => {
 export default {
   fetch: app.fetch,
   // Cloudflare Cron Trigger entry point — see [triggers] in wrangler.toml.
-  async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext) {
-    ctx.waitUntil(handleScheduled(env));
+  async scheduled(event: ScheduledController, env: Env, ctx: ExecutionContext) {
+    ctx.waitUntil(handleScheduled(env, event.cron));
   },
 };
