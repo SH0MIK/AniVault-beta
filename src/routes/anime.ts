@@ -14,12 +14,11 @@ import { Notification } from '../lib/notification';
 import { h, statusBadge } from '../lib/helpers';
 import { icon } from '../lib/icons';
 import { renderHeader, renderFooter, CurrentUser } from '../render/layout';
-import { streamWatchOn } from '../lib/stream-services';
 import { animeTailScript } from '../render/anime-tail';
 import { getBannerData } from '../lib/settings';
 import { rowNavScript } from '../render/home-js';
 import { EpisodeAir } from '../lib/episode-air';
-import { DubStatus, DUB_LANGUAGES } from '../lib/dub-status';
+import { DubStatus } from '../lib/dub-status';
 
 export const animeRoutes = new Hono<{ Bindings: Env }>();
 
@@ -41,9 +40,6 @@ animeRoutes.get('/anime', async (c) => {
   if (!anime) {
     return c.html(`<script>location.replace(${JSON.stringify(siteUrl + '/')});</script>`);
   }
-
-  const streaming = await mal.getAnimeStreaming(id);
-  const streamLinks: { name?: string; url?: string }[] = streaming.data ?? [];
 
   let videoEpRows: { episode_num: number; qualities: string | null }[] = [];
   try {
@@ -87,6 +83,12 @@ animeRoutes.get('/anime', async (c) => {
   const totalEps = airedInfo?.total ?? anime.episodes ?? 0;
   const airedSoFar = airedInfo?.aired ?? null;
   const dubbedLangs = await DubStatus.getFor(db, id);
+  const hasDub = animeDubConfirmed || dubbedLangs.length > 0;
+
+  // Title art: your own admin-saved logo (admin/anime_banners.php "Add
+  // Logo") wins; falls back to TMDB's clear-logo search when you haven't
+  // saved one. Empty string if neither exists — plain text title is used.
+  const titleLogo = await mal.getTitleLogo(id, title);
 
   // Backdrop priority: your own admin-saved banner (admin/anime_banners.php)
   // > AniList's real banner from the current-season cache (currently airing
@@ -134,9 +136,10 @@ animeRoutes.get('/anime', async (c) => {
       <img src="${h(image)}" alt="${h(title)}">
     </div>` : ''}
 
-    <div class="info-head">
+    <div class="info-head${titleLogo ? ' has-logo' : ''}">
       <div class="info-eyebrow"><span class="dot"></span><span>${h(anime.type || 'Anime')}</span></div>
 
+      ${titleLogo ? `<img class="info-title-logo" src="${h(titleLogo)}" alt="${h(title)}" loading="eager">` : ''}
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
         <h1 class="info-title">${h(title)}</h1>
         ${hasSeriesLinks ? `
@@ -163,13 +166,9 @@ animeRoutes.get('/anime', async (c) => {
         <span class="meta-pill">${h(anime.type || '—')}</span>
         <span class="meta-pill">${airedSoFar !== null && airedSoFar > 0 && airedSoFar !== totalEps ? `Ep ${airedSoFar}/${totalEps || '?'} aired` : (totalEps ? totalEps + ' eps' : 'Unknown eps')}</span>
         <span class="meta-pill${anime.status === 'Currently Airing' ? ' meta-status-airing' : ''}">${h(anime.status || '—')}</span>
+        <span class="meta-pill" style="${hasDub ? 'color:var(--teal,#2dd4bf);' : ''}">${hasDub ? '🎙️ Dub' : '💬 Sub'}</span>
       </div>
-
-      ${dubbedLangs.length > 0 ? `
-      <div class="info-dub-row" style="display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-top:8px;">
-        ${dubbedLangs.map((l) => `<span class="meta-pill" style="color:var(--teal,#2dd4bf);">🎙️ ${h(DUB_LANGUAGES[l] ?? l)}</span>`).join('')}
-        <span style="font-size:0.7rem;color:var(--text-muted);">Dub data © <a href="https://mydublist.com" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline;">MyDubList</a></span>
-      </div>` : ''}
+      <span style="font-size:0.68rem;color:var(--text-muted);">Dub data © <a href="https://mydublist.com" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline;">MyDubList</a></span>
 
       ${(anime.genres?.length ?? 0) > 0 ? `
       <div class="info-genres">
@@ -206,8 +205,6 @@ animeRoutes.get('/anime', async (c) => {
         </div>
         <div id="anime-progress-wrap" class="progress-bar mt-1" style="max-width:400px;display:none;"><div id="anime-progress-fill" class="progress-fill" style="width:0%"></div></div>`}
       </div>
-
-      ${streamLinks.length > 0 ? `<div style="margin-top:16px;">${streamWatchOn(streamLinks, id, siteUrl)}</div>` : ''}
     </div>
   </div>
 </section>
