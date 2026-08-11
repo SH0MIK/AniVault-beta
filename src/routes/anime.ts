@@ -18,7 +18,7 @@ import { animeTailScript } from '../render/anime-tail';
 import { getBannerData } from '../lib/settings';
 import { rowNavScript } from '../render/home-js';
 import { EpisodeAir } from '../lib/episode-air';
-import { DubStatus } from '../lib/dub-status';
+import { DubStatus, DUB_LANGUAGES } from '../lib/dub-status';
 
 export const animeRoutes = new Hono<{ Bindings: Env }>();
 
@@ -83,12 +83,13 @@ animeRoutes.get('/anime', async (c) => {
   const totalEps = airedInfo?.total ?? anime.episodes ?? 0;
   const airedSoFar = airedInfo?.aired ?? null;
   const dubbedLangs = await DubStatus.getFor(db, id);
-  const hasDub = animeDubConfirmed || dubbedLangs.length > 0;
 
-  // Title art: your own admin-saved logo (admin/anime_banners.php "Add
-  // Logo") wins; falls back to TMDB's clear-logo search when you haven't
-  // saved one. Empty string if neither exists — plain text title is used.
-  const titleLogo = await mal.getTitleLogo(id, title);
+  // Same TMDB clear-logo lookup the home hero uses, plus a simple sub/dub
+  // yes-no readout for the meta row -- replaces the old "Watch on" list of
+  // every streaming provider with just the two badges that actually matter.
+  const titleLogo = await mal.getTitleLogo(id, title).catch(() => '');
+  const hasSub = videoEpRows.length > 0;
+  const hasDub = animeDubConfirmed || dubbedLangs.length > 0 || Object.values(videoEpSet).some((v) => v.dub);
 
   // Backdrop priority: your own admin-saved banner (admin/anime_banners.php)
   // > AniList's real banner from the current-season cache (currently airing
@@ -139,7 +140,7 @@ animeRoutes.get('/anime', async (c) => {
     <div class="info-head${titleLogo ? ' has-logo' : ''}">
       <div class="info-eyebrow"><span class="dot"></span><span>${h(anime.type || 'Anime')}</span></div>
 
-      ${titleLogo ? `<img class="info-title-logo" src="${h(titleLogo)}" alt="${h(title)}" loading="eager">` : ''}
+      ${titleLogo ? `<img class="info-logo" src="${h(titleLogo)}" alt="${h(title)}" loading="eager">` : ''}
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
         <h1 class="info-title">${h(title)}</h1>
         ${hasSeriesLinks ? `
@@ -166,9 +167,15 @@ animeRoutes.get('/anime', async (c) => {
         <span class="meta-pill">${h(anime.type || '—')}</span>
         <span class="meta-pill">${airedSoFar !== null && airedSoFar > 0 && airedSoFar !== totalEps ? `Ep ${airedSoFar}/${totalEps || '?'} aired` : (totalEps ? totalEps + ' eps' : 'Unknown eps')}</span>
         <span class="meta-pill${anime.status === 'Currently Airing' ? ' meta-status-airing' : ''}">${h(anime.status || '—')}</span>
-        <span class="meta-pill" style="${hasDub ? 'color:var(--teal,#2dd4bf);' : ''}">${hasDub ? '🎙️ Dub' : '💬 Sub'}</span>
+        ${hasSub ? `<span class="meta-pill meta-sub">${icon('captions', 'icon-inline')} Sub</span>` : ''}
+        ${hasDub ? `<span class="meta-pill meta-dub">${icon('mic', 'icon-inline')} Dub</span>` : ''}
       </div>
-      <span style="font-size:0.68rem;color:var(--text-muted);">Dub data © <a href="https://mydublist.com" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline;">MyDubList</a></span>
+
+      ${dubbedLangs.length > 0 ? `
+      <div class="info-dub-row" style="display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-top:8px;">
+        ${dubbedLangs.map((l) => `<span class="meta-pill" style="color:var(--teal,#2dd4bf);">🎙️ ${h(DUB_LANGUAGES[l] ?? l)}</span>`).join('')}
+        <span style="font-size:0.7rem;color:var(--text-muted);">Dub data © <a href="https://mydublist.com" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline;">MyDubList</a></span>
+      </div>` : ''}
 
       ${(anime.genres?.length ?? 0) > 0 ? `
       <div class="info-genres">
