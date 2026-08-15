@@ -14,6 +14,8 @@ import { Db } from '../lib/db';
 import { Session } from '../lib/session';
 import { Auth } from '../lib/auth';
 import { h } from '../lib/helpers';
+import { MalAPI } from '../lib/mal-api';
+import { EpisodeAir } from '../lib/episode-air';
 
 export const scraperRoutes = new Hono<{ Bindings: Env }>();
 
@@ -431,4 +433,19 @@ scraperRoutes.get('/api/anime_info.php', async (c) => {
   const { ok, code, data } = await fetchJson(`${base}/api/info?malId=${malId}`, 8000);
   if (!ok) return c.json({ error: data?.error ?? `Scraper API error HTTP ${code}` }, 502);
   return c.json(data);
+});
+
+// ── api/ep_count.php ────────────────────────────────────────────────────
+// Does the full scraper-API-then-Jikan lookup and writes through to
+// episode_air_cache (same as EpisodeAir.get) — this is the "slow" work.
+// anime.ts renders instantly off the cache (see EpisodeAir.getCachedAny)
+// and calls this from the client, in the background, only when that cache
+// was missing or stale, so a slow scraper response never blocks the page.
+scraperRoutes.get('/api/ep_count.php', async (c) => {
+  const animeId = parseInt(c.req.query('anime_id') ?? '0', 10) || 0;
+  if (!animeId) return c.json({ error: 'Missing anime_id' }, 400);
+  const db = new Db(c.env.DB);
+  const mal = new MalAPI(c.env, c.env.API_CACHE, db);
+  const airedInfo = await EpisodeAir.get(db, c.env, mal, animeId);
+  return c.json({ aired: airedInfo?.aired ?? null, total: airedInfo?.total ?? null });
 });
