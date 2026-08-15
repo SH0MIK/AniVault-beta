@@ -172,6 +172,10 @@ export const ICON_SPRITE = `<svg xmlns="http://www.w3.org/2000/svg" style="displ
   <rect x="2" y="7" width="20" height="15" rx="2" ry="2"/>
   <polyline points="17 2 12 7 7 2"/>
 </symbol>
+<symbol id="icon-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <circle cx="12" cy="12" r="10"/>
+  <polyline points="12 6 12 12 16 14"/>
+</symbol>
 <symbol id="icon-wrench" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
   <path d="M14.7 6.3a4 4 0 1 1-5.4 5.4l-7.6 7.6a1.5 1.5 0 0 0 2.1 2.1l7.6-7.6a4 4 0 0 1 5.4-5.4l-2.2 2.2a1 1 0 0 1-1.4 0l-1.4-1.4a1 1 0 0 1 0-1.4z"/>
 </symbol>
@@ -225,12 +229,21 @@ export const ICON_SPRITE = `<svg xmlns="http://www.w3.org/2000/svg" style="displ
   <path d="M6.361 2.943 0 21.056h4.024l1.075-3.379h6.238l1.075 3.379h4.024L9.075 2.943zm-.397 11.482 2.014-6.312 2.014 6.312zM17.09 2.943v18.113h6.91v-3.076h-3.588V2.943z"/>
 </symbol>
 <symbol id="icon-captions" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M7 10.5c-.5-.6-1.2-1-2-1-1.4 0-2.5 1.1-2.5 2.5S3.6 14.5 5 14.5c.8 0 1.5-.4 2-1"/><path d="M15.5 10.5c-.5-.6-1.2-1-2-1-1.4 0-2.5 1.1-2.5 2.5s1.1 2.5 2.5 2.5c.8 0 1.5-.4 2-1"/>
+<rect x="3" y="5" width="18" height="14" rx="3"/><path d="M7 10.5h2.5M11.5 10.5h5.5M7 14.5h5.5M15.5 14.5h1.5"/>
 </symbol>
 <symbol id="icon-mic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
   <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
   <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
   <line x1="12" y1="19" x2="12" y2="23"/>
   <line x1="8" y1="23" x2="16" y2="23"/>
+</symbol>
+<symbol id="icon-airing" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+<circle cx="5" cy="19" r="1.2" fill="currentColor" stroke="none"/><path d="M5 12a7 7 0 0 1 7 7"/><path d="M5 5a14 14 0 0 1 14 14"/>
+</symbol>
+<symbol id="icon-finished" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+<circle cx="12" cy="12" r="9"/><path d="M8.5 12.3l2.4 2.4 4.6-4.9"/>
+</symbol>
+<symbol id="icon-upcoming" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+<path d="M6 2h12"/><path d="M6 22h12"/><path d="M6 2c0 5 4 6.5 6 8-2 1.5-6 3-6 8"/><path d="M18 2c0 5-4 6.5-6 8 2 1.5 6 3 6 8"/>
 </symbol>
 </svg>`;

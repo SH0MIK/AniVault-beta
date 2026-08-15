@@ -12,14 +12,26 @@ export interface ChatMessageRow {
   username: string;
   avatar_url: string | null;
   role: string;
+  reply_to_id: number | null;
+  reply_to_username: string | null;
+  reply_to_message: string | null;
 }
 
 export const MAX_MESSAGE_LENGTH = 500;
 const MIN_INTERVAL_MS = 1500; // basic per-user flood guard
 
+// LEFT JOINs back onto chat_messages/users for the message being replied to
+// (if any) so the reply preview comes along for free with every fetch —
+// no per-message follow-up query on the client. If the original message was
+// since deleted, reply_to_id survives but reply_to_message/username come
+// back NULL, and the client shows "original message deleted".
 const SELECT_WITH_USER = `
-  SELECT m.id, m.user_id, m.message, m.created_at, u.username, u.avatar_url, u.role
-  FROM chat_messages m JOIN users u ON u.id = m.user_id`;
+  SELECT m.id, m.user_id, m.message, m.created_at, u.username, u.avatar_url, u.role,
+         m.reply_to_id, pu.username AS reply_to_username, p.message AS reply_to_message
+  FROM chat_messages m
+  JOIN users u ON u.id = m.user_id
+  LEFT JOIN chat_messages p ON p.id = m.reply_to_id
+  LEFT JOIN users pu ON pu.id = p.user_id`;
 
 export const Chat = {
   /** Most recent `limit` messages, oldest first (ready to render top-to-bottom).
@@ -45,7 +57,7 @@ export const Chat = {
     );
   },
 
-  async send(db: Db, userId: number, message: string): Promise<{ success: boolean; error?: string; row?: ChatMessageRow }> {
+  async send(db: Db, userId: number, message: string, replyToId?: number): Promise<{ success: boolean; error?: string; row?: ChatMessageRow; replyToAuthorId?: number | null }> {
     const trimmed = message.trim();
     if (!trimmed) return { success: false, error: 'Message cannot be empty.' };
     if (trimmed.length > MAX_MESSAGE_LENGTH) {
@@ -63,9 +75,22 @@ export const Chat = {
       }
     }
 
-    const id = await db.insert('INSERT INTO chat_messages (user_id, message) VALUES (?, ?)', [userId, trimmed]);
+    // Only keep the reply link if it actually points at a message that still exists —
+    // stops a stale/spoofed id from ever reaching the insert. Also grabs the original
+    // author's id here so the caller can notify them without a second lookup.
+    let replyTo: number | null = null;
+    let replyToAuthorId: number | null = null;
+    if (replyToId) {
+      const parent = await db.fetchOne<{ id: number; user_id: number }>('SELECT id, user_id FROM chat_messages WHERE id = ?', [replyToId]);
+      if (parent) { replyTo = parent.id; replyToAuthorId = parent.user_id; }
+    }
+
+    const id = await db.insert(
+      'INSERT INTO chat_messages (user_id, message, reply_to_id) VALUES (?, ?, ?)',
+      [userId, trimmed, replyTo]
+    );
     const row = await db.fetchOne<ChatMessageRow>(`${SELECT_WITH_USER} WHERE m.id = ?`, [id]);
-    return { success: true, row: row ?? undefined };
+    return { success: true, row: row ?? undefined, replyToAuthorId };
   },
 
   async latestId(db: Db): Promise<number> {
@@ -153,6 +178,31 @@ export const Chat = {
   /** Logged-in users active in the last 60 seconds. */
   async onlineCount(db: Db): Promise<number> {
     return db.count(`SELECT COUNT(*) as cnt FROM chat_presence WHERE last_seen > datetime('now', '-60 seconds')`, []);
+  },
+
+  /** Marks a user as actively viewing the open chat panel right now (separate from
+   * typing_until so it doesn't get clobbered by ping()'s send-stops-typing call).
+   * The client re-pings this on an interval while the panel is open; the short
+   * expiry means a closed tab / dropped connection self-clears within seconds. */
+  async setActive(db: Db, userId: number): Promise<void> {
+    await db.query(
+      `INSERT INTO chat_presence (user_id, last_seen, active_until) VALUES (?, datetime('now'), datetime('now', '+8 seconds'))
+       ON CONFLICT(user_id) DO UPDATE SET last_seen = datetime('now'), active_until = datetime('now', '+8 seconds')`,
+      [userId]
+    );
+  },
+
+  /** Which of the given users currently have their chat panel open — used to skip
+   * mention/reply notifications for someone who's already looking at the message live. */
+  async activeUserIds(db: Db, userIds: number[]): Promise<Set<number>> {
+    const ids = Array.from(new Set(userIds.filter((n) => n > 0)));
+    if (ids.length === 0) return new Set();
+    const placeholders = ids.map(() => '?').join(',');
+    const rows = await db.fetchAll<{ user_id: number }>(
+      `SELECT user_id FROM chat_presence WHERE user_id IN (${placeholders}) AND active_until > datetime('now')`,
+      ids
+    );
+    return new Set(rows.map((r) => r.user_id));
   },
 
   /** Usernames currently typing (excluding the caller), up to 3. */

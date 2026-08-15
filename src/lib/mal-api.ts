@@ -299,22 +299,37 @@ export class MalAPI {
   // manually curate a nicer banner per title, same as Anivexa does.
   // Returns order_index too, so the home page hero can honour your manual
   // display order (see getAniListSeasonNow's caller in home.ts).
+  // Falls back to home_hero_banners (the Homepage Hero Carousel admin page)
+  // if nothing's saved in the dedicated anime_banners library — titles
+  // curated for the homepage hero should also get their banner on their
+  // own detail page instead of needing to be saved twice.
   async getLocalAnimeBannerInfo(animeId: number): Promise<{ image_url: string; order_index: number } | null> {
     if (!animeId) return null;
     const row = await this.db.fetchOne<{ image_url: string; order_index: number | null }>(
       'SELECT image_url, order_index FROM anime_banners WHERE anime_id = ?',
       [animeId]
     );
-    return row ? { image_url: row.image_url, order_index: row.order_index ?? 0 } : null;
+    if (row) return { image_url: row.image_url, order_index: row.order_index ?? 0 };
+
+    const heroRow = await this.db.fetchOne<{ banner_image_url: string | null; display_order: number | null }>(
+      'SELECT banner_image_url, display_order FROM home_hero_banners WHERE anime_id = ?',
+      [animeId]
+    );
+    return heroRow?.banner_image_url ? { image_url: heroRow.banner_image_url, order_index: heroRow.display_order ?? 0 } : null;
   }
 
   // A manually-saved logo (admin/anime_banners.php "Add Logo" button) takes
   // priority over the automatic TMDB search — lets you fix a wrong/missing
-  // match without waiting on TMDB to have the right one.
+  // match without waiting on TMDB to have the right one. Falls back to
+  // home_hero_banners' logo_image_url (Homepage Hero Carousel) if nothing's
+  // saved in the dedicated anime_logos library, for the same reason as above.
   async getLocalAnimeLogo(animeId: number): Promise<string> {
     if (!animeId) return '';
     const row = await this.db.fetchOne<{ image_url: string }>('SELECT image_url FROM anime_logos WHERE anime_id = ?', [animeId]);
-    return row ? row.image_url : '';
+    if (row) return row.image_url;
+
+    const heroRow = await this.db.fetchOne<{ logo_image_url: string | null }>('SELECT logo_image_url FROM home_hero_banners WHERE anime_id = ?', [animeId]);
+    return heroRow?.logo_image_url ?? '';
   }
 
   // TMDB stores a "clear logo" per title — transparent-background title art,
@@ -329,26 +344,65 @@ export class MalAPI {
   async getTitleLogo(animeId: number, title: string): Promise<string> {
     const local = await this.getLocalAnimeLogo(animeId);
     if (local) return local;
-
-    if (!this.env.TMDB_API_KEY || !title) return '';
-
-    const cacheKey = `tmdb_logo_${animeId || (await sha1(title.toLowerCase()))}`;
-    if (this.kv && this.cacheEnabled()) {
-      const cached = await this.kv.get(cacheKey);
-      if (cached !== null) return cached; // cached '' is a valid "no logo found" result
-    }
-
-    const logo = await this.fetchTmdbLogo(title);
-    if (this.kv && this.cacheEnabled()) {
-      // Logos essentially never change — cache for a week either way (even
-      // a "not found" result), so a title with no logo doesn't get
-      // re-searched on every single page load.
-      await this.kv.put(cacheKey, logo, { expirationTtl: 604800 });
-    }
+    const { logo } = await this.getTmdbImages(animeId, title);
     return logo;
   }
 
-  private async fetchTmdbLogo(title: string): Promise<string> {
+  // Textless/clean backdrop from TMDB, used as the first-choice hero
+  // background before falling back to AniList banners. Shares the same
+  // cached /images lookup as the logo, so this costs nothing extra when
+  // getTitleLogo has already been called for the same anime.
+  async getTitleBackdrop(animeId: number, title: string): Promise<string> {
+    const { backdrop } = await this.getTmdbImages(animeId, title);
+    return backdrop;
+  }
+
+  private async getTmdbImages(animeId: number, title: string): Promise<{ logo: string; backdrop: string }> {
+    const empty = { logo: '', backdrop: '' };
+    if (!this.env.TMDB_API_KEY || !title) return empty;
+
+    const cacheKey = `tmdb_images_${animeId || (await sha1(title.toLowerCase()))}`;
+    if (this.kv && this.cacheEnabled()) {
+      const cached = await this.kv.get(cacheKey);
+      if (cached !== null) {
+        try { return JSON.parse(cached); } catch { /* stale/corrupt entry, refetch below */ }
+      }
+    }
+
+    const images = await this.fetchTmdbImages(title);
+    if (this.kv && this.cacheEnabled()) {
+      // Logos/backdrops essentially never change — cache for a week either
+      // way (even a "not found" result), so a title with neither doesn't
+      // get re-searched on every single page load.
+      await this.kv.put(cacheKey, JSON.stringify(images), { expirationTtl: 604800 });
+    }
+    return images;
+  }
+
+  // Strips a trailing season marker from a title so a season-2+ entry can
+  // fall back to searching for its base/season-1 title. Returns null if no
+  // recognisable season suffix is present (nothing to strip).
+  private stripSeasonSuffix(title: string): string | null {
+    const patterns = [
+      /\s+(?:the\s+)?\d+(?:st|nd|rd|th)\s+season$/i,   // "... 2nd Season"
+      /\s+season\s+\d+$/i,                              // "... Season 2"
+      /\s+cour\s+\d+$/i,                                 // "... Cour 2"
+      /\s+part\s+\d+$/i,                                 // "... Part 2"
+      /\s+s\d+$/i,                                       // "... S2"
+      /\s+(?:ii|iii|iv|v)$/i,                            // "... II" / "III" etc
+      /\s+\d+$/,                                         // "... 2" (plain trailing number)
+    ];
+    for (const re of patterns) {
+      if (re.test(title)) {
+        const stripped = title.replace(re, '').trim();
+        if (stripped && stripped.toLowerCase() !== title.toLowerCase()) return stripped;
+      }
+    }
+    return null;
+  }
+
+  private async fetchTmdbImages(title: string, isFallback = false): Promise<{ logo: string; backdrop: string }> {
+    const empty = { logo: '', backdrop: '' };
     try {
       const key = this.env.TMDB_API_KEY!;
       const searchUrl = (kind: 'tv' | 'movie') =>
@@ -363,18 +417,51 @@ export class MalAPI {
         const first = json?.results?.[0];
         if (first?.id) { id = first.id; kind = k; break; }
       }
-      if (!id) return '';
+      if (!id) {
+        // No TMDB entry matched this exact title (common for season 2+
+        // entries) — retry once with the season suffix stripped so we land
+        // on the season 1 / base show entry instead.
+        if (!isFallback) {
+          const stripped = this.stripSeasonSuffix(title);
+          if (stripped) return await this.fetchTmdbImages(stripped, true);
+        }
+        return empty;
+      }
 
       const imgRes = await fetch(`https://api.themoviedb.org/3/${kind}/${id}/images?api_key=${key}&include_image_language=en,ja,null`);
-      if (!imgRes.ok) return '';
+      if (!imgRes.ok) return empty;
       const imgJson: any = await imgRes.json();
       const logos: any[] = imgJson?.logos ?? [];
-      if (logos.length === 0) return '';
+      const backdrops: any[] = imgJson?.backdrops ?? [];
 
-      const best = logos.find((l) => l.iso_639_1 === 'en') || logos[0];
-      return best?.file_path ? `https://image.tmdb.org/t/p/w500${best.file_path}` : '';
+      let logo = '';
+      if (logos.length > 0) {
+        const best = logos.find((l) => l.iso_639_1 === 'en') || logos[0];
+        logo = best?.file_path ? `https://image.tmdb.org/t/p/w500${best.file_path}` : '';
+      }
+
+      let backdrop = '';
+      if (backdrops.length > 0) {
+        // Prefer textless backdrops (no language tag) over ones with a
+        // logo/text baked in.
+        const best = backdrops.find((b) => b.iso_639_1 === null) || backdrops[0];
+        backdrop = best?.file_path ? `https://image.tmdb.org/t/p/original${best.file_path}` : '';
+      }
+
+      // If either piece is still missing, fill the gap from the season 1 /
+      // base title instead of overwriting what we already found.
+      if ((!logo || !backdrop) && !isFallback) {
+        const stripped = this.stripSeasonSuffix(title);
+        if (stripped) {
+          const fallback = await this.fetchTmdbImages(stripped, true);
+          logo = logo || fallback.logo;
+          backdrop = backdrop || fallback.backdrop;
+        }
+      }
+
+      return { logo, backdrop };
     } catch {
-      return '';
+      return empty;
     }
   }
 
