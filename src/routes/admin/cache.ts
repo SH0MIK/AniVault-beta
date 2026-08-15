@@ -22,7 +22,7 @@ export const adminCacheRoutes = new Hono<{ Bindings: Env }>();
 
 async function listCacheKeys(kv: KVNamespace): Promise<string[]> {
   const keys: string[] = [];
-  for (const prefix of ['mal_', 'jikan_']) {
+  for (const prefix of ['mal_', 'jikan_', 'tmdb_images_', 'tmdb_logo_']) {
     let cursor: string | undefined;
     do {
       const res = await kv.list({ prefix, cursor, limit: 1000 });
@@ -379,7 +379,7 @@ adminCacheRoutes.post('/admin/ep_refresh.php', async (c) => {
   if (!auth.isAdmin()) { await session.save(c, lifetime); return c.json({ error: 'Forbidden' }, 403); }
 
   const mal = new MalAPI(c.env, c.env.API_CACHE, db);
-  const refreshed = await EpisodeAir.refreshStale(db, mal, 20);
+  const refreshed = await EpisodeAir.refreshStale(db, c.env, mal, 20);
   await Logger.log(db, session.user_id ?? 0, 'admin_ep_refresh', `Manually refreshed ${refreshed} stale episode-air cache entries`);
   await session.save(c, lifetime);
   return c.json({ success: true, refreshed });
