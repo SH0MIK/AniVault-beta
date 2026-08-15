@@ -260,6 +260,21 @@ if(popSpdList){
 /* ── Custom control bar ──────────────────────────────────── */
 (function(){
   const area      = document.getElementById('sp-video-area');
+
+  /* iOS Safari has a longstanding bug where native <track> caption boxes
+     are positioned against an internal default video size rather than the
+     actual CSS \`aspect-ratio\` box, so they can render outside the player
+     entirely. Giving the area an explicit pixel height (recalculated on
+     resize) sidesteps it; overflow:hidden on #sp-video-area (see CSS) is
+     the backstop in case a caption box still miscalculates. */
+  function sizeVideoArea(){
+    if(area.classList.contains('sp-ios-fs')||document.fullscreenElement===area) return;
+    const w=area.getBoundingClientRect().width;
+    if(w>0) area.style.height=(w*9/16)+'px';
+  }
+  sizeVideoArea();
+  window.addEventListener('resize',sizeVideoArea);
+  window.addEventListener('orientationchange',()=>setTimeout(sizeVideoArea,350));
   const ctrlBar   = document.getElementById('sp-ctrl-bar');
   const playBtn   = document.getElementById('sp-play');
   const back10Btn = document.getElementById('sp-back10');
@@ -367,14 +382,42 @@ if(popSpdList){
   });
 
   /* Fullscreen */
+  // iOS Safari (incl. in-app browsers) doesn't implement the Fullscreen API
+  // on arbitrary elements — only <video> supports native fullscreen there —
+  // so area.requestFullscreen is undefined and the old code silently no-op'd.
+  // We detect that and fall back to a CSS "fake fullscreen" that keeps our
+  // custom controls instead of kicking the user out to native video chrome.
+  let _iosFs=false;
+  function nativeFsSupported(){
+    return !!(area.requestFullscreen||area.webkitRequestFullscreen);
+  }
   function syncFsIcon(){
-    const fs=!!document.fullscreenElement;
+    const fs=!!document.fullscreenElement||_iosFs;
     fsBtn2.querySelector('.sp-icon-fs').style.display=fs?'none':'';
     fsBtn2.querySelector('.sp-icon-exit-fs').style.display=fs?'':'none';
   }
-  fsBtn2.addEventListener('click',()=>{
+  function enterFs(){
+    if(nativeFsSupported()){
+      (area.requestFullscreen||area.webkitRequestFullscreen).call(area);
+    }else{
+      _iosFs=true;
+      area.classList.add('sp-ios-fs');
+      document.documentElement.classList.add('sp-ios-fs-lock');
+      syncFsIcon();
+    }
+  }
+  function exitFs(){
     if(document.fullscreenElement) document.exitFullscreen();
-    else area.requestFullscreen?.();
+    if(_iosFs){
+      _iosFs=false;
+      area.classList.remove('sp-ios-fs');
+      document.documentElement.classList.remove('sp-ios-fs-lock');
+      syncFsIcon();
+    }
+  }
+  fsBtn2.addEventListener('click',()=>{
+    if(document.fullscreenElement||_iosFs) exitFs();
+    else enterFs();
   });
   document.addEventListener('fullscreenchange',()=>{
     syncFsIcon();
