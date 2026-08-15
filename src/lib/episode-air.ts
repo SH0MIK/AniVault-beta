@@ -18,32 +18,59 @@ import { MalAPI } from './mal-api';
 
 const STALE_AFTER_MS = 6 * 60 * 60 * 1000; // 6 hours
 const MAX_PAGES = 15; // 15 * 100 = up to 1500 episodes tracked; covers everything but a handful of very long runners
+const SCRAPER_TIMEOUT_MS = 5000;
+const JIKAN_FALLBACK_BUDGET_MS = 5000; // total cap across all pages, not per-request
 
 export interface AiredInfo { aired: number; total: number | null; updatedAt: string; }
 export interface EpisodeAirEnv { SCRAPER_API_BASE?: string; }
 
+// Races a promise against a plain timeout so a slow/hanging source can never
+// hold up the whole lookup — used below because fetchAiredCountFromJikan has
+// no internal timeout of its own (it can page + retry-on-429 indefinitely).
+function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+  return new Promise((resolve) => {
+    const t = setTimeout(() => resolve(fallback), ms);
+    promise.then((v) => { clearTimeout(t); resolve(v); }, () => { clearTimeout(t); resolve(fallback); });
+  });
+}
+
 export const EpisodeAir = {
   /** Scraper API lookup — same base-URL handling as api-scraper.ts (accepts
    *  either "https://host" or "https://host/api"). Returns null on any
-   *  failure or missing/zero episodeCount so callers fall through to Jikan. */
+   *  failure or missing/zero episodeCount so callers fall through to Jikan.
+   *  Logs *why* it failed (unlike before, which swallowed everything) —
+   *  check `wrangler tail` if this keeps falling through: the two most
+   *  common causes are SCRAPER_API_BASE not being set for this environment,
+   *  or the scraper responding with a different field name than expected. */
   async fetchFromScraperApi(env: EpisodeAirEnv, animeId: number): Promise<{ aired: number; total: number } | null> {
     const base = env.SCRAPER_API_BASE?.replace(/\/+$/, '').replace(/\/api$/i, '');
-    if (!base) return null;
+    if (!base) {
+      console.warn('[episode-air] SCRAPER_API_BASE is not set — falling back to Jikan for anime', animeId);
+      return null;
+    }
     try {
       const controller = new AbortController();
-      const t = setTimeout(() => controller.abort(), 8000);
+      const t = setTimeout(() => controller.abort(), SCRAPER_TIMEOUT_MS);
       const res = await fetch(`${base}/api/info?malId=${animeId}`, { headers: { Accept: 'application/json' }, signal: controller.signal });
       clearTimeout(t);
-      if (!res.ok) return null;
+      if (!res.ok) {
+        console.warn(`[episode-air] scraper API HTTP ${res.status} for anime ${animeId} — falling back to Jikan`);
+        return null;
+      }
       const data: any = await res.json().catch(() => null);
       const count = Number(data?.episodeCount);
-      if (!count || count <= 0) return null;
+      if (!count || count <= 0) {
+        console.warn('[episode-air] scraper API returned no usable episodeCount for anime', animeId, '— raw response:', JSON.stringify(data));
+        return null;
+      }
       // The scraper only exposes one count, not an aired/total split — treat
       // it as both. For a streaming site this is arguably more useful than
       // MAL's "aired" distinction anyway: it's the number of episodes your
       // site actually has, which is what drives the episode grid.
       return { aired: count, total: count };
-    } catch {
+    } catch (err: any) {
+      const reason = err?.name === 'AbortError' ? `timed out after ${SCRAPER_TIMEOUT_MS}ms` : String(err?.message ?? err);
+      console.warn('[episode-air] scraper API call failed for anime', animeId, '—', reason, '— falling back to Jikan');
       return null;
     }
   },
@@ -70,11 +97,13 @@ export const EpisodeAir = {
     return { aired, total };
   },
 
-  /** Scraper API first, Jikan pagination fallback. */
+  /** Scraper API first (bounded by its own internal timeout), Jikan
+   *  pagination fallback second (bounded here, since it has no timeout of
+   *  its own and can otherwise run long on rate-limited/very long shows). */
   async fetchAiredCount(env: EpisodeAirEnv, mal: MalAPI, animeId: number): Promise<{ aired: number; total: number } | null> {
     const fromScraper = await EpisodeAir.fetchFromScraperApi(env, animeId);
     if (fromScraper) return fromScraper;
-    return EpisodeAir.fetchAiredCountFromJikan(mal, animeId);
+    return withTimeout(EpisodeAir.fetchAiredCountFromJikan(mal, animeId), JIKAN_FALLBACK_BUDGET_MS, null);
   },
 
   /** Read-through cache for a single anime — used by the detail page, where the extra round trip on a cache miss is worth it. */
