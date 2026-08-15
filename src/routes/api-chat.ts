@@ -49,6 +49,15 @@ function serialize(row: ChatMessageRow, currentUserId: number, isAdmin: boolean,
     can_delete: row.user_id === currentUserId || isAdmin,
     reactions: extras.reactions,
     reaction_emojis: CHAT_REACTION_EMOJIS,
+    reply_to: row.reply_to_id
+      ? {
+          id: row.reply_to_id,
+          // username/message come back NULL if the original was deleted since —
+          // client shows a "message deleted" placeholder in that case.
+          username: row.reply_to_username ? h(row.reply_to_username) : null,
+          message: row.reply_to_message ? h(row.reply_to_message.slice(0, 120)) : null,
+        }
+      : null,
   };
 }
 
@@ -70,7 +79,7 @@ async function serializeAll(db: Db, rows: ChatMessageRow[], currentUserId: numbe
 
 // Reading (get/poll/count/presence/mention_search) is open to guests;
 // anything that writes on a user's behalf requires a logged-in session.
-const WRITE_ACTIONS = new Set(['send', 'read', 'delete', 'react', 'typing']);
+const WRITE_ACTIONS = new Set(['send', 'read', 'delete', 'react', 'typing', 'active']);
 
 apiChatRoutes.on(['GET', 'POST'], '/api/chat', async (c) => {
   const { db, session, lifetime, auth } = await buildCtx(c);
@@ -118,7 +127,8 @@ apiChatRoutes.on(['GET', 'POST'], '/api/chat', async (c) => {
 
     case 'send': {
       const text = (getParam('message') || '').toString();
-      const sent = await Chat.send(db, userId, text);
+      const replyToId = parseInt(getParam('reply_to') || '0', 10) || undefined;
+      const sent = await Chat.send(db, userId, text, replyToId);
       if (!sent.success) {
         result = { success: false, message: sent.error };
         break;
@@ -126,11 +136,20 @@ apiChatRoutes.on(['GET', 'POST'], '/api/chat', async (c) => {
       await Chat.markRead(db, userId, sent.row!.id);
       await Chat.ping(db, userId, false); // sending implicitly stops "typing"
 
-      // @mentions — notify anyone named in the message (excluding the sender).
+      // @mentions and replies both notify someone about this message — skip anyone
+      // who's got the chat panel open right now, since they'll see it live instead.
       const mentioned = await Chat.findMentionedUsers(db, text, userId);
+      const replyToAuthorId = sent.replyToAuthorId && sent.replyToAuthorId !== userId ? sent.replyToAuthorId : null;
+      const notifyCandidates = [...mentioned.map((u) => u.id), ...(replyToAuthorId ? [replyToAuthorId] : [])];
+      const activeIds = await Chat.activeUserIds(db, notifyCandidates);
       const preview = text.length > 60 ? text.slice(0, 57) + '...' : text;
+
       for (const u of mentioned) {
+        if (activeIds.has(u.id)) continue;
         await Notification.create(db, u.id, userId, 'chat_mention', sent.row!.id, preview);
+      }
+      if (replyToAuthorId && !activeIds.has(replyToAuthorId)) {
+        await Notification.create(db, replyToAuthorId, userId, 'chat_reply', sent.row!.id, preview);
       }
 
       const myBadges = await Badge.getForUser(db, userId);
@@ -168,6 +187,15 @@ apiChatRoutes.on(['GET', 'POST'], '/api/chat', async (c) => {
     // Typing ping — client calls this (debounced) while the input has text.
     case 'typing': {
       await Chat.ping(db, userId, true);
+      result = { success: true };
+      break;
+    }
+
+    // Chat-panel-open heartbeat — client calls this on an interval while the panel
+    // is open, so mention/reply notifications can be skipped for anyone already
+    // looking at the message live. Short-lived by design (see Chat.setActive).
+    case 'active': {
+      await Chat.setActive(db, userId);
       result = { success: true };
       break;
     }

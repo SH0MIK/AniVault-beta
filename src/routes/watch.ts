@@ -147,7 +147,7 @@ watchRoutes.get('/watch', async (c) => {
   // lags for airing shows, and this total also drives which episode
   // numbers get nav chips below (missing/wrong = viewers can't reach an
   // episode that's actually already out).
-  const airedInfo = await EpisodeAir.get(db, mal, animeId);
+  const airedInfo = await EpisodeAir.get(db, c.env, mal, animeId);
   const totalEps = airedInfo?.total ?? anime.episodes ?? 0;
   const dubbedLangs = await DubStatus.getFor(db, animeId);
 

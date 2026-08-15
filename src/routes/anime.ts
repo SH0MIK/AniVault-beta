@@ -18,7 +18,7 @@ import { animeTailScript } from '../render/anime-tail';
 import { getBannerData } from '../lib/settings';
 import { rowNavScript } from '../render/home-js';
 import { EpisodeAir } from '../lib/episode-air';
-import { DubStatus, DUB_LANGUAGES } from '../lib/dub-status';
+import { DubStatus } from '../lib/dub-status';
 
 export const animeRoutes = new Hono<{ Bindings: Env }>();
 
@@ -79,7 +79,7 @@ animeRoutes.get('/anime', async (c) => {
   // the one page where the extra round trip on a cache miss is worth it
   // (single anime, not a grid), so it's a live refresh-if-stale rather
   // than a cache-only lookup.
-  const airedInfo = await EpisodeAir.get(db, mal, id);
+  const airedInfo = await EpisodeAir.get(db, c.env, mal, id);
   const totalEps = airedInfo?.total ?? anime.episodes ?? 0;
   const airedSoFar = airedInfo?.aired ?? null;
   const dubbedLangs = await DubStatus.getFor(db, id);
@@ -92,16 +92,22 @@ animeRoutes.get('/anime', async (c) => {
   const hasDub = animeDubConfirmed || dubbedLangs.length > 0 || Object.values(videoEpSet).some((v) => v.dub);
 
   // Backdrop priority: your own admin-saved banner (admin/anime_banners.php)
-  // > AniList's real banner from the current-season cache (currently airing
-  // titles only) > AniList's real banner from the all-time top-200 cache
-  // (covers older/finished popular titles) > blurred poster.
+  // > TMDB's textless backdrop (shares the same cached /images lookup as
+  // the logo above, so this is a free KV read, not a second API call)
+  // > AniList's real banner from the current-season cache (currently
+  // airing titles only) > AniList's real banner from the all-time top-200
+  // cache (covers older/finished popular titles) > blurred poster.
   const bannerInfo = await mal.getLocalAnimeBannerInfo(id);
+  let tmdbBackdrop = '';
   let aniListBanner = '';
   if (!bannerInfo?.image_url) {
-    aniListBanner = (await mal.getAniListBannerFromSeasonCache(id)) || (await mal.getAniListTopBanner(id));
+    tmdbBackdrop = await mal.getTitleBackdrop(id, title).catch(() => '');
+    if (!tmdbBackdrop) {
+      aniListBanner = (await mal.getAniListBannerFromSeasonCache(id)) || (await mal.getAniListTopBanner(id));
+    }
   }
-  const backdrop = bannerInfo?.image_url || aniListBanner || image;
-  const hasBanner = !!(bannerInfo?.image_url || aniListBanner);
+  const backdrop = bannerInfo?.image_url || tmdbBackdrop || aniListBanner || image;
+  const hasBanner = !!(bannerInfo?.image_url || tmdbBackdrop || aniListBanner);
 
   const currentUser = auth.check() ? await auth.getCurrentUser() : null;
   let userEntry: any = null;
@@ -129,88 +135,72 @@ animeRoutes.get('/anime', async (c) => {
   const jImage = JSON.stringify(image);
 
   html += `
-<section class="info-hero${hasBanner ? '' : ' info-hero-no-banner'}">
-  <div class="info-hero-bg${hasBanner ? '' : ' info-hero-bg-fallback'}" style="background-image:url('${h(backdrop)}')"></div>
-  <div class="container info-hero-inner">
-    ${image ? `
-    <div class="info-poster">
-      <img src="${h(image)}" alt="${h(title)}">
-    </div>` : ''}
+<section class="ih-hero${hasBanner ? '' : ' ih-hero-no-banner'}">
+  <div class="ih-bg${hasBanner ? '' : ' ih-bg-fallback'}" style="background-image:url('${h(backdrop)}')"></div>
+  <div class="ih-bg-scrim"></div>
+  ${titleLogo ? `<img class="ih-logo-bg" src="${h(titleLogo)}" alt="" aria-hidden="true">` : ''}
 
-    <div class="info-head${titleLogo ? ' has-logo' : ''}">
-      <div class="info-eyebrow"><span class="dot"></span><span>${h(anime.type || 'Anime')}</span></div>
+  <div class="container ih-inner">
+    <div class="ih-thumb">
+      <img src="${h(image || backdrop)}" alt="${h(title)}">
+    </div>
 
-      ${titleLogo ? `<img class="info-logo" src="${h(titleLogo)}" alt="${h(title)}" loading="eager">` : ''}
-      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-        <h1 class="info-title">${h(title)}</h1>
-        ${hasSeriesLinks ? `
-        <div id="series-dropdown-wrap" style="position:relative;flex-shrink:0;">
-          <button id="series-dropdown-btn" onclick="toggleSeriesDropdown(event)"
-            style="display:inline-flex;align-items:center;gap:6px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.1);color:#fff;padding:6px 12px 6px 14px;border-radius:8px;font-size:0.85rem;font-weight:600;cursor:pointer;transition:background .15s;white-space:nowrap;"
-            onmouseover="this.style.background='rgba(255,255,255,0.14)'" onmouseout="this.style.background='rgba(255,255,255,0.08)'"
-            aria-haspopup="listbox" aria-expanded="false">
-            <span id="series-btn-label">Season …</span>
-            <svg id="series-dropdown-arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="transition:transform .2s;flex-shrink:0;"><polyline points="6 9 12 15 18 9"/></svg>
-          </button>
-          <div id="series-dropdown-menu" style="display:none;position:absolute;top:calc(100% + 6px);left:0;z-index:200;background:var(--bg-card,#1a1a1a);border:1px solid var(--border);border-radius:10px;min-width:220px;max-width:300px;box-shadow:0 8px 24px rgba(0,0,0,.5);overflow:hidden;" role="listbox">
-            <div id="series-menu-loading" style="padding:12px 14px;font-size:0.82rem;color:var(--text-muted);text-align:center;">Loading series…</div>
-          </div>
-        </div>
-        <script>window.__seriesData = ${JSON.stringify({ currentId: id, currentTitle: title, siteUrl, entries: seriesEntries })};</script>` : ''}
+    <div class="ih-content">
+      <div class="ih-plaintitle">${h(title)}</div>
+
+      ${titleLogo ? `<img class="ih-logo" src="${h(titleLogo)}" alt="${h(title)}" loading="eager">` : `<h1 class="ih-title">${h(title)}</h1>`}
+
+      <div class="ih-meta-row">
+        ${anime.score ? `<span class="ih-meta-item ih-meta-score">${icon('star', 'icon-inline')} ${anime.score.toFixed(1)}</span>` : ''}
+        <span class="ih-meta-item">${icon('tv', 'icon-inline')} ${h(titleCase(anime.type || 'TV'))}</span>
+        <span class="ih-meta-item">${icon('list', 'icon-inline')} ${airedSoFar !== null && airedSoFar > 0 && airedSoFar !== totalEps ? `Ep ${airedSoFar}/${totalEps || '?'} aired` : (totalEps ? totalEps + ' eps' : 'Unknown eps')}</span>
+        ${anime.duration_mins ? `<span class="ih-meta-item">${icon('clock', 'icon-inline')} ${anime.duration_mins}m</span>` : ''}
+        ${seasonYearLabel(anime.start_date) ? `<span class="ih-meta-item">${icon('calendar', 'icon-inline')} ${h(seasonYearLabel(anime.start_date)!)}</span>` : ''}
+        <span class="ih-meta-item${anime.status === 'Currently Airing' ? ' ih-meta-airing' : ''}">${icon(anime.status === 'Currently Airing' ? 'airing' : anime.status === 'Finished Airing' ? 'finished' : anime.status === 'Not yet aired' ? 'upcoming' : 'info', 'icon-inline')} ${h(anime.status || '—')}</span>
+        <span class="ih-meta-item">${icon('captions', 'icon-inline')} Sub</span>
+        ${hasDub ? `<span class="ih-meta-item">${icon('mic', 'icon-inline')} Dub</span>` : ''}
       </div>
-      ${jpTitle && jpTitle !== title ? `<div class="info-subtitle">${h(jpTitle)}</div>` : ''}
-
-      <div class="info-meta-row">
-        ${anime.score ? `<span class="meta-pill meta-score">★ ${anime.score.toFixed(2)} <span style="opacity:.65;font-weight:500;">(${(anime.scored_by || anime.members || 0).toLocaleString('en-US')})</span></span>` : ''}
-        ${anime.rank ? `<span class="meta-pill">🏆 #${anime.rank}</span>` : ''}
-        ${anime.popularity ? `<span class="meta-pill">🔥 #${anime.popularity}</span>` : ''}
-        <span class="meta-pill">${h(anime.type || '—')}</span>
-        <span class="meta-pill">${airedSoFar !== null && airedSoFar > 0 && airedSoFar !== totalEps ? `Ep ${airedSoFar}/${totalEps || '?'} aired` : (totalEps ? totalEps + ' eps' : 'Unknown eps')}</span>
-        <span class="meta-pill${anime.status === 'Currently Airing' ? ' meta-status-airing' : ''}">${h(anime.status || '—')}</span>
-        ${hasSub ? `<span class="meta-pill meta-sub">${icon('captions', 'icon-inline')} Sub</span>` : ''}
-        ${hasDub ? `<span class="meta-pill meta-dub">${icon('mic', 'icon-inline')} Dub</span>` : ''}
-      </div>
-
-      ${dubbedLangs.length > 0 ? `
-      <div class="info-dub-row" style="display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-top:8px;">
-        ${dubbedLangs.map((l) => `<span class="meta-pill" style="color:var(--teal,#2dd4bf);">🎙️ ${h(DUB_LANGUAGES[l] ?? l)}</span>`).join('')}
-        <span style="font-size:0.7rem;color:var(--text-muted);">Dub data © <a href="https://mydublist.com" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline;">MyDubList</a></span>
-      </div>` : ''}
 
       ${(anime.genres?.length ?? 0) > 0 ? `
-      <div class="info-genres">
-        ${anime.genres.filter(Boolean).map((g) => `<a href="${siteUrl}/browse?genre=${g?.mal_id ?? ''}" class="info-genre-tag">${h(g?.name ?? '')}</a>`).join('')}
+      <div class="ih-genres">
+        ${anime.genres.filter(Boolean).map((g) => `<a href="${siteUrl}/browse?genre=${g?.mal_id ?? ''}" class="ih-genre-tag">${h(g?.name ?? '')}</a>`).join('')}
       </div>` : ''}
 
-      <div class="info-cta">
-        <a href="#episodes-section" class="btn-watch" onclick="var b=document.getElementById('ep-grid-js'); var s=document.getElementById('episodes-section'); if(s) s.scrollIntoView({behavior:'smooth'});">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
-          Watch Now
+      <div class="ih-infoline">
+        <span>Studio: <strong>${h((anime.studios ?? []).filter(Boolean).map((s) => s?.name ?? '').filter(Boolean).join(', ') || '—')}</strong></span>
+        <span>Source: <strong>${h(anime.source || '—')}</strong></span>
+      </div>
+
+      <div class="ih-cta">
+        <a href="#episodes-section" class="ih-btn-play" onclick="var s=document.getElementById('episodes-section'); if(s) s.scrollIntoView({behavior:'smooth'});">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5,3 19,12 5,21"/></svg>
+          Play Episode 1
         </a>
-        <button class="btn-secondary" onclick='addToList(${id}, ${jTitle}, ${jImage}, ${totalEps})'>
-          ${userEntry ? `✏️ Edit in List` : `+ Add to List`}
+        <button class="ih-btn-secondary" onclick='addToList(${id}, ${jTitle}, ${jImage}, ${totalEps})'>
+          ${icon(userEntry ? 'edit' : 'heart', 'icon-inline')} ${userEntry ? 'Edit in List' : 'Add to list'}
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
         </button>
-        <button class="btn-secondary" id="fav-btn" style="${isFav ? 'color:var(--accent-2)' : ''}" onclick='toggleFavorite(this, ${id}, ${jTitle}, ${jImage})'>
-          ${isFav ? '♥ Favorited' : '♡ Favorite'}
+        <button class="ih-btn-secondary ih-btn-subscribe" id="fav-btn" style="${isFav ? 'color:var(--accent-2)' : ''}" onclick='toggleFavorite(this, ${id}, ${jTitle}, ${jImage})'>
+          ${icon('bell', 'icon-inline')} ${isFav ? 'Subscribed' : 'Subscribe'}
         </button>
       </div>
 
       <div id="anime-user-status" class="mt-2" data-total-eps="${totalEps}">
         ${userEntry ? `
-        <div class="flex gap-1" style="gap:8px;align-items:center;">
+        <div class="flex gap-1" style="gap:8px;align-items:center;justify-content:center;">
           <span id="anime-status-badge">${statusBadge(userEntry.status)}</span>
           <span id="anime-score-badge" style="color:var(--gold);font-size:0.9rem;">${userEntry.score ? `⭐ ${userEntry.score}/10` : ''}</span>
           <span id="anime-eps-badge" class="text-muted" style="font-size:0.85rem;">${totalEps > 0 ? `${userEntry.episodes_watched}/${totalEps} eps` : ''}</span>
         </div>
-        <div id="anime-progress-wrap" class="progress-bar mt-1" style="max-width:400px;${totalEps > 0 && userEntry.episodes_watched ? '' : 'display:none'}">
+        <div id="anime-progress-wrap" class="progress-bar mt-1" style="max-width:400px;margin-left:auto;margin-right:auto;${totalEps > 0 && userEntry.episodes_watched ? '' : 'display:none'}">
           <div id="anime-progress-fill" class="progress-fill" style="width:${totalEps > 0 ? Math.min(100, Math.round((userEntry.episodes_watched / totalEps) * 100)) : 0}%"></div>
         </div>` : `
-        <div class="flex gap-1" style="gap:8px;align-items:center;">
+        <div class="flex gap-1" style="gap:8px;align-items:center;justify-content:center;">
           <span id="anime-status-badge"></span>
           <span id="anime-score-badge" style="color:var(--gold);font-size:0.9rem;"></span>
           <span id="anime-eps-badge" class="text-muted" style="font-size:0.85rem;"></span>
         </div>
-        <div id="anime-progress-wrap" class="progress-bar mt-1" style="max-width:400px;display:none;"><div id="anime-progress-fill" class="progress-fill" style="width:0%"></div></div>`}
+        <div id="anime-progress-wrap" class="progress-bar mt-1" style="max-width:400px;margin-left:auto;margin-right:auto;display:none;"><div id="anime-progress-fill" class="progress-fill" style="width:0%"></div></div>`}
       </div>
     </div>
   </div>
@@ -332,6 +322,25 @@ ${animeTailScript(animeDubConfirmed)}`;
 
 function infoStatRow(label: string, value: string | number): string {
   return `<div class="info-stat-row"><span class="label">${h(label)}</span><span class="value">${h(String(value))}</span></div>`;
+}
+
+// "2004-10-05" -> "Fall 2004" (Jan-Mar Winter, Apr-Jun Spring, Jul-Sep
+// Summer, Oct-Dec Fall — same quarter boundaries AniList uses), so the meta
+// row shows one compact season badge instead of a full aired date range.
+function seasonYearLabel(startDate: string | null | undefined): string | null {
+  if (!startDate) return null;
+  const d = new Date(startDate + 'T00:00:00Z');
+  if (isNaN(d.getTime())) return null;
+  const month = d.getUTCMonth() + 1;
+  const year = d.getUTCFullYear();
+  const season = month <= 3 ? 'Winter' : month <= 6 ? 'Spring' : month <= 9 ? 'Summer' : 'Fall';
+  return `${season} ${year}`;
+}
+
+// "TV" -> "Tv", "OVA" -> "Ova" — matches the reference's title-case badge
+// instead of MAL's all-caps media type.
+function titleCase(s: string): string {
+  return s.length ? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() : s;
 }
 
 function renderEpisodeEditorModal(): string {
