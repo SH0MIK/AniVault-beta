@@ -96,6 +96,20 @@ export const EpisodeAir = {
     return { aired: fetched.aired, total: fetched.total, updatedAt: new Date().toISOString() };
   },
 
+  /** Cache-only, any age — never calls the scraper API or Jikan, so this is
+   *  always fast. For pages that shouldn't block their render on a live
+   *  lookup: use this immediately (falling back to MAL's own field if
+   *  there's nothing cached yet) and, when isFresh is false, fetch the real
+   *  number client-side via /api/ep_count.php instead. */
+  async getCachedAny(db: Db, animeId: number): Promise<{ info: AiredInfo | null; isFresh: boolean }> {
+    const cached = await db.fetchOne<{ aired_count: number; total_count: number | null; updated_at: string }>(
+      'SELECT aired_count, total_count, updated_at FROM episode_air_cache WHERE anime_id = ?', [animeId]
+    );
+    if (!cached) return { info: null, isFresh: false };
+    const isFresh = (Date.now() - new Date(cached.updated_at.replace(' ', 'T') + 'Z').getTime()) < STALE_AFTER_MS;
+    return { info: { aired: cached.aired_count, total: cached.total_count, updatedAt: cached.updated_at }, isFresh };
+  },
+
   /** Cache-only bulk lookup for card grids — never calls the scraper API or Jikan directly, so it's always fast regardless of how many cards are on the page. */
   async getForMany(db: Db, animeIds: number[]): Promise<Map<number, AiredInfo>> {
     const map = new Map<number, AiredInfo>();
