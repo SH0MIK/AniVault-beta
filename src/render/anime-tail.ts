@@ -279,6 +279,22 @@ function buildEpCard(ep, animeId, cover, thumbMap) {
   return div;
 }
 
+// ── Ep-tab header count ─────────────────────────────────────────────
+// The tab title must always agree with the Info panel's episode count.
+// Jikan/DB-derived lists only contain episodes that have actually
+// aired/been scraped (e.g. 1 for a currently-airing 8-ep show), so we
+// never trust that length on its own -- we take whichever is larger:
+// the show's known total (window.__totalEps, kept in sync by
+// epsLiveScript) or the actual list we just rendered.
+function updateEpTabCount(actualCount) {
+  const total = window.__totalEps || 0;
+  const count = Math.max(total, actualCount);
+  const span  = document.getElementById('ep-tab-count');
+  if (!span) return;
+  span.classList.remove('eps-skel');
+  span.textContent = count > 0 ? '(' + count + ')' : '';
+}
+
 // ── Fetch and render episodes (all pages) ─────────────────────────────
 async function lazyLoadEpisodes() {
   const animeId = window.__animeId;
@@ -325,14 +341,12 @@ async function lazyLoadEpisodes() {
       const stubEps = [...epNums].sort((a,b)=>a-b).map(n => ({
         mal_id: n, title: null, aired: null, score: null, filler: false, recap: false
       }));
-      const btn = document.getElementById('ep-tab-btn');
-      if (btn) btn.textContent = 'Episodes (' + stubEps.length + ')';
+      updateEpTabCount(stubEps.length);
       stubEps.forEach(ep => grid.appendChild(buildEpCard(ep, animeId, cover, thumbMap)));
       grid.style.display = '';
       return;
     }
-    const btn = document.getElementById('ep-tab-btn');
-    if (btn) btn.textContent = 'Episodes (' + jikanEps.length + ')';
+    updateEpTabCount(jikanEps.length);
     jikanEps.forEach(ep => grid.appendChild(buildEpCard(ep, animeId, cover, thumbMap)));
     grid.style.display = '';
     if (typeof loadEpCardThumbnails === 'function') loadEpCardThumbnails();
