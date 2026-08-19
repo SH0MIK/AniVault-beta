@@ -347,11 +347,28 @@ async function lazyLoadEpisodes() {
       return;
     }
     updateEpTabCount(jikanEps.length);
-    jikanEps.forEach(ep => grid.appendChild(buildEpCard(ep, animeId, cover, thumbMap)));
+    // Jikan's per-episode data commonly lags behind the show's real total
+    // (currently-airing shows especially -- it only lists episodes that
+    // have actually aired/been indexed). Pad the grid out with numbered
+    // stubs for anything beyond what Jikan gave us, up to the known
+    // total, so the card count always matches the "(N)" in the tab title
+    // instead of silently showing fewer cards than it claims.
+    const totalEps = window.__totalEps || 0;
+    const jikanNums = new Set(jikanEps.map(ep => Number(ep.mal_id ?? 0)));
+    const fullEps = jikanEps.slice();
+    if (totalEps > jikanEps.length) {
+      for (let n = 1; n <= totalEps; n++) {
+        if (!jikanNums.has(n)) {
+          fullEps.push({ mal_id: n, title: null, aired: null, score: null, filler: false, recap: false });
+        }
+      }
+    }
+    fullEps.sort((a, b) => Number(a.mal_id ?? 0) - Number(b.mal_id ?? 0));
+    fullEps.forEach(ep => grid.appendChild(buildEpCard(ep, animeId, cover, thumbMap)));
     grid.style.display = '';
     if (typeof loadEpCardThumbnails === 'function') loadEpCardThumbnails();
   } catch(e) {
-    if (loading) loading.innerHTML = '<p class="text-muted">Failed to load episodes. <button class="btn btn-ghost btn-sm" onclick="lazyLoadEpisodes()">Retry</button></p>';
+    if (loading) loading.innerHTML = '<p class="text-muted" style="grid-column:1/-1;text-align:center;padding:1rem 0;">Failed to load episodes. <button class="btn btn-ghost btn-sm" onclick="lazyLoadEpisodes()">Retry</button></p>';
   }
 }
 
