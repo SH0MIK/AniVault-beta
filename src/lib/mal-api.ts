@@ -14,6 +14,7 @@ export interface MalEnv {
   API_CACHE_ENABLED?: string; // "1" / "0" via wrangler.toml var
   API_CACHE_TIME?: string; // seconds
   TMDB_API_KEY?: string;
+  SCRAPER_API_BASE?: string; // same secret as api-scraper.ts / episode-air.ts
 }
 
 export interface NormalisedAnime {
@@ -53,6 +54,22 @@ export interface NormalisedAnime {
 export class MalAPI {
   constructor(private env: MalEnv, private kv: KVNamespace | undefined, private db: Db) {}
 
+  // Fire-and-forget cache write. KV's daily put() quota (1,000/day on the
+  // free tier) is easy to exceed with an hourly scanner + Jikan pagination
+  // fallback — when that happens put() throws, and previously that was
+  // unhandled and took the whole request down with it (see incident:
+  // "KV put() limit exceeded for the day" crashing GET /). A cache write is
+  // never worth failing the response over, so this always resolves and just
+  // logs on failure.
+  private async safeKvPut(key: string, value: string, opts?: KVNamespacePutOptions): Promise<void> {
+    if (!this.kv) return;
+    try {
+      await this.kv.put(key, value, opts);
+    } catch (err: any) {
+      console.warn('[mal-api] KV put failed (continuing without cache write):', key, '-', String(err?.message ?? err));
+    }
+  }
+
   private cacheEnabled(): boolean {
     return (this.env.API_CACHE_ENABLED ?? '1') === '1';
   }
@@ -71,7 +88,7 @@ export class MalAPI {
       const res = await fetch(url, { headers: { 'X-MAL-CLIENT-ID': this.env.MAL_CLIENT_ID ?? '', Accept: 'application/json' } });
       if (!res.ok) return { error: 'API request failed' };
       const json = await res.json();
-      await this.kv.put(cacheKey, JSON.stringify(json), { expirationTtl: this.cacheTtl() });
+      await this.safeKvPut(cacheKey, JSON.stringify(json), { expirationTtl: this.cacheTtl() });
       return json;
     }
 
@@ -100,7 +117,7 @@ export class MalAPI {
 
       if (this.kv && this.cacheEnabled()) {
         const cacheKey = 'jikan_' + (await sha1(url));
-        await this.kv.put(cacheKey, JSON.stringify(decoded), { expirationTtl: this.cacheTtl() });
+        await this.safeKvPut(cacheKey, JSON.stringify(decoded), { expirationTtl: this.cacheTtl() });
       }
       return decoded;
     }
@@ -133,7 +150,7 @@ export class MalAPI {
       // Generous TTL as a safety net — the cron is what actually keeps this
       // fresh minute-to-minute; this just stops a cold cache from forcing
       // every single request to call AniList live.
-      await this.kv.put(cacheKey, JSON.stringify(result), { expirationTtl: Math.max(this.cacheTtl(), 7200) });
+      await this.safeKvPut(cacheKey, JSON.stringify(result), { expirationTtl: Math.max(this.cacheTtl(), 7200) });
     }
     return result;
   }
@@ -145,7 +162,7 @@ export class MalAPI {
     const data = await this.fetchAniListSeasonLive();
     if (!data || data.length === 0) return false;
     if (this.kv && this.cacheEnabled()) {
-      await this.kv.put(this.seasonCacheKey(), JSON.stringify({ data }), { expirationTtl: 7200 });
+      await this.safeKvPut(this.seasonCacheKey(), JSON.stringify({ data }), { expirationTtl: 7200 });
     }
     return true;
   }
@@ -374,7 +391,7 @@ export class MalAPI {
       // Logos/backdrops essentially never change — cache for a week either
       // way (even a "not found" result), so a title with neither doesn't
       // get re-searched on every single page load.
-      await this.kv.put(cacheKey, JSON.stringify(images), { expirationTtl: 604800 });
+      await this.safeKvPut(cacheKey, JSON.stringify(images), { expirationTtl: 604800 });
     }
     return images;
   }
@@ -593,15 +610,44 @@ export class MalAPI {
   }
 
   async getAnimeCharacters(id: number): Promise<any> {
+    const fromScraper = await this.scraperGet(`/api/mal/anime/${id}/characters`);
+    if (fromScraper) return mapScraperCharacters(fromScraper);
     return this.jikanGet(`https://api.jikan.moe/v4/anime/${id}/characters`);
   }
 
   async getAnimeEpisodes(id: number, page = 1): Promise<any> {
+    const fromScraper = await this.scraperGet(`/api/mal/anime/${id}/episodes?page=${page}`);
+    if (fromScraper) return mapScraperEpisodes(fromScraper);
     return this.jikanGet(`https://api.jikan.moe/v4/anime/${id}/episodes?page=${page}`);
   }
 
   async getAnimeStreaming(id: number): Promise<any> {
     return this.jikanGet(`https://api.jikan.moe/v4/anime/${id}/streaming`);
+  }
+
+  // Own scraper (see AniVault-Scraper's src/scrapers/mal.ts) — same base-URL
+  // env var and stripping convention as api-scraper.ts / episode-air.ts.
+  // Returns null (not throw) on any failure/missing config so callers fall
+  // straight through to the Jikan path above, same "scraper first, Jikan as
+  // safety net" shape episode-air.ts already established.
+  private async scraperGet(path: string, timeoutMs = 8000): Promise<any | null> {
+    const base = this.env.SCRAPER_API_BASE?.replace(/\/+$/, '').replace(/\/api$/i, '');
+    if (!base) return null;
+    try {
+      const controller = new AbortController();
+      const t = setTimeout(() => controller.abort(), timeoutMs);
+      const res = await fetch(`${base}${path}`, { headers: { Accept: 'application/json' }, signal: controller.signal });
+      clearTimeout(t);
+      if (!res.ok) {
+        console.warn(`[mal-api] scraper API HTTP ${res.status} for ${path} — falling back to Jikan`);
+        return null;
+      }
+      return await res.json().catch(() => null);
+    } catch (err: any) {
+      const reason = err?.name === 'AbortError' ? `timed out after ${timeoutMs}ms` : String(err?.message ?? err);
+      console.warn(`[mal-api] scraper API call failed for ${path} —`, reason, '— falling back to Jikan');
+      return null;
+    }
   }
 
   async getRecommendations(animeId: number): Promise<{ data: any[] }> {
@@ -695,6 +741,53 @@ export class MalAPI {
     all.sort((a, b) => (a.broadcast.time ?? '99:99').localeCompare(b.broadcast.time ?? '99:99'));
     return { data: all };
   }
+}
+
+// Reshapes AniVault-Scraper's /api/mal/anime/{id}/episodes response into
+// the same { data: [...], pagination: { last_visible_page, has_next_page } }
+// shape Jikan returned, so every existing caller (episode-air.ts,
+// watch.ts, anime-tail.ts's server-rendered path) needs zero changes.
+function mapScraperEpisodes(raw: any): any {
+  const data = (raw?.data ?? []).map((ep: any) => ({
+    mal_id: ep.malId,
+    url: ep.url,
+    title: ep.title,
+    title_japanese: ep.titleJapanese,
+    aired: ep.aired,
+    filler: !!ep.filler,
+    recap: !!ep.recap,
+  }));
+  return {
+    data,
+    pagination: {
+      last_visible_page: raw?.pagination?.currentPage ?? 1,
+      has_next_page: !!raw?.pagination?.hasNextPage,
+    },
+  };
+}
+
+// Same idea for /api/mal/anime/{id}/characters -> Jikan's
+// { data: [{ character, role, voice_actors }] } shape.
+function mapScraperCharacters(raw: any): any {
+  const data = (raw?.data ?? []).map((ch: any) => ({
+    character: {
+      mal_id: ch.characterId,
+      url: ch.url,
+      images: { jpg: { image_url: ch.image } },
+      name: ch.name,
+    },
+    role: ch.role,
+    voice_actors: (ch.voiceActors ?? []).map((va: any) => ({
+      person: {
+        mal_id: va.peopleId,
+        url: va.url,
+        images: { jpg: { image_url: va.image } },
+        name: va.name,
+      },
+      language: va.language,
+    })),
+  }));
+  return { data };
 }
 
 function mapStatus(s: string): string {
