@@ -27,11 +27,7 @@ characterRoutes.get('/character', async (c) => {
   const charId = parseInt(c.req.query('id') ?? '0', 10) || 0;
   if (!charId) return c.redirect(siteUrl + '/');
 
-  const [charData, charAnimeData, charVoicesData] = await Promise.all([
-    mal.getCharacter(charId),
-    mal.getCharacterAnime(charId),
-    mal.getCharacterVoices(charId),
-  ]);
+  const { character: charData, animeography: charAnimeData, voices: charVoicesData } = await mal.getCharacterFull(charId);
 
   const char = charData?.data;
   if (!char) {
