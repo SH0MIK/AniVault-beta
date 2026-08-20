@@ -597,16 +597,21 @@ export class MalAPI {
     return { data: await this.normalise(raw) };
   }
 
-  async getCharacter(id: number): Promise<any> {
-    return this.jikanGet(`https://api.jikan.moe/v4/characters/${id}`);
-  }
+  // Replaces getCharacter + getCharacterAnime + getCharacterVoices (3
+  // separate Jikan calls) with one -- MAL's character page has bio,
+  // animeography, and voice roles all on a single page, so one scrape
+  // covers what used to take 3 requests. Falls back to the original 3
+  // parallel Jikan calls if the scraper is unavailable/errors.
+  async getCharacterFull(id: number): Promise<{ character: any; animeography: any; voices: any }> {
+    const fromScraper = await this.scraperGet(`/api/mal/character/${id}`);
+    if (fromScraper) return mapScraperCharacterFull(fromScraper);
 
-  async getCharacterAnime(id: number): Promise<any> {
-    return this.jikanGet(`https://api.jikan.moe/v4/characters/${id}/anime`);
-  }
-
-  async getCharacterVoices(id: number): Promise<any> {
-    return this.jikanGet(`https://api.jikan.moe/v4/characters/${id}/voices`);
+    const [character, animeography, voices] = await Promise.all([
+      this.jikanGet(`https://api.jikan.moe/v4/characters/${id}`),
+      this.jikanGet(`https://api.jikan.moe/v4/characters/${id}/anime`),
+      this.jikanGet(`https://api.jikan.moe/v4/characters/${id}/voices`),
+    ]);
+    return { character, animeography, voices };
   }
 
   async getAnimeCharacters(id: number): Promise<any> {
@@ -788,6 +793,50 @@ function mapScraperCharacters(raw: any): any {
     })),
   }));
   return { data };
+}
+
+// Reshapes /api/mal/character/{id} into the 3-piece shape getCharacterFull
+// returns, each piece matching what its old separate Jikan call returned
+// ({ data: {...} } for the bio, { data: [...] } for the other two) so
+// character.ts's existing field access (char.name_kanji, entry.role, etc.)
+// needed no changes.
+function mapScraperCharacterFull(raw: any): { character: any; animeography: any; voices: any } {
+  const character = {
+    data: {
+      mal_id: raw.characterId,
+      name: raw.name,
+      name_kanji: raw.nameKanji,
+      nicknames: raw.nicknames ?? [],
+      about: raw.about,
+      favorites: raw.favorites,
+      images: { jpg: { image_url: raw.image } },
+    },
+  };
+
+  const animeography = {
+    data: (raw.animeography ?? []).map((a: any) => ({
+      anime: {
+        mal_id: a.animeId,
+        title: a.title,
+        images: { jpg: { image_url: a.image } },
+      },
+      role: a.role,
+    })),
+  };
+
+  const voices = {
+    data: (raw.voiceActors ?? []).map((va: any) => ({
+      person: {
+        mal_id: va.peopleId,
+        name: va.name,
+        url: va.url,
+        images: { jpg: { image_url: va.image } },
+      },
+      language: va.language,
+    })),
+  };
+
+  return { character, animeography, voices };
 }
 
 function mapStatus(s: string): string {
