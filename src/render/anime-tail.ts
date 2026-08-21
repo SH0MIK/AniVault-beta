@@ -491,6 +491,100 @@ async function lazyLoadCharacters() {
   }
 }
 
+// ── Fetch and render the trailer ────────────────────────────────
+async function lazyLoadTrailer() {
+  const animeId = window.__animeId;
+  const section = document.getElementById('trailer-section');
+  const wrap    = document.getElementById('trailer-js');
+  const loading = document.getElementById('trailer-loading');
+  if (!wrap || !section) return;
+  try {
+    const res  = await fetch(\`\${window.__siteUrl || ''}/api/anime_videos.php?anime=\${animeId}\`);
+    const data = await res.json();
+    const trailer = (data.trailers || [])[0];
+    if (loading) loading.style.display = 'none';
+    if (!trailer || !trailer.youtubeId) {
+      section.style.display = 'none'; // no trailer available -- hide the whole section rather than show an empty player
+      return;
+    }
+    wrap.innerHTML = \`
+      <div style="position:relative;width:100%;aspect-ratio:16/9;border-radius:10px;overflow:hidden;background:var(--bg-base);">
+        <iframe src="https://www.youtube-nocookie.com/embed/\${trailer.youtubeId}" title="\${(trailer.label||'Trailer').replace(/</g,'&lt;')}" style="position:absolute;inset:0;width:100%;height:100%;border:0;" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen loading="lazy"></iframe>
+      </div>\`;
+    wrap.style.display = '';
+  } catch(e) {
+    if (loading) loading.innerHTML = '<p class="text-muted">Failed to load trailer. <button class="btn btn-ghost btn-sm" onclick="lazyLoadTrailer()">Retry</button></p>';
+  }
+}
+
+// ── Fetch and render theme songs (Opening/Ending) ───────────────
+async function lazyLoadMusic() {
+  const animeId = window.__animeId;
+  const section = document.getElementById('music-section');
+  const wrap    = document.getElementById('music-js');
+  const loading = document.getElementById('music-loading');
+  if (!wrap || !section) return;
+  try {
+    const res  = await fetch(\`\${window.__siteUrl || ''}/api/anime_themes.php?anime=\${animeId}\`);
+    const data = await res.json();
+    const opening = data.opening || [];
+    const ending  = data.ending || [];
+    if (loading) loading.style.display = 'none';
+    if (!opening.length && !ending.length) {
+      section.style.display = 'none';
+      return;
+    }
+    const renderList = (list) => list.map(t => \`
+      <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border-color);">
+        <span style="color:var(--text-muted);font-weight:600;min-width:1.5rem;">\${t.number}.</span>
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:600;">"\${(t.title||'').replace(/</g,'&lt;')}"</div>
+          <div style="color:var(--text-muted);font-size:0.85rem;">\${(t.artist||'').replace(/</g,'&lt;')}\${t.episodes ? \` &middot; eps \${t.episodes}\` : ''}</div>
+        </div>
+        \${t.spotifyUrl ? \`<a href="\${t.spotifyUrl}" target="_blank" rel="noopener" class="btn btn-ghost btn-sm" style="flex-shrink:0;" onclick="event.stopPropagation();">Spotify</a>\` : ''}
+      </div>\`).join('');
+    wrap.innerHTML = \`
+      \${opening.length ? \`<h3 style="font-size:0.95rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;margin:0 0 .5rem;">Opening</h3>\${renderList(opening)}\` : ''}
+      \${ending.length ? \`<h3 style="font-size:0.95rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.04em;margin:1.25rem 0 .5rem;">Ending</h3>\${renderList(ending)}\` : ''}
+    \`;
+    wrap.style.display = '';
+  } catch(e) {
+    if (loading) loading.innerHTML = '<p class="text-muted">Failed to load music. <button class="btn btn-ghost btn-sm" onclick="lazyLoadMusic()">Retry</button></p>';
+  }
+}
+
+// ── Fetch and render the picture gallery ─────────────────────────
+async function lazyLoadPictures() {
+  const animeId = window.__animeId;
+  const section = document.getElementById('pictures-section');
+  const grid    = document.getElementById('pictures-grid-js');
+  const loading = document.getElementById('pictures-grid-loading');
+  if (!grid || !section) return;
+  try {
+    const res  = await fetch(\`\${window.__siteUrl || ''}/api/anime_pictures.php?anime=\${animeId}\`);
+    const data = await res.json();
+    const pics = (data.data || []).slice(0, 24);
+    if (loading) loading.style.display = 'none';
+    if (!pics.length) {
+      section.style.display = 'none';
+      return;
+    }
+    pics.forEach(p => {
+      const a = document.createElement('a');
+      a.href = p.image;
+      a.target = '_blank';
+      a.rel = 'noopener';
+      a.className = 'anime-card';
+      a.style.cssText = 'flex-shrink:0;width:140px;';
+      a.innerHTML = \`<div class="anime-card-poster" style="aspect-ratio:2/3;"><img src="\${p.thumbnail || p.image}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;"></div>\`;
+      grid.appendChild(a);
+    });
+    grid.style.display = '';
+  } catch(e) {
+    if (loading) loading.innerHTML = '<p class="text-muted">Failed to load pictures. <button class="btn btn-ghost btn-sm" onclick="lazyLoadPictures()">Retry</button></p>';
+  }
+}
+
 // ── Fetch and render related/recommendations ───────────────────
 async function lazyLoadRelated() {
   const animeId = window.__animeId;
@@ -546,6 +640,9 @@ document.addEventListener('DOMContentLoaded', function() {
     lazyLoadEpisodes();
     lazyLoadCharacters();
     lazyLoadRelated();
+    lazyLoadTrailer();
+    lazyLoadMusic();
+    lazyLoadPictures();
   });
 });
 
