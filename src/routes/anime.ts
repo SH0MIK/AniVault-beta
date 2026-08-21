@@ -259,6 +259,15 @@ animeRoutes.get('/anime', async (c) => {
     <div class="ep-grid" id="ep-grid-js" style="display:none;"></div>
   </div>
 
+  <div class="info-section" id="trailer-section">
+    <h2 class="info-section-title">Trailer</h2>
+    <div id="trailer-loading" style="text-align:center;padding:2.5rem 0;color:var(--text-muted);">
+      <div class="av-loader" style="margin:0 auto 1rem;transform:scale(.6);"></div>
+      Loading trailer…
+    </div>
+    <div id="trailer-js" style="display:none;"></div>
+  </div>
+
   <div class="modal-overlay" id="ep-modal">
     <div class="modal" style="max-width:620px;width:100%;">
       <div class="modal-header" style="padding:1rem 1.25rem;display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;">
@@ -299,6 +308,30 @@ animeRoutes.get('/anime', async (c) => {
       Loading characters…
     </div>
     <div class="scroll-row" id="char-grid-js" style="display:none;"></div>
+  </div>
+
+  <div class="info-section" id="music-section">
+    <h2 class="info-section-title">Music</h2>
+    <div id="music-loading" style="text-align:center;padding:2.5rem 0;color:var(--text-muted);">
+      <div class="av-loader" style="margin:0 auto 1rem;transform:scale(.6);"></div>
+      Loading theme songs…
+    </div>
+    <div id="music-js" style="display:none;"></div>
+  </div>
+
+  <div class="info-section" id="pictures-section">
+    <div class="section-header">
+      <h2 class="info-section-title" style="margin-bottom:0;">Pictures</h2>
+      <div style="display:flex;align-items:center;gap:12px;">
+        <button class="btn btn-ghost btn-sm btn-icon row-nav-btn" data-target="pictures-grid-js" data-dir="prev" aria-label="Previous">${icon('chevron-left', 'icon-small')}</button>
+        <button class="btn btn-ghost btn-sm btn-icon row-nav-btn" data-target="pictures-grid-js" data-dir="next" aria-label="Next">${icon('chevron-right', 'icon-small')}</button>
+      </div>
+    </div>
+    <div id="pictures-grid-loading" style="text-align:center;padding:2.5rem 0;color:var(--text-muted);">
+      <div class="av-loader" style="margin:0 auto 1rem;transform:scale(.6);"></div>
+      Loading pictures…
+    </div>
+    <div class="scroll-row" id="pictures-grid-js" style="display:none;"></div>
   </div>
 
   <div class="info-section">

@@ -476,3 +476,33 @@ scraperRoutes.get('/api/anime_characters.php', async (c) => {
   const result = await mal.getAnimeCharacters(animeId);
   return c.json(result);
 });
+
+// ── api/anime_themes.php, anime_videos.php, anime_pictures.php ─────────────
+// Same same-origin-proxy reasoning as the two routes above, for the new
+// trailer/theme-song/picture-gallery sections.
+scraperRoutes.get('/api/anime_themes.php', async (c) => {
+  const animeId = parseInt(c.req.query('anime') ?? '0', 10) || 0;
+  if (!animeId) return c.json({ error: 'Missing anime' }, 400);
+  const db = new Db(c.env.DB);
+  const mal = new MalAPI(c.env, c.env.API_CACHE, db);
+  const result = await mal.getAnimeThemes(animeId);
+  return c.json(result);
+});
+
+scraperRoutes.get('/api/anime_videos.php', async (c) => {
+  const animeId = parseInt(c.req.query('anime') ?? '0', 10) || 0;
+  if (!animeId) return c.json({ error: 'Missing anime' }, 400);
+  const db = new Db(c.env.DB);
+  const mal = new MalAPI(c.env, c.env.API_CACHE, db);
+  const result = await mal.getAnimeVideos(animeId);
+  return c.json(result);
+});
+
+scraperRoutes.get('/api/anime_pictures.php', async (c) => {
+  const animeId = parseInt(c.req.query('anime') ?? '0', 10) || 0;
+  if (!animeId) return c.json({ error: 'Missing anime' }, 400);
+  const db = new Db(c.env.DB);
+  const mal = new MalAPI(c.env, c.env.API_CACHE, db);
+  const result = await mal.getAnimePictures(animeId);
+  return c.json(result);
+});
