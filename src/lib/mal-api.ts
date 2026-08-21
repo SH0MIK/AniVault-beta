@@ -808,6 +808,8 @@ function mapScraperCharacterFull(raw: any): { character: any; animeography: any;
       name_kanji: raw.nameKanji,
       nicknames: raw.nicknames ?? [],
       about: raw.about,
+      note: raw.note ?? null,
+      spoilers: raw.spoilers ?? [],
       favorites: raw.favorites,
       images: { jpg: { image_url: raw.image } },
     },
