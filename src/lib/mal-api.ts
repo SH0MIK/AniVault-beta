@@ -630,6 +630,45 @@ export class MalAPI {
     return this.jikanGet(`https://api.jikan.moe/v4/anime/${id}/streaming`);
   }
 
+  // New endpoints -- no prior site UI consumed these, so no Jikan-shape
+  // reshaping is needed the way episodes/characters had to match existing
+  // callers. Still keep Jikan as a fallback for resilience, same pattern
+  // as everything else here, reshaped from Jikan's actual shape into ours
+  // instead (the reverse direction, since our own shape is what the new
+  // UI below is built against).
+  async getAnimeThemes(id: number): Promise<{ opening: any[]; ending: any[] }> {
+    const fromScraper = await this.scraperGet(`/api/mal/anime/${id}/themes`);
+    if (fromScraper) return fromScraper;
+
+    const jikan = await this.jikanGet(`https://api.jikan.moe/v4/anime/${id}/themes`);
+    return {
+      opening: (jikan?.data?.openings ?? []).map((t: string, i: number) => ({ number: i + 1, title: t, artist: '', episodes: null, spotifyUrl: null })),
+      ending: (jikan?.data?.endings ?? []).map((t: string, i: number) => ({ number: i + 1, title: t, artist: '', episodes: null, spotifyUrl: null })),
+    };
+  }
+
+  async getAnimeVideos(id: number): Promise<{ musicVideos: any[]; trailers: any[] }> {
+    const fromScraper = await this.scraperGet(`/api/mal/anime/${id}/videos`);
+    if (fromScraper) return fromScraper;
+
+    const jikan = await this.jikanGet(`https://api.jikan.moe/v4/anime/${id}/videos`);
+    const trailer = jikan?.data?.promo?.[0]?.trailer;
+    return {
+      musicVideos: [],
+      trailers: trailer?.youtube_id
+        ? [{ label: 'PV 1', youtubeId: trailer.youtube_id, embedUrl: trailer.embed_url, songTitle: null, songArtist: null }]
+        : [],
+    };
+  }
+
+  async getAnimePictures(id: number): Promise<{ data: any[] }> {
+    const fromScraper = await this.scraperGet(`/api/mal/anime/${id}/pictures`);
+    if (fromScraper) return fromScraper;
+
+    const jikan = await this.jikanGet(`https://api.jikan.moe/v4/anime/${id}/pictures`);
+    return { data: (jikan?.data ?? []).map((p: any) => ({ image: p.jpg?.image_url ?? null, thumbnail: p.jpg?.small_image_url ?? null })) };
+  }
+
   // Own scraper (see AniVault-Scraper's src/scrapers/mal.ts) — same base-URL
   // env var and stripping convention as api-scraper.ts / episode-air.ts.
   // Returns null (not throw) on any failure/missing config so callers fall
