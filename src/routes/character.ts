@@ -38,6 +38,8 @@ characterRoutes.get('/character', async (c) => {
   const nameKanji = char.name_kanji ?? null;
   const nicknames: string[] = char.nicknames ?? [];
   const about: string | null = char.about ?? null;
+  const note: string | null = char.note ?? null;
+  const spoilers: string[] = char.spoilers ?? [];
   const favorites: number = char.favorites ?? 0;
   const imageLarge = char.images?.jpg?.image_url ?? '';
 
@@ -101,6 +103,12 @@ characterRoutes.get('/character', async (c) => {
         <div class="char-about" id="char-about-text">${h(about)}</div>
         <div class="char-about-fade" id="char-about-fade"></div>
         <button class="btn-read-more" id="char-read-more-btn" onclick="toggleAbout()" style="margin-bottom:0.75rem;">▾ Read more</button>
+        ${spoilers.length > 0 ? spoilers.map((s) => `
+        <details class="char-spoiler" style="margin:0.5rem 0;">
+          <summary style="cursor:pointer;color:var(--text-muted);font-size:0.85rem;">⚠ Click to show spoiler</summary>
+          <div style="margin-top:0.5rem;">${h(s)}</div>
+        </details>`).join('') : ''}
+        ${note ? `<p style="font-size:0.8rem;color:var(--text-muted);font-style:italic;margin:0.5rem 0 0.75rem;">${h(note)}</p>` : ''}
       </div>` : ''}
     </div>
   </div>
