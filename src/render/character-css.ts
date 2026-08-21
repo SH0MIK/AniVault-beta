@@ -1,303 +1,83 @@
-export const CHARACTER_CSS = `/* ── Character page specific styles ── */
-.char-hero {
-    position: relative;
-    display: flex;
-    gap: 2rem;
-    align-items: flex-start;
-    flex-wrap: wrap;
-    margin-bottom: 2.5rem;
+export const CHARACTER_CSS = `/* ── Character page — Anivexa-style layout (matches anime.ts's ih-hero / info-section system) ── */
+
+/* -- Hero: blurred backdrop from the character's own portrait, scrim, floating card -- */
+.ch-hero { position: relative; width: 100%; overflow: hidden; padding-top: var(--header-h); }
+.ch-bg { position: absolute; inset: 0; background-position: center 20%; background-size: cover; background-repeat: no-repeat; filter: brightness(.4) blur(3px); transform: scale(1.05); }
+.ch-bg-fallback { filter: brightness(.32) blur(6px); }
+.ch-bg-scrim { position: absolute; inset: 0; background: radial-gradient(120% 90% at 50% 20%, rgba(0,0,0,.35), rgba(0,0,0,.88) 65%, var(--bg-base) 100%); pointer-events: none; }
+
+.ch-inner { position: relative; z-index: 2; display: flex; gap: 40px; align-items: flex-start; padding: 40px 0 48px; }
+.ch-thumb-wrap { flex: 0 0 220px; width: 220px; position: relative; }
+.ch-thumb { width: 100%; aspect-ratio: 3/4; border-radius: var(--radius-lg); overflow: hidden; box-shadow: 0 24px 60px rgba(0,0,0,.6), 0 0 0 1px rgba(255,255,255,.08); background: var(--bg-card); }
+.ch-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ch-thumb-placeholder { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 3.5rem; color: var(--text-muted); background: var(--bg-card); }
+
+.ch-content { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px; padding-top: 4px; }
+.ch-eyebrow { font-size: .78rem; font-weight: 700; text-transform: uppercase; letter-spacing: .12em; color: var(--accent-2); }
+.ch-title { font-size: clamp(1.6rem, 3.4vw, 2.5rem); font-weight: 800; line-height: 1.12; margin: 2px 0; text-shadow: 0 6px 24px rgba(0,0,0,.6); color: #fff; }
+.ch-subtitle { font-size: .9rem; color: rgba(255,255,255,.55); font-weight: 500; }
+
+.ch-nicknames { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 2px; }
+.ch-nickname-tag { background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.1); padding: 5px 14px; border-radius: var(--radius-pill); font-size: .78rem; font-weight: 600; font-style: italic; color: rgba(255,255,255,.85); }
+
+.ch-meta-row { display: flex; flex-wrap: wrap; gap: 4px 18px; align-items: center; font-size: .85rem; font-weight: 600; color: rgba(255,255,255,.85); margin-top: 4px; }
+.ch-meta-item { display: inline-flex; align-items: center; gap: 6px; }
+.ch-meta-item .icon-inline { width: 14px; height: 14px; }
+.ch-meta-fav { color: var(--gold); }
+
+/* -- Body sections (reuses anime page's info-section / info-stats system) -- */
+.ch-body { padding: 40px 0 72px; }
+.ch-body .info-section { margin-bottom: 44px; }
+
+.ch-about { font-size: .94rem; line-height: 1.8; color: var(--text-secondary); margin: 0; position: relative; max-height: 12.5em; overflow: hidden; transition: max-height .35s ease; white-space: pre-line; }
+.ch-about.expanded { max-height: 200em; }
+.ch-about::after { content: ''; position: absolute; inset: auto 0 0 0; height: 3em; background: linear-gradient(180deg, transparent 0%, var(--bg-base) 100%); pointer-events: none; transition: opacity .3s ease; }
+.ch-about.expanded::after { opacity: 0; }
+.ch-about-toggle { display: inline-block; margin-top: 10px; color: var(--accent-2); font-weight: 700; font-size: .85rem; cursor: pointer; background: none; border: none; padding: 0; }
+.ch-note { font-size: .8rem; color: var(--text-muted); font-style: italic; margin: 14px 0 0; }
+
+.ch-spoilers { margin-top: 18px; display: flex; flex-direction: column; gap: 8px; }
+.ch-spoiler { border: 1px solid var(--border); border-radius: var(--radius-md); background: rgba(255,255,255,.02); padding: 10px 14px; }
+.ch-spoiler summary { cursor: pointer; font-size: .8rem; font-weight: 600; color: var(--text-muted); list-style: none; display: flex; align-items: center; gap: 8px; }
+.ch-spoiler summary::-webkit-details-marker { display: none; }
+.ch-spoiler summary::before { content: '⚠'; color: var(--gold); }
+.ch-spoiler[open] summary { color: var(--text-secondary); margin-bottom: 8px; }
+.ch-spoiler-body { font-size: .87rem; line-height: 1.7; color: var(--text-secondary); }
+
+/* Info stats panel (right column) — same component the anime page uses */
+.ch-stats-note { margin-top: 14px; font-size: .74rem; color: var(--text-muted); }
+
+/* -- Voice actor language filter chips -- */
+.ch-lang-filters { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 18px; }
+.ch-lang-chip { background: rgba(255,255,255,.04); border: 1px solid var(--border); padding: 6px 15px; border-radius: var(--radius-pill); font-size: .78rem; font-weight: 600; color: var(--text-secondary); cursor: pointer; transition: var(--trans); }
+.ch-lang-chip:hover { background: rgba(255,255,255,.08); color: var(--text-primary); }
+.ch-lang-chip.active { background: var(--grad-accent); border-color: transparent; color: #fff; box-shadow: 0 0 16px var(--accent-glow); }
+
+/* Voice actor cards — circular avatar, reuses .anime-card.char-card treatment */
+.va-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 18px; }
+.va-grid-item { display: none; }
+.va-grid-item.va-visible { display: block; }
+.va-card { text-decoration: none; display: block; text-align: center; transition: var(--trans); }
+.va-card:hover .va-avatar, .va-card:hover .va-avatar-placeholder { transform: scale(1.06); box-shadow: 0 0 0 3px var(--border-accent); }
+.va-avatar-wrap { aspect-ratio: 1/1; border-radius: 50%; overflow: hidden; border: 2px solid rgba(255,255,255,.08); margin: 0 auto 10px; width: 84px; }
+.va-avatar { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .3s ease, box-shadow .3s ease; }
+.va-avatar-placeholder { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 1.6rem; color: var(--text-muted); background: var(--bg-card); transition: transform .3s ease, box-shadow .3s ease; border-radius: 50%; }
+.va-name { font-size: .83rem; font-weight: 700; color: var(--text-primary); line-height: 1.3; }
+.va-lang { font-size: .72rem; color: var(--text-muted); margin-top: 3px; }
+
+/* Anime appearances — standard .anime-card poster inside a scroll-row (same component as anime.ts's related/characters rows) */
+.ch-role-badge { position: absolute; top: 6px; left: 6px; background: var(--accent); color: #fff; font-size: .65rem; font-weight: 700; padding: 2px 8px; border-radius: 10px; text-transform: uppercase; letter-spacing: .04em; z-index: 2; }
+
+@media (max-width: 880px) {
+  .ch-inner { flex-direction: column; align-items: center; text-align: left; padding: 24px 12px 36px; gap: 16px; }
+  .ch-thumb-wrap { width: min(170px, 45vw); align-self: center; }
+  .ch-content { align-items: flex-start; width: 100%; gap: 8px; }
+  .ch-meta-row, .ch-nicknames { justify-content: flex-start; }
+  .ch-body { padding: 32px 20px 72px; }
 }
-
-.char-poster-wrap {
-    position: relative;
-    flex-shrink: 0;
-}
-
-.char-poster {
-    width: 220px;
-    border-radius: var(--radius-lg);
-    border: 1px solid var(--border);
-    display: block;
-    object-fit: cover;
-    aspect-ratio: 2/3;
-    background: var(--bg-card);
-}
-
-.char-poster-placeholder {
-    width: 220px;
-    aspect-ratio: 2/3;
-    border-radius: var(--radius-lg);
-    border: 1px solid var(--border);
-    background: var(--bg-card);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--text-muted);
-    font-size: 3rem;
-}
-
-.char-glow-ring {
-    position: absolute;
-    inset: -3px;
-    border-radius: calc(var(--radius-lg) + 3px);
-    background: linear-gradient(135deg, var(--accent), transparent 60%);
-    z-index: -1;
-    opacity: 0.5;
-}
-
-.char-meta { flex: 1; min-width: 260px; }
-
-.char-name {
-    font-size: 2rem;
-    font-weight: 800;
-    line-height: 1.2;
-    margin-bottom: 4px;
-    letter-spacing: -0.5px;
-}
-
-.char-name-kanji {
-    font-size: 1rem;
-    color: var(--text-muted);
-    margin-bottom: 1rem;
-    letter-spacing: 0.05em;
-}
-
-.char-nicknames {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    margin-bottom: 1rem;
-}
-
-.char-nickname-tag {
-    background: rgba(124,58,237,0.1);
-    border: 1px solid rgba(124,58,237,0.25);
-    color: var(--accent);
-    padding: 3px 10px;
-    border-radius: 20px;
-    font-size: 0.8rem;
-    font-style: italic;
-}
-
-.char-stat-row {
-    display: flex;
-    gap: 1rem;
-    flex-wrap: wrap;
-    margin-bottom: 1.25rem;
-}
-
-.char-stat-pill {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: 24px;
-    padding: 6px 14px;
-    font-size: 0.85rem;
-}
-
-.char-stat-pill .stat-val {
-    font-weight: 700;
-    color: var(--text-primary);
-}
-
-.char-stat-pill .stat-lbl {
-    color: var(--text-muted);
-    font-size: 0.78rem;
-}
-
-/* About section */
-.char-about {
-    color: var(--text-secondary);
-    line-height: 1.8;
-    font-size: 0.93rem;
-    white-space: pre-line;
-    max-height: 160px;
-    overflow: hidden;
-    position: relative;
-    transition: max-height 0.4s ease;
-}
-
-.char-about.expanded {
-    max-height: 9999px;
-}
-
-.char-about-fade {
-    position: absolute;
-    bottom: 0; left: 0; right: 0;
-    height: 60px;
-    background: linear-gradient(transparent, var(--bg-card));
-    pointer-events: none;
-    transition: opacity 0.3s;
-}
-
-.char-about.expanded ~ .char-about-fade {
-    opacity: 0;
-}
-
-.btn-read-more {
-    background: none;
-    border: none;
-    color: var(--accent);
-    cursor: pointer;
-    font-size: 0.85rem;
-    padding: 6px 0;
-    font-weight: 600;
-    transition: opacity 0.2s;
-}
-.btn-read-more:hover { opacity: 0.75; }
-
-/* Voice actors grid */
-.va-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    gap: 1rem;
-}
-
-.va-card {
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 10px 12px;
-    transition: border-color 0.2s, background 0.2s;
-}
-
-.va-card:hover {
-    border-color: var(--accent-dim);
-    background: var(--bg-hover);
-}
-
-.va-avatar {
-    width: 48px;
-    height: 48px;
-    border-radius: 50%;
-    object-fit: cover;
-    background: var(--bg-surface);
-    flex-shrink: 0;
-    border: 2px solid var(--border);
-}
-
-.va-avatar-placeholder {
-    width: 48px;
-    height: 48px;
-    border-radius: 50%;
-    background: var(--bg-surface);
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--text-muted);
-    font-size: 1.2rem;
-    border: 2px solid var(--border);
-}
-
-.va-info { flex: 1; min-width: 0; }
-
-.va-name {
-    font-weight: 600;
-    font-size: 0.88rem;
-    color: var(--text-primary);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.va-lang {
-    font-size: 0.75rem;
-    color: var(--text-muted);
-    margin-top: 2px;
-}
-
-/* Anime appearances */
-.char-anime-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-    gap: 1rem;
-}
-
-.char-anime-item {
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    overflow: hidden;
-    cursor: pointer;
-    transition: border-color 0.2s, transform 0.2s;
-    text-decoration: none;
-    display: block;
-}
-
-.char-anime-item:hover {
-    border-color: var(--accent-dim);
-    transform: translateY(-3px);
-}
-
-.char-anime-poster {
-    aspect-ratio: 2/3;
-    overflow: hidden;
-    background: var(--bg-surface);
-}
-
-.char-anime-poster img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    transition: transform 0.3s;
-    display: block;
-}
-
-.char-anime-item:hover .char-anime-poster img {
-    transform: scale(1.05);
-}
-
-.char-anime-info {
-    padding: 8px 10px;
-}
-
-.char-anime-title {
-    font-size: 0.82rem;
-    font-weight: 600;
-    color: var(--text-primary);
-    line-height: 1.3;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-}
-
-.char-anime-role {
-    font-size: 0.73rem;
-    color: var(--text-muted);
-    margin-top: 3px;
-}
-
-.char-anime-role.main { color: var(--accent); }
-
-/* Favorites badge */
-.favorites-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    background: rgba(245, 200, 66, 0.12);
-    color: var(--gold);
-    border: 1px solid rgba(245,200,66,0.25);
-    padding: 5px 14px;
-    border-radius: 20px;
-    font-size: 0.85rem;
-    font-weight: 600;
-}
-
 @media (max-width: 640px) {
-    .char-hero { flex-direction: column; align-items: center; text-align: center; }
-    .char-poster { width: 180px; }
-    .char-poster-placeholder { width: 180px; }
-    .char-name { font-size: 1.5rem; }
-    .char-stat-row { justify-content: center; }
-    .char-nicknames { justify-content: center; }
-    .char-anime-grid { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); }
-    .va-grid { grid-template-columns: 1fr; }
+  .ch-meta-row { font-size: .76rem; gap: 6px 12px; }
+  .va-grid { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 12px; }
+  .va-avatar-wrap { width: 64px; }
 }
 `;
