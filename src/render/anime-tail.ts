@@ -513,7 +513,12 @@ async function lazyLoadVideos() {
     const videosData = await videosRes.json();
     const themesData = await themesRes.json();
 
-    const trailers = videosData.trailers || [];
+    const sortByLabelNumber = (arr) => [...arr].sort((a, b) => {
+      const na = parseInt((a.label || '').match(/\d+/)?.[0] || '0', 10);
+      const nb = parseInt((b.label || '').match(/\d+/)?.[0] || '0', 10);
+      return na - nb;
+    });
+    const trailers = sortByLabelNumber(videosData.trailers || []);
     const musicVideos = videosData.musicVideos || [];
 
     const videoByKey = {};
