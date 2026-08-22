@@ -669,6 +669,14 @@ export class MalAPI {
     return { data: (jikan?.data ?? []).map((p: any) => ({ image: p.jpg?.image_url ?? null, thumbnail: p.jpg?.small_image_url ?? null })) };
   }
 
+  async getCharacterPictures(id: number): Promise<{ data: any[] }> {
+    const fromScraper = await this.scraperGet(`/api/mal/character/${id}/pictures`);
+    if (fromScraper) return fromScraper;
+
+    const jikan = await this.jikanGet(`https://api.jikan.moe/v4/characters/${id}/pictures`);
+    return { data: (jikan?.data ?? []).map((p: any) => ({ image: p.jpg?.image_url ?? null, thumbnail: p.jpg?.small_image_url ?? null })) };
+  }
+
   // Own scraper (see AniVault-Scraper's src/scrapers/mal.ts) — same base-URL
   // env var and stripping convention as api-scraper.ts / episode-air.ts.
   // Returns null (not throw) on any failure/missing config so callers fall
