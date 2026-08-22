@@ -259,15 +259,6 @@ animeRoutes.get('/anime', async (c) => {
     <div class="ep-grid" id="ep-grid-js" style="display:none;"></div>
   </div>
 
-  <div class="info-section" id="trailer-section">
-    <h2 class="info-section-title">Trailer</h2>
-    <div id="trailer-loading" style="text-align:center;padding:2.5rem 0;color:var(--text-muted);">
-      <div class="av-loader" style="margin:0 auto 1rem;transform:scale(.6);"></div>
-      Loading trailer…
-    </div>
-    <div id="trailer-js" style="display:none;"></div>
-  </div>
-
   <div class="modal-overlay" id="ep-modal">
     <div class="modal" style="max-width:620px;width:100%;">
       <div class="modal-header" style="padding:1rem 1.25rem;display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;">
@@ -310,13 +301,21 @@ animeRoutes.get('/anime', async (c) => {
     <div class="scroll-row" id="char-grid-js" style="display:none;"></div>
   </div>
 
-  <div class="info-section" id="music-section">
-    <h2 class="info-section-title">Music</h2>
-    <div id="music-loading" style="text-align:center;padding:2.5rem 0;color:var(--text-muted);">
+  <div class="info-section" id="video-section">
+    <h2 class="info-section-title">Trailer</h2>
+    <div id="video-loading" style="text-align:center;padding:2.5rem 0;color:var(--text-muted);">
       <div class="av-loader" style="margin:0 auto 1rem;transform:scale(.6);"></div>
-      Loading theme songs…
+      Loading videos…
     </div>
-    <div id="music-js" style="display:none;"></div>
+    <div id="video-js" style="display:none;">
+      <div id="video-player-wrap" style="position:relative;width:100%;aspect-ratio:16/9;border-radius:10px;overflow:hidden;background:var(--bg-base);margin-bottom:14px;"></div>
+      <div class="video-tabs" style="display:flex;gap:8px;margin-bottom:12px;">
+        <button class="btn btn-sm video-tab-btn" data-tab="trailers" onclick="switchVideoTab('trailers')">Trailers</button>
+        <button class="btn btn-sm video-tab-btn" data-tab="opening" onclick="switchVideoTab('opening')">Opening</button>
+        <button class="btn btn-sm video-tab-btn" data-tab="ending" onclick="switchVideoTab('ending')">Ending</button>
+      </div>
+      <div class="scroll-row" id="video-list-js"></div>
+    </div>
   </div>
 
   <div class="info-section" id="pictures-section">
