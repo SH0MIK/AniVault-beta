@@ -69,6 +69,7 @@ homeRoutes.get('/', async (c) => {
   // migration dance isn't needed here since watch_history already exists
   // with the right shape from the D1 migration.
   let watchHistory: WatchHistoryRow[] = [];
+  let episodeThumbOverrides: Record<string, string> = {};
   const currentUser = auth.check() ? await auth.getCurrentUser() : null;
   if (currentUser) {
     try {
@@ -79,6 +80,23 @@ homeRoutes.get('/', async (c) => {
       );
     } catch {
       watchHistory = [];
+    }
+    // Continue Watching thumbnails only ever come from an admin-saved
+    // override (episode_overrides.image_url, set via the Episode
+    // Thumbnails admin panel) -- never from an auto-fetched source. Batch
+    // look these up for the episodes on this page in one query.
+    if (watchHistory.length > 0) {
+      try {
+        const pairs = watchHistory.map(() => '(?, ?)').join(', ');
+        const params = watchHistory.flatMap((r) => [r.anime_id, r.episode_num]);
+        const rows = await db.fetchAll<{ anime_id: number; episode_num: number; image_url: string | null }>(
+          `SELECT anime_id, episode_num, image_url FROM episode_overrides WHERE (anime_id, episode_num) IN (${pairs})`,
+          params
+        );
+        for (const row of rows) {
+          if (row.image_url) episodeThumbOverrides[`${row.anime_id}:${row.episode_num}`] = row.image_url;
+        }
+      } catch { /* best-effort -- cards just show placeholders on failure */ }
     }
   }
 
@@ -205,7 +223,7 @@ ${heroSliderScript(heroPool.length)}
           </div>
         </div>
         <div class="scroll-row" id="row-history">
-          ${watchHistory.map((hRow) => renderContinueWatchingCard(hRow, siteUrl)).join('')}
+          ${watchHistory.map((hRow) => renderContinueWatchingCard(hRow, siteUrl, episodeThumbOverrides)).join('')}
         </div>
       </section>
       ${continueWatchingScript(siteUrl)}`;
@@ -263,9 +281,11 @@ ${heroSliderScript(heroPool.length)}
   return c.html(html);
 });
 
-function renderContinueWatchingCard(hRow: WatchHistoryRow, siteUrl: string): string {
+function renderContinueWatchingCard(hRow: WatchHistoryRow, siteUrl: string, episodeThumbOverrides: Record<string, string>): string {
   const watchUrl = `${siteUrl}/watch?anime=${hRow.anime_id}&ep=${hRow.episode_num}`;
-  const thumbSrc = hRow.ep_thumb || '';
+  // Only an admin-saved override shows here now -- the legacy ep_thumb
+  // column (populated by old client-side auto-fetch code) is ignored.
+  const thumbSrc = episodeThumbOverrides[`${hRow.anime_id}:${hRow.episode_num}`] || '';
   const epNum = hRow.episode_num;
   const animeTitle = h(hRow.anime_title || `Anime #${hRow.anime_id}`);
   const epTitle = hRow.ep_title ? h(hRow.ep_title) : `Episode ${epNum}`;

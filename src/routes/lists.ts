@@ -309,6 +309,24 @@ listRoutes.get('/history', async (c) => {
   );
   const totalPages = total ? Math.ceil(total / limit) : 1;
 
+  // History thumbnails only ever come from an admin-saved override
+  // (episode_overrides.image_url, set via the Episode Thumbnails admin
+  // panel) -- never from an auto-fetched source. Batch-lookup for this page.
+  const episodeThumbOverrides: Record<string, string> = {};
+  if (history.length > 0) {
+    try {
+      const pairs = history.map(() => '(?, ?)').join(', ');
+      const params = history.flatMap((r: any) => [r.anime_id, r.episode_num]);
+      const rows = await db.fetchAll<{ anime_id: number; episode_num: number; image_url: string | null }>(
+        `SELECT anime_id, episode_num, image_url FROM episode_overrides WHERE (anime_id, episode_num) IN (${pairs})`,
+        params
+      );
+      for (const row of rows) {
+        if (row.image_url) episodeThumbOverrides[`${row.anime_id}:${row.episode_num}`] = row.image_url;
+      }
+    } catch { /* best-effort -- cards just show placeholders on failure */ }
+  }
+
   const { unreadCount, layoutUser } = await commonLayoutData(db, auth);
   const __banner = await getBannerData(db);
   let html = renderHeader({ ...__banner, siteUrl, siteName: c.env.SITE_NAME, pageTitle: 'Watch History', currentPage: 'history', currentUser: layoutUser, unreadCount, requestUrl: c.req.url });
@@ -325,106 +343,16 @@ listRoutes.get('/history', async (c) => {
       <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
       <p>No watch history yet.</p>
       <a href="${siteUrl}/browse" style="color:var(--accent,#e00);font-weight:600;text-decoration:none;">Browse Anime →</a>
-    </div>` : history.map((hRow) => renderHistoryCard(hRow, siteUrl)).join('')}
+    </div>` : history.map((hRow) => renderHistoryCard(hRow, siteUrl, episodeThumbOverrides)).join('')}
   </div>
 
   ${totalPages > 1 ? renderHistPagination(page, totalPages) : ''}
 </div>
 
 <script>
-(function() {
-  var BEARER = 'eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiI5MGM2MTA0NGEzODMxYWM1NDQ4Y2ZmYzg5YWU4Nzk0YiIsIm5iZiI6MTc3ODM3NTk5NC45MTI5OTk5LCJzdWIiOiI2OWZmZGQzYWQ5ZTdhZDY1NTIxZTEyYTgiLCJzY29wZXMiOlsiYXBpX3JlYWQiXSwidmVyc2lvbiI6MX0.NeITU3u5e-9-_YaN_zrQQCUp4u8tKSXpZDOWlouxjps';
-  function tmdbFetch(url) {
-    return fetch(url, { headers: { Authorization: 'Bearer ' + BEARER } })
-      .then(function(r){ return r.ok ? r.json() : null; }).catch(function(){ return null; });
-  }
-  function applyThumb(img, url) {
-    var tmp = new Image();
-    tmp.onload = function(){
-      img.src = url;
-      fetch('${siteUrl}/api/watch_history.php', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'set_ep_info', anime_id: parseInt(img.dataset.animeId), episode_num: parseInt(img.dataset.ep), ep_thumb: url })
-      }).catch(function(){});
-    };
-    tmp.src = url;
-  }
-  var pending = {};
-  document.querySelectorAll('.hist-ep-img').forEach(function(img) {
-    var aid = img.dataset.animeId;
-    if (!pending[aid]) pending[aid] = [];
-    pending[aid].push(img);
-  });
-  Object.keys(pending).forEach(async function(aid) {
-    var imgs = pending[aid];
-    var tmdbId = null;
-    var extRes = await fetch('https://api.jikan.moe/v4/anime/' + aid + '/external')
-      .then(function(r){ return r.ok ? r.json() : null; }).catch(function(){ return null; });
-    if (extRes && extRes.data) {
-      var entry = extRes.data.find(function(e){ return e.url && e.url.includes('themoviedb.org/tv/'); });
-      if (entry) { var m = entry.url.match(/themoviedb\\.org\\/tv\\/(\\d+)/); if (m) tmdbId = m[1]; }
-    }
-    if (!tmdbId) {
-      var firstImg = imgs[0];
-      var card = firstImg.closest('.hist-card-wrap');
-      var title = card ? (card.querySelector('.hist-anime-title') || {}).textContent || '' : '';
-      if (title) {
-        var sr = await tmdbFetch('https://api.themoviedb.org/3/search/tv?query=' + encodeURIComponent(title.trim()));
-        if (sr && sr.results && sr.results.length) tmdbId = sr.results[0].id;
-      }
-    }
-    if (tmdbId) {
-      var season = await tmdbFetch('https://api.themoviedb.org/3/tv/' + tmdbId + '/season/1');
-      if (season && season.episodes) {
-        var tmdbMap = {};
-        season.episodes.forEach(function(ep){
-          if (ep.still_path && ep.episode_number) tmdbMap[ep.episode_number] = 'https://image.tmdb.org/t/p/w500' + ep.still_path;
-        });
-        var missing = [];
-        imgs.forEach(function(img){
-          var ep = parseInt(img.dataset.ep);
-          if (tmdbMap[ep]) applyThumb(img, tmdbMap[ep]); else missing.push(img);
-        });
-        imgs = missing;
-      }
-    }
-    if (!imgs.length) return;
-    try {
-      var res = await fetch('https://graphql.anilist.co', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          query: 'query ($malId: Int) { Media(idMal: $malId, type: ANIME) { streamingEpisodes { title thumbnail site } } }',
-          variables: { malId: parseInt(aid) }
-        })
-      });
-      var data = await res.json();
-      var eps  = data && data.data && data.data.Media && data.data.Media.streamingEpisodes || [];
-      var SKIP = ['netflix','amazon','prime','disney','hulu','apple'];
-      var PREF = ['crunchyroll','funimation','hidive','vrv'];
-      function siteScore(site) {
-        var s = (site||'').toLowerCase();
-        if (SKIP.some(function(x){ return s.indexOf(x)!==-1; })) return -1;
-        if (PREF.some(function(x){ return s.indexOf(x)!==-1; })) return 2;
-        return 1;
-      }
-      var raw = {};
-      eps.forEach(function(ep) {
-        var m = (ep.title||'').match(/Episode\\s+(\\d+)/i);
-        if (!m || !ep.thumbnail) return;
-        var n = parseInt(m[1]), s = siteScore(ep.site);
-        if (s < 0) return;
-        if (!raw[n] || s > raw[n].s) raw[n] = { url: ep.thumbnail, s: s };
-      });
-      imgs.forEach(function(img) {
-        var epNum = parseInt(img.dataset.ep);
-        var entry = raw[epNum];
-        if (!entry) return;
-        applyThumb(img, entry.url);
-      });
-    } catch(e) {}
-  });
-})();
-
+// History thumbnails are server-rendered straight from an admin-saved
+// override (episode_overrides.image_url) -- no client-side auto-fetching
+// from TMDB/AniList/Jikan happens here anymore.
 async function removeEntry(animeId, btn) {
   var wrap = btn.closest('.hist-card-wrap');
   if (!wrap) return;
@@ -464,12 +392,14 @@ async function clearAll(btn) {
   return c.html(html);
 });
 
-export function renderHistoryCard(hRow: any, siteUrl: string): string {
+export function renderHistoryCard(hRow: any, siteUrl: string, episodeThumbOverrides: Record<string, string> = {}): string {
   const watchUrl = `${siteUrl}/watch?anime=${hRow.anime_id}&ep=${hRow.episode_num}`;
   const epNum = hRow.episode_num;
   const animeTitle = h(hRow.anime_title || `Anime #${hRow.anime_id}`);
   const epTitle = hRow.ep_title ? h(hRow.ep_title) : `Episode ${epNum}`;
-  const thumb = hRow.ep_thumb ?? '';
+  // Only an admin-saved override shows here now -- the legacy ep_thumb
+  // column (populated by old client-side auto-fetch code) is ignored.
+  const thumb = episodeThumbOverrides[`${hRow.anime_id}:${epNum}`] || '';
   const cover = hRow.anime_image ?? '';
   const date = hRow.watched_at ? new Date(hRow.watched_at.replace(' ', 'T') + 'Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }) : '';
 

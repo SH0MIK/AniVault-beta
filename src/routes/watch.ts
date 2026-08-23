@@ -23,7 +23,6 @@ import { PLAYER_CSS } from '../render/player-css';
 import { playerScript } from '../render/player-script';
 import { playerBody } from '../render/player-body';
 import { getBannerData } from '../lib/settings';
-import { findEpisodeThumbnails, episodeThumbCacheKey } from '../lib/episode-thumb';
 import { AnimeTracker } from '../lib/tracker';
 import { EpisodeAir } from '../lib/episode-air';
 import { DubStatus, DUB_LANGUAGES } from '../lib/dub-status';
@@ -57,21 +56,25 @@ export function parseDurationSeconds(durationStr: string | null | undefined): nu
 /** Ports getAnilistIdFromMal(): looks up (and caches in D1) the AniList ID
  * for a MAL id via AniList's GraphQL API, since AniList's streaming-episode
  * thumbnails / episode data key off their own IDs, not MAL's. */
-async function getAnilistIdFromMal(db: Db, malId: number): Promise<number | null> {
+async function getAnilistIdFromMal(db: Db, malId: number, env: { SCRAPER_API_BASE?: string }): Promise<number | null> {
   const row = await db.fetchOne<{ anilist_id: number }>('SELECT anilist_id FROM anime_mal_map WHERE mal_id = ?', [malId]);
   if (row?.anilist_id) return row.anilist_id;
 
+  // Was a direct fetch to graphql.anilist.co — AniList blocks Cloudflare
+  // Workers' IP ranges outright, so this silently failed on every call and
+  // anime_mal_map has likely stayed empty since launch. Routed through the
+  // scraper now (Railway isn't in a blocked range), same pattern as the
+  // season data and episode thumbnails fixes.
+  const base = env.SCRAPER_API_BASE?.replace(/\/+$/, '').replace(/\/api$/i, '');
+  if (!base) return null;
   try {
-    const res = await fetch('https://graphql.anilist.co', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        query: 'query ($malId: Int) { Media(idMal: $malId, type: ANIME) { id } }',
-        variables: { malId },
-      }),
-    });
-    const data: any = await res.json();
-    const anilistId = data?.data?.Media?.id ?? 0;
+    const controller = new AbortController();
+    const t = setTimeout(() => controller.abort(), 8000);
+    const res = await fetch(`${base}/api/anilist/id?malId=${malId}`, { headers: { Accept: 'application/json' }, signal: controller.signal });
+    clearTimeout(t);
+    if (!res.ok) return null;
+    const json: any = await res.json().catch(() => null);
+    const anilistId = json?.anilistId ?? 0;
     if (anilistId) {
       await db.query(
         'INSERT INTO anime_mal_map (mal_id, anilist_id) VALUES (?, ?) ON CONFLICT(mal_id) DO UPDATE SET anilist_id = excluded.anilist_id',
@@ -79,35 +82,24 @@ async function getAnilistIdFromMal(db: Db, malId: number): Promise<number | null
       );
       return anilistId;
     }
-  } catch { /* AniList unreachable -- non-fatal, ID mapping just stays empty */ }
+  } catch { /* AniList/scraper unreachable -- non-fatal, ID mapping just stays empty */ }
   return null;
 }
 
 /** Episode-specific thumbnail for the watch page's og:image, so link previews
  * (Discord, Twitter, etc.) show the actual episode instead of the anime's
- * generic cover. Used to only check AniList's streamingEpisodes with a
- * fragile regex and no fallback -- that's why it so often lost to the
- * Continue Watching thumbnail, which runs the same multi-source chain
- * (Kitsu -> TMDB -> AniList -> Jikan -> AniSearch, see lib/episode-thumb.ts)
- * client-side in home-js.ts. This now runs that same chain server-side, with
- * a KV cache shared with the admin thumb-search tool so repeat views/shares
- * of the same episode don't re-hit every API. */
-async function getEpisodeOgImage(env: Env, animeTitle: string, malId: number, epNum: number, fallback: string): Promise<string> {
-  const cacheKey = episodeThumbCacheKey(malId, epNum);
+ * generic cover. Previously this ran a multi-source auto-fetch chain (Kitsu
+ * -> TMDB -> AniList -> Jikan -> AniSearch). That's been removed -- the only
+ * source now is a thumbnail an admin has explicitly saved for this episode
+ * via the Episode Thumbnails admin panel (episode_overrides.image_url). If
+ * none was saved, this just falls back to the anime's cover art. */
+async function getEpisodeOgImage(db: Db, malId: number, epNum: number, fallback: string): Promise<string> {
   try {
-    const cached = await env.API_CACHE.get(cacheKey, 'json') as { thumb?: string | null } | null;
-    if (cached?.thumb) return cached.thumb;
-  } catch { /* cache miss/error -- fall through to a fresh lookup */ }
-
-  try {
-    const { thumbs } = await findEpisodeThumbnails(env, animeTitle, epNum, malId, false);
-    const thumb = thumbs[0] ?? null;
-    if (thumb) {
-      try {
-        await env.API_CACHE.put(cacheKey, JSON.stringify({ success: true, thumb }), { expirationTtl: 3600 });
-      } catch { /* caching is best-effort */ }
-      return thumb;
-    }
+    const row = await db.fetchOne<{ image_url: string | null }>(
+      'SELECT image_url FROM episode_overrides WHERE anime_id = ? AND episode_num = ?',
+      [malId, epNum]
+    );
+    if (row?.image_url) return row.image_url;
   } catch { /* fall through to fallback image */ }
   return fallback;
 }
@@ -171,7 +163,7 @@ watchRoutes.get('/watch', async (c) => {
   const resumeParam = resumeT >= 30 ? resumeT : 0;
   const hasMegaplayFallback = !video;
 
-  const anilistId = await getAnilistIdFromMal(db, animeId);
+  const anilistId = await getAnilistIdFromMal(db, animeId, c.env);
 
   const allVideos = await db.fetchAll<{ episode_num: number; title: string | null }>(
     'SELECT episode_num, title FROM episode_videos WHERE anime_id=? AND is_active=1 ORDER BY episode_num ASC',
@@ -246,7 +238,7 @@ watchRoutes.get('/watch', async (c) => {
     ? { id: currentUser.id, username: currentUser.username, avatar_url: currentUser.avatar_url, role: currentUser.role }
     : null;
 
-  const ogImage = await getEpisodeOgImage(c.env, title, animeId, epNum, image);
+  const ogImage = await getEpisodeOgImage(db, animeId, epNum, image);
 
   const __banner = await getBannerData(db);
   let html = renderHeader({
