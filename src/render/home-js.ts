@@ -1,124 +1,12 @@
 export function continueWatchingScript(siteUrl: string): string {
   return `<script>
-  (function(){
-    var BEARER = 'eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiI5MGM2MTA0NGEzODMxYWM1NDQ4Y2ZmYzg5YWU4Nzk0YiIsIm5iZiI6MTc3ODM3NTk5NC45MTI5OTk5LCJzdWIiOiI2OWZmZGQzYWQ5ZTdhZDY1NTIxZTEyYTgiLCJzY29wZXMiOlsiYXBpX3JlYWQiXSwidmVyc2lvbiI6MX0.NeITU3u5e-9-_YaN_zrQQCUp4u8tKSXpZDOWlouxjps';
-
-    function tmdbFetch(url) {
-      return fetch(url, { headers: { Authorization: 'Bearer ' + BEARER } })
-        .then(function(r){ return r.ok ? r.json() : null; }).catch(function(){ return null; });
-    }
-
-    function applyThumb(img, url, epTitle) {
-      var tmp = new Image();
-      tmp.onload = function(){
-        img.src = url;
-        img.style.display = '';
-        img.style.position = '';
-        img.style.inset = '';
-        img.style.width = '';
-        img.style.height = '';
-        img.style.objectFit = '';
-        var phId = img.dataset.phId;
-        if (phId) { var ph = document.getElementById(phId); if (ph) ph.style.display = 'none'; }
-        var prev = img.previousElementSibling;
-        if (prev && prev.classList && prev.classList.contains('cw-placeholder')) prev.style.display = 'none';
-        var payload = { action:'set_ep_info', anime_id:parseInt(img.dataset.animeId), episode_num:parseInt(img.dataset.ep), ep_thumb:url };
-        if (epTitle) payload.ep_title = epTitle;
-        fetch('${siteUrl}/api/watch_history.php', {
-          method:'POST', headers:{'Content-Type':'application/json'},
-          body: JSON.stringify(payload)
-        }).catch(function(){});
-      };
-      tmp.src = url;
-    }
-
-    // ── Episode thumbnails: TMDB primary, AniList fallback ────────────────────
-    var pending = {};
-    document.querySelectorAll('.wh-ep-thumb').forEach(function(img) {
-      var rawSrc = img.getAttribute('src') || '';
-      if (rawSrc !== '') return; // already has a stored thumb
-      var aid = img.dataset.animeId;
-      if (!pending[aid]) pending[aid] = [];
-      pending[aid].push(img);
-    });
-
-    Object.keys(pending).forEach(async function(aid) {
-      var imgs = pending[aid];
-
-      // ── Step 1: Try TMDB ───────────────────────────────────────────────
-      var tmdbId = null;
-      var extRes = await fetch('https://api.jikan.moe/v4/anime/' + aid + '/external')
-        .then(function(r){ return r.ok ? r.json() : null; }).catch(function(){ return null; });
-      if (extRes && extRes.data) {
-        var entry = extRes.data.find(function(e){ return e.url && e.url.includes('themoviedb.org/tv/'); });
-        if (entry) { var m = entry.url.match(/themoviedb\\.org\\/tv\\/(\\d+)/); if (m) tmdbId = m[1]; }
-      }
-      if (!tmdbId) {
-        var title = imgs[0].dataset.animeTitle || '';
-        if (title) {
-          var sr = await tmdbFetch('https://api.themoviedb.org/3/search/tv?query=' + encodeURIComponent(title));
-          if (sr && sr.results && sr.results.length) tmdbId = sr.results[0].id;
-        }
-      }
-
-      if (tmdbId) {
-        var season = await tmdbFetch('https://api.themoviedb.org/3/tv/' + tmdbId + '/season/1');
-        if (season && season.episodes) {
-          var tmdbMap = {};
-          season.episodes.forEach(function(ep){
-            if (ep.still_path && ep.episode_number)
-              tmdbMap[ep.episode_number] = { thumb: 'https://image.tmdb.org/t/p/w500' + ep.still_path, title: ep.name || '' };
-          });
-          var missing = [];
-          imgs.forEach(function(img){
-            var ep = parseInt(img.dataset.ep);
-            if (tmdbMap[ep]) applyThumb(img, tmdbMap[ep].thumb, tmdbMap[ep].title);
-            else missing.push(img);
-          });
-          imgs = missing; // only fall through to AniList for episodes TMDB didn't cover
-        }
-      }
-
-      // ── Step 2: AniList fallback for any remaining images ────────────
-      if (!imgs.length) return;
-      try {
-        var res = await fetch('https://graphql.anilist.co', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            query: 'query ($malId: Int) { Media(idMal: $malId, type: ANIME) { streamingEpisodes { title thumbnail site } } }',
-            variables: { malId: parseInt(aid) }
-          })
-        });
-        var data = await res.json();
-        var eps  = data && data.data && data.data.Media && data.data.Media.streamingEpisodes || [];
-        var SKIP = ['netflix','amazon','prime','disney','hulu','apple'];
-        var PREF = ['crunchyroll','funimation','hidive','vrv'];
-        function siteScore(site) {
-          var s = (site||'').toLowerCase();
-          if (SKIP.some(function(x){ return s.indexOf(x)!==-1; })) return -1;
-          if (PREF.some(function(x){ return s.indexOf(x)!==-1; })) return 2;
-          return 1;
-        }
-        var rawMap = {};
-        eps.forEach(function(ep){
-          var match = (ep.title||'').match(/Episode\\s+(\\d+)/i);
-          if (!match || !ep.thumbnail) return;
-          var n = parseInt(match[1]), s = siteScore(ep.site);
-          if (s < 0) return;
-          if (!rawMap[n] || s > rawMap[n].score) rawMap[n] = { url: ep.thumbnail, score: s };
-        });
-        imgs.forEach(function(img){
-          var epNum = parseInt(img.dataset.ep);
-          if (rawMap[epNum]) applyThumb(img, rawMap[epNum].url, '');
-        });
-      } catch(e) {}
-    });
-  })();
-  </script>
-  </script>
-  <script>
   var __cwSiteUrl = '${siteUrl}';
+
+  // Episode thumbnails on this page are server-rendered straight from an
+  // admin-saved override (episode_overrides.image_url via the Episode
+  // Thumbnails admin panel) -- no client-side auto-fetching from
+  // TMDB/AniList/Jikan happens anymore. If an episode has no saved override,
+  // its card just shows the placeholder icon.
 
   async function removeFromHistory(animeId, btn) {
     var card = document.getElementById('whcard-' + animeId);
@@ -165,7 +53,7 @@ export function continueWatchingScript(siteUrl: string): string {
       var epNum     = nextItem.episode_num;
       var epTitle   = nextItem.ep_title  || ('Episode ' + epNum);
       var animeName = nextItem.anime_title || ('Anime #' + nextItem.anime_id);
-      var thumb     = nextItem.ep_thumb  || nextItem.anime_image || '';
+      var thumb     = nextItem.anime_image || '';
       var imgHtml   = thumb
         ? '<img src="'+thumb+'" class="wh-ep-thumb" data-anime-id="'+nextItem.anime_id+'" data-ep="'+epNum+'" loading="lazy" alt="">'
         : '<div class="cw-placeholder"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.15)" stroke-width="1.5"><polygon points="5 3 19 12 5 21 5 3"/></svg></div>';
@@ -204,27 +92,25 @@ export function continueWatchingScript(siteUrl: string): string {
 
       grid.appendChild(newCard);
 
-      // Trigger AniList thumb refresh for the new card if no thumb
-      if (!thumb && nextItem.anime_id) {
-        fetch('https://graphql.anilist.co', {
-          method:'POST', headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({
-            query: 'query ($malId: Int) { Media(idMal: $malId, type: ANIME) { streamingEpisodes { title thumbnail site } } }',
-            variables: { malId: parseInt(nextItem.anime_id) }
-          })
-        }).then(function(r){ return r.json(); }).then(function(data) {
-          var eps = data && data.data && data.data.Media && data.data.Media.streamingEpisodes || [];
-          var SKIP = ['netflix','amazon','prime','disney','hulu','apple'];
-          eps.forEach(function(ep) {
-            var m = (ep.title||'').match(/Episode\\s+(\\d+)/i);
-            if (!m || !ep.thumbnail) return;
-            if (SKIP.some(function(x){ return (ep.site||'').toLowerCase().indexOf(x)!==-1; })) return;
-            if (parseInt(m[1]) === parseInt(epNum)) {
-              var img = newCard.querySelector('.wh-ep-thumb');
-              if (img) img.src = ep.thumbnail;
-            }
-          });
-        }).catch(function(){});
+      // Pick up an admin-saved thumbnail override for this episode, if any
+      // (this card was built client-side so it didn't go through the
+      // server-side render that normally injects it).
+      if (nextItem.anime_id) {
+        fetch(__cwSiteUrl + '/api/episode_override.php?anime_id=' + nextItem.anime_id + '&ep=' + epNum)
+          .then(function(r){ return r.ok ? r.json() : null; })
+          .then(function(od) {
+            var url = od && od.override && od.override.image_url;
+            if (!url) return;
+            var img = newCard.querySelector('.wh-ep-thumb');
+            if (img) { img.src = url; return; }
+            var thumbWrap = newCard.querySelector('.cw-thumb');
+            if (!thumbWrap) return;
+            var newImg = document.createElement('img');
+            newImg.src = url; newImg.className = 'wh-ep-thumb'; newImg.loading = 'lazy'; newImg.alt = '';
+            thumbWrap.insertBefore(newImg, thumbWrap.firstChild);
+            var ph = thumbWrap.querySelector('.cw-placeholder');
+            if (ph) ph.style.display = 'none';
+          }).catch(function(){});
       }
 
       // Animate in

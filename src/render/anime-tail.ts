@@ -184,49 +184,19 @@ const __animeDubConfirmed = ${animeDubConfirmed ? "true" : "false"};
 const SVG_SUB = \`<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M7 10.5h2.5M11.5 10.5h5.5M7 14.5h5.5M15.5 14.5h1.5"/></svg>\`;
 const SVG_DUB = \`<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>\`;
 
-// ── Fetch AniList episode thumbnails via MAL id ─────────────────────────
+// ── Fetch admin-saved episode thumbnail overrides ─────────────────────────
+// Only source for episode-card thumbnails now: an admin has explicitly
+// saved one via the Episode Thumbnails admin panel (episode_overrides
+// table). The old AniList streamingEpisodes auto-fetch has been removed --
+// episodes without a saved override just fall back to the anime cover.
 async function fetchAniListThumbnails(malId) {
   try {
-    const res = await fetch('https://graphql.anilist.co', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        query: \`query ($malId: Int) {
-          Media(idMal: $malId, type: ANIME) {
-            streamingEpisodes { title thumbnail site }
-          }
-        }\`,
-        variables: { malId: parseInt(malId) }
-      })
-    });
+    const res = await fetch((window.__siteUrl || '') + '/api/episode_override.php?anime_id=' + malId + '&all=1');
+    if (!res.ok) return {};
     const data = await res.json();
-    const eps  = data?.data?.Media?.streamingEpisodes || [];
-
-    // Skip live-action/non-anime streaming sources (e.g. Netflix live action)
-    // Prefer anime-specific sites (Crunchyroll, Funimation, HIDIVE)
-    const SKIP  = ['netflix', 'amazon', 'prime', 'disney', 'hulu', 'apple'];
-    const PREF  = ['crunchyroll', 'funimation', 'hidive', 'vrv'];
-    function score(site) {
-      const s = (site || '').toLowerCase();
-      if (SKIP.some(x => s.includes(x))) return -1;
-      if (PREF.some(x => s.includes(x))) return 2;
-      return 1;
-    }
-
-    // Build map: keep highest-scored thumbnail per episode number
-    const thumbMap = {};
-    eps.forEach(ep => {
-      const match = (ep.title || '').match(/Episode\\s+(\\d+)/i);
-      if (!match || !ep.thumbnail) return;
-      const n = parseInt(match[1]);
-      const s = score(ep.site);
-      if (s < 0) return; // skip Netflix/live-action
-      if (!thumbMap[n] || s > thumbMap[n].score) thumbMap[n] = { url: ep.thumbnail, score: s };
-    });
-
-    // Return flat map: epNum -> url
+    const overrides = data?.overrides || [];
     const result = {};
-    Object.keys(thumbMap).forEach(n => { result[n] = thumbMap[n].url; });
+    overrides.forEach(o => { if (o.image_url) result[parseInt(o.episode_num)] = o.image_url; });
     return result;
   } catch(e) { return {}; }
 }
@@ -245,7 +215,7 @@ function buildEpCard(ep, animeId, cover, thumbMap) {
   const hasVid  = !!vidInfo;
   const hasDub  = __animeDubConfirmed || !!(vidInfo && vidInfo.dub);
 
-  // Use AniList thumbnail if available, fall back to anime cover
+  // Use admin-saved override thumbnail if available, fall back to anime cover
   const thumb = (thumbMap && thumbMap[parseInt(epNum)]) || cover;
 
   const div = document.createElement('a');
@@ -382,7 +352,7 @@ async function lazyLoadEpisodes() {
   const loading = document.getElementById('ep-grid-loading');
   if (!grid) return;
   try {
-    // Fetch Jikan episodes + AniList thumbnails in parallel
+    // Fetch Jikan episodes + admin-saved thumbnail overrides in parallel
     const [thumbMap, jikanEps] = await Promise.all([
       fetchAniListThumbnails(animeId),
       (async () => {
