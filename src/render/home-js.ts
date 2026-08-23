@@ -2,10 +2,10 @@ export function continueWatchingScript(siteUrl: string): string {
   return `<script>
   var __cwSiteUrl = '${siteUrl}';
 
-  // Episode thumbnails on this page are server-rendered straight from an
-  // admin-saved override (episode_overrides.image_url via the Episode
-  // Thumbnails admin panel) -- no client-side auto-fetching from
-  // TMDB/AniList/Jikan happens anymore. If an episode has no saved override,
+  // Episode thumbnails on this page are server-rendered: an admin-saved
+  // override (episode_overrides.image_url) wins if one exists, otherwise
+  // the server fetches it live from our own scraper API. No client-side
+  // fetching of any kind happens here. If an episode has no saved override,
   // its card just shows the placeholder icon.
 
   async function removeFromHistory(animeId, btn) {

@@ -184,11 +184,12 @@ const __animeDubConfirmed = ${animeDubConfirmed ? "true" : "false"};
 const SVG_SUB = \`<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M7 10.5h2.5M11.5 10.5h5.5M7 14.5h5.5M15.5 14.5h1.5"/></svg>\`;
 const SVG_DUB = \`<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>\`;
 
-// ── Fetch admin-saved episode thumbnail overrides ─────────────────────────
-// Only source for episode-card thumbnails now: an admin has explicitly
-// saved one via the Episode Thumbnails admin panel (episode_overrides
-// table). The old AniList streamingEpisodes auto-fetch has been removed --
-// episodes without a saved override just fall back to the anime cover.
+// ── Fetch episode thumbnails (admin overrides + scraper fallback) ─────────
+// An admin-saved override wins where one exists (episode_overrides table,
+// set via the Episode Thumbnails admin panel); episodes without one are
+// filled in server-side with a live lookup against our own scraper API (see
+// api-episode-override.ts's ?all=1 handler). Only falls back to the anime
+// cover if the scraper has nothing for that episode either.
 async function fetchAniListThumbnails(malId) {
   try {
     const res = await fetch((window.__siteUrl || '') + '/api/episode_override.php?anime_id=' + malId + '&all=1');

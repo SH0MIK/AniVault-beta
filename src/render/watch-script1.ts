@@ -729,9 +729,12 @@ function filterEps(q){
     if(!img)return;
     var t=new Image();t.onload=function(){img.src=url;img.classList.add('vis');};t.src=url;
   }
-  // Only source for episode-list thumbnails now is an admin-saved override
-  // (episode_overrides.image_url via the Episode Thumbnails admin panel).
-  // The old AniList streamingEpisodes auto-fetch has been removed.
+  // Episode-list thumbnails: an admin-saved override wins where one exists
+  // (episode_overrides.image_url via the Episode Thumbnails admin panel),
+  // otherwise the server fills it in with a live lookup against our own
+  // scraper API (see api-episode-override.ts's ?all=1 handler). Same
+  // response shape either way, so this client code doesn't need to care
+  // which source a given thumbnail came from.
   async function loadThumbs(){
     try{var ov=await fetch('/api/episode_override.php?anime_id='+animeId+'&all=1');if(ov.ok){var od=await ov.json();(od.overrides||[]).forEach(function(o){if(o.image_url)applyThumb(o.episode_num,o.image_url);});}}catch(e){}
   }
