@@ -42,6 +42,7 @@ import { legalRoutes } from './routes/legal';
 import { watchNowRoutes } from './routes/watch-now';
 import { legacyRedirectRoutes } from './routes/legacy-redirects';
 import { apiChatRoutes } from './routes/api-chat';
+import { healthRoutes } from './routes/health';
 import { handleScheduled } from './scheduled';
 
 // Env bindings + secrets (set secrets via `wrangler secret put NAME`, see wrangler.toml)
@@ -62,7 +63,11 @@ export interface Env {
   DISCORD_REDIRECT_URI?: string;
   DISCORD_SERVER_ID?: string;
   DISCORD_BOT_TOKEN?: string;
-  DISCORD_RELAY_URL?: string;
+  DISCORD_LOG_CHANNEL_ID?: string;
+  // Shared secret between this Worker and the AniVault Discord bot (Vercel).
+  // Used both ways: the bot doesn't call in with it anymore for notifications
+  // (the Worker posts those to Discord directly), but the bot DOES send it
+  // as `x-bot-secret` when hitting /api/discord/user-lookup for /user.
   BOT_SECRET?: string;
   MAL_CLIENT_ID?: string;
   MAL_CLIENT_SECRET?: string;
@@ -76,6 +81,7 @@ export interface Env {
 
 const app = new Hono<{ Bindings: Env }>();
 
+app.route('/', healthRoutes);
 app.route('/', authRoutes);
 app.route('/', homeRoutes);
 app.route('/', browseRoutes);
