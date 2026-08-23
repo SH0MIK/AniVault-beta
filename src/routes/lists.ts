@@ -13,6 +13,7 @@ import { renderAnimeCard, buildCardMetaMap, LANG_CODE } from '../lib/anime-card'
 import { renderHeader, renderFooter, CurrentUser } from '../render/layout';
 import { HISTORY_CSS } from '../render/history-css';
 import { getBannerData } from '../lib/settings';
+import { getEpisodeThumbnail } from '../lib/episode-thumb';
 
 export const listRoutes = new Hono<{ Bindings: Env }>();
 
@@ -309,9 +310,11 @@ listRoutes.get('/history', async (c) => {
   );
   const totalPages = total ? Math.ceil(total / limit) : 1;
 
-  // History thumbnails only ever come from an admin-saved override
+  // History thumbnails: an admin-saved override wins where one exists
   // (episode_overrides.image_url, set via the Episode Thumbnails admin
-  // panel) -- never from an auto-fetched source. Batch-lookup for this page.
+  // panel). Batch-lookup for this page, then live-fetch (via our scraper
+  // API, KV-cached) whatever's still missing -- capped at 24/page so this
+  // stays cheap. Cards fall back to a placeholder only if both miss.
   const episodeThumbOverrides: Record<string, string> = {};
   if (history.length > 0) {
     try {
@@ -324,7 +327,18 @@ listRoutes.get('/history', async (c) => {
       for (const row of rows) {
         if (row.image_url) episodeThumbOverrides[`${row.anime_id}:${row.episode_num}`] = row.image_url;
       }
-    } catch { /* best-effort -- cards just show placeholders on failure */ }
+    } catch { /* best-effort -- cards fall back to scraper/placeholder */ }
+
+    const missing = history.filter((r: any) => !episodeThumbOverrides[`${r.anime_id}:${r.episode_num}`]);
+    if (missing.length > 0) {
+      const scraped = await Promise.all(
+        missing.map((r: any) => getEpisodeThumbnail(c.env, c.env.API_CACHE, r.anime_id, r.episode_num))
+      );
+      missing.forEach((r: any, i: number) => {
+        const thumb = scraped[i];
+        if (thumb) episodeThumbOverrides[`${r.anime_id}:${r.episode_num}`] = thumb;
+      });
+    }
   }
 
   const { unreadCount, layoutUser } = await commonLayoutData(db, auth);

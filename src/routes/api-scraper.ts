@@ -17,6 +17,7 @@ import { h } from '../lib/helpers';
 import { MalAPI } from '../lib/mal-api';
 import { EpisodeAir } from '../lib/episode-air';
 import { AnimeTracker } from '../lib/tracker';
+import { getEpisodeThumbnail } from '../lib/episode-thumb';
 
 export const scraperRoutes = new Hono<{ Bindings: Env }>();
 
@@ -334,9 +335,9 @@ scraperRoutes.get('/api/embed.php', async (c) => {
     if (Number(ep.mal_id ?? 0) === epNum && ep.title && ep.title !== 'TBA') { epTitle = ep.title; break; }
   }
 
-  // Only source for this embed's thumbnail is an admin-saved override
-  // (episode_overrides.image_url, set via the Episode Thumbnails admin
-  // panel) -- the old AniList streamingEpisodes auto-fetch has been removed.
+  // Priority: an admin-saved override wins (episode_overrides.image_url,
+  // set via the Episode Thumbnails admin panel), then a live lookup against
+  // our own scraper API (cached in KV), then the anime cover as last resort.
   let ogImage = image;
   try {
     const db = new Db(c.env.DB);
@@ -344,7 +345,12 @@ scraperRoutes.get('/api/embed.php', async (c) => {
       'SELECT image_url FROM episode_overrides WHERE anime_id = ? AND episode_num = ?',
       [animeId, epNum]
     );
-    if (row?.image_url) ogImage = row.image_url;
+    if (row?.image_url) {
+      ogImage = row.image_url;
+    } else {
+      const scraped = await getEpisodeThumbnail(c.env, c.env.API_CACHE, animeId, epNum);
+      if (scraped) ogImage = scraped;
+    }
   } catch { /* fall back to anime cover */ }
 
   const watchUrl = `${siteUrl}/watch?anime=${animeId}&ep=${epNum}`;

@@ -19,6 +19,7 @@ import { CONTINUE_WATCHING_CSS } from '../render/home-css';
 import { continueWatchingScript, heroSliderScript, rowNavScript } from '../render/home-js';
 import type { NormalisedAnime } from '../lib/mal-api';
 import { getBannerData } from '../lib/settings';
+import { getEpisodeThumbnail } from '../lib/episode-thumb';
 
 export const homeRoutes = new Hono<{ Bindings: Env }>();
 
@@ -81,10 +82,13 @@ homeRoutes.get('/', async (c) => {
     } catch {
       watchHistory = [];
     }
-    // Continue Watching thumbnails only ever come from an admin-saved
-    // override (episode_overrides.image_url, set via the Episode
-    // Thumbnails admin panel) -- never from an auto-fetched source. Batch
-    // look these up for the episodes on this page in one query.
+    // Continue Watching thumbnails: an admin-saved override wins where one
+    // exists (episode_overrides.image_url, set via the Episode Thumbnails
+    // admin panel). Batch look these up for the episodes on this page in
+    // one query, then live-fetch (via our scraper API, KV-cached) whatever
+    // episodes are still missing one -- only a handful of cards per page
+    // load, so this stays cheap. Cards fall back to a placeholder only if
+    // both miss.
     if (watchHistory.length > 0) {
       try {
         const pairs = watchHistory.map(() => '(?, ?)').join(', ');
@@ -96,7 +100,18 @@ homeRoutes.get('/', async (c) => {
         for (const row of rows) {
           if (row.image_url) episodeThumbOverrides[`${row.anime_id}:${row.episode_num}`] = row.image_url;
         }
-      } catch { /* best-effort -- cards just show placeholders on failure */ }
+      } catch { /* best-effort -- cards fall back to scraper/placeholder */ }
+
+      const missing = watchHistory.filter((r) => !episodeThumbOverrides[`${r.anime_id}:${r.episode_num}`]);
+      if (missing.length > 0) {
+        const scraped = await Promise.all(
+          missing.map((r) => getEpisodeThumbnail(c.env, c.env.API_CACHE, r.anime_id, r.episode_num))
+        );
+        missing.forEach((r, i) => {
+          const thumb = scraped[i];
+          if (thumb) episodeThumbOverrides[`${r.anime_id}:${r.episode_num}`] = thumb;
+        });
+      }
     }
   }
 

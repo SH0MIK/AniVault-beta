@@ -26,6 +26,7 @@ import { getBannerData } from '../lib/settings';
 import { AnimeTracker } from '../lib/tracker';
 import { EpisodeAir } from '../lib/episode-air';
 import { DubStatus, DUB_LANGUAGES } from '../lib/dub-status';
+import { getEpisodeThumbnail } from '../lib/episode-thumb';
 
 export const watchRoutes = new Hono<{ Bindings: Env }>();
 
@@ -89,19 +90,26 @@ async function getAnilistIdFromMal(db: Db, malId: number, env: { SCRAPER_API_BAS
 /** Episode-specific thumbnail for the watch page's og:image, so link previews
  * (Discord, Twitter, etc.) show the actual episode instead of the anime's
  * generic cover. Previously this ran a multi-source auto-fetch chain (Kitsu
- * -> TMDB -> AniList -> Jikan -> AniSearch). That's been removed -- the only
- * source now is a thumbnail an admin has explicitly saved for this episode
- * via the Episode Thumbnails admin panel (episode_overrides.image_url). If
- * none was saved, this just falls back to the anime's cover art. */
-async function getEpisodeOgImage(db: Db, malId: number, epNum: number, fallback: string): Promise<string> {
+ * -> TMDB -> AniList -> Jikan -> AniSearch) directly against those APIs.
+ * Priority now: an admin-saved override wins (episode_overrides.image_url,
+ * set via the Episode Thumbnails admin panel) -- that lets an admin correct
+ * a bad auto-fetched thumbnail. Otherwise, fetch it live from our own
+ * scraper API (cached in KV, see getEpisodeThumbnail). Only falls back to
+ * the anime's cover art if neither of those has anything. */
+async function getEpisodeOgImage(
+  db: Db, kv: KVNamespace | undefined, env: { SCRAPER_API_BASE?: string },
+  malId: number, epNum: number, fallback: string
+): Promise<string> {
   try {
     const row = await db.fetchOne<{ image_url: string | null }>(
       'SELECT image_url FROM episode_overrides WHERE anime_id = ? AND episode_num = ?',
       [malId, epNum]
     );
     if (row?.image_url) return row.image_url;
-  } catch { /* fall through to fallback image */ }
-  return fallback;
+  } catch { /* fall through to scraper/fallback */ }
+
+  const scraped = await getEpisodeThumbnail(env, kv, malId, epNum);
+  return scraped ?? fallback;
 }
 
 watchRoutes.get('/watch', async (c) => {
@@ -238,7 +246,7 @@ watchRoutes.get('/watch', async (c) => {
     ? { id: currentUser.id, username: currentUser.username, avatar_url: currentUser.avatar_url, role: currentUser.role }
     : null;
 
-  const ogImage = await getEpisodeOgImage(db, animeId, epNum, image);
+  const ogImage = await getEpisodeOgImage(db, c.env.API_CACHE, c.env, animeId, epNum, image);
 
   const __banner = await getBannerData(db);
   let html = renderHeader({
