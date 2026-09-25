@@ -201,6 +201,42 @@ ${ogBlock}
   window.__dismissLoader=dismissLoader;
   window.__showLoader=showLoader;
 
+  // Warm the small set of navigation pages users are most likely to open next.
+  // Skip slow connections/data-saver and never prefetch heavy watch/player pages.
+  (function initNavPrefetch(){
+    var conn=navigator.connection||navigator.mozConnection||navigator.webkitConnection;
+    if(conn && (conn.saveData || /^(slow-2g|2g)$/i.test(conn.effectiveType||''))) return;
+    var seen={};
+    function canPrefetch(a){
+      if(!a || !a.href) return false;
+      if(a.dataset && a.dataset.noPrefetch!==undefined) return false;
+      var href=a.getAttribute('href')||'';
+      if(!href || href.charAt(0)==='#' || /^(javascript:|mailto:|tel:)/i.test(href)) return false;
+      try{
+        var u=new URL(href,location.href);
+        if(u.origin!==location.origin) return false;
+        if(u.pathname===location.pathname && u.search===location.search) return false;
+        if(/^\\/watch(?:$|\\?)/i.test(u.pathname) || /^\\/logout(?:$|\\?)/i.test(u.pathname)) return false;
+        return /^(\\/|\\/(?:browse|seasonal|top|schedule|anime|character|u|profile|mylist|favorites|discover|watch-now|lists))(?:$|[/?])/i.test(u.pathname);
+      }catch(_e){ return false; }
+    }
+    function warm(a){
+      if(!canPrefetch(a)) return;
+      var u=new URL(a.href,location.href).href;
+      if(seen[u]) return;
+      seen[u]=1;
+      var l=document.createElement('link');
+      l.rel='prefetch';
+      l.href=u;
+      l.as='document';
+      document.head.appendChild(l);
+    }
+    document.addEventListener('pointerover',function(e){
+      var a=e.target&&e.target.closest&&e.target.closest('a[href]');
+      if(a) warm(a);
+    },{passive:true});
+  })();
+
   function isRealNav(a){
     if(!a) return false;
     if(a.target && a.target!=='' && a.target!=='_self') return false;
