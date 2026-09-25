@@ -1,0 +1,34 @@
+name: One-time sync from AniVault main
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    if: contains(github.event.head_commit.message, 'Start one-time main sync')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout beta
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Sync latest AniVault main
+        run: |
+          rm -rf /tmp/anivault-main
+          git clone --depth 1 https://github.com/SH0MIK/AniVault.git /tmp/anivault-main
+          rsync -a --delete --exclude='.git' --exclude='.github' /tmp/anivault-main/ ./
+          rm -f .github/workflows/one-time-main-sync.yml
+
+      - name: Commit synced tree
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet && exit 0
+          git commit -m "Sync beta with latest AniVault main"
+          git push origin HEAD:main
