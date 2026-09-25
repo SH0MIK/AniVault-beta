@@ -130,8 +130,12 @@ homeRoutes.get('/', async (c) => {
     }
   }
 
-  const unreadCount = currentUser ? await Notification.unreadCount(db, currentUser.id) : 0;
-  const userStatuses = currentUser ? await getUserAnimeStatuses(db, currentUser.id) : {};
+  const [unreadCount, userStatuses] = currentUser
+    ? await Promise.all([
+        Notification.unreadCount(db, currentUser.id),
+        getUserAnimeStatuses(db, currentUser.id),
+      ])
+    : [0, {} as Record<number, string>];
 
   // Curated hero banners need their episode counts too (see hero-slide
   // section below) — fetch just the IDs now so they can go into the same
@@ -345,7 +349,7 @@ function renderContinueWatchingCard(hRow: WatchHistoryRow, siteUrl: string, epis
 <a class="cw-card" id="whcard-${hRow.anime_id}" href="${resumeUrl}">
   <div class="cw-thumb">
     ${!hasThumb ? `<div class="cw-placeholder" id="${phId}"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.15)" stroke-width="1.5"><polygon points="5 3 19 12 5 21 5 3"/></svg></div>` : ''}
-    <img src="${h(thumbSrc)}" alt="${epTitle}" loading="lazy" data-anime-id="${hRow.anime_id}" data-ep="${epNum}" data-anime-title="${animeTitle}" data-ph-id="${phId}" class="wh-ep-thumb" style="${!hasThumb ? 'position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:none;' : ''}">
+    <img src="${h(thumbSrc)}" alt="${epTitle}" loading="lazy" decoding="async" data-anime-id="${hRow.anime_id}" data-ep="${epNum}" data-anime-title="${animeTitle}" data-ph-id="${phId}" class="wh-ep-thumb" style="${!hasThumb ? 'position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:none;' : ''}">
     <div class="cw-play"><div class="cw-play-circle"><svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg></div></div>
     <div class="cw-ep-badge">Ep ${epNum}</div>
     ${timeLeft ? `<span class="cw-time-left">${h(timeLeft)}</span>` : ''}
@@ -439,7 +443,7 @@ function renderSidebarItem(a: NormalisedAnime, rank: number, siteUrl: string): s
   return `
 <a class="sidebar-item" href="${aurl}">
   <span class="sidebar-rank">#${rank}</span>
-  ${img ? `<img class="sidebar-thumb" src="${h(img)}" alt="${h(title)}" loading="lazy">` : ''}
+  ${img ? `<img class="sidebar-thumb" src="${h(img)}" alt="${h(title)}" loading="lazy" decoding="async">` : ''}
   <div>
     <div class="sidebar-title">${h(title)}</div>
     <div class="sidebar-meta">${a.score ? `${icon('star', 'icon-small')} ${a.score.toFixed(1)}` : ''}${a.type ? ` · ${h(a.type)}` : ''}</div>
