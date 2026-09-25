@@ -102,6 +102,204 @@ scraperRoutes.get('/api/anikoto_stream.php', async (c) => {
   return c.json({ error: 'No stream URL in response' });
 });
 
+// ── api/desidub_stream.php ──────────────────────────────────────────────────
+// DesiDubAnime (Hindi dub + regional multi-audio) source, added alongside
+// AnimeHeaven/Anikoto. Shares the same read-only-proxy reasoning as the two
+// above (no session writes). `audio` here is 'dub' (HLS/MP4-capable Hindi
+// dub servers — VidMoly, StreamRuby, GDMirrorBot mirrors, etc.) or 'raw'
+// (embed-only hosts the scraper couldn't resolve to a direct stream, e.g.
+// Abyss/CLOUD — surfaced on the watch page with an "Embed" badge and played
+// back in a plain iframe instead of the custom player).
+scraperRoutes.get('/api/desidub_stream.php', async (c) => {
+  const animeId = parseInt(c.req.query('anime') ?? '0', 10) || 0;
+  const epNum = parseInt(c.req.query('ep') ?? '0', 10) || 0;
+  const audio = ['dub', 'raw'].includes(c.req.query('audio') ?? '') ? c.req.query('audio')! : 'dub';
+  const server = (c.req.query('server') ?? '').trim();
+  if (!animeId || !epNum) return c.json({ error: 'Missing anime or ep' }, 400);
+  const base = getScraperBase(c.env);
+  if (!base) return c.json({ error: 'Scraper API not configured' }, 500);
+
+  let watchUrl = `${base}/api/watch/desidub/mal-${animeId}/${epNum}/${audio}`;
+  if (server !== '') watchUrl += `?server=${encodeURIComponent(server)}`;
+
+  const { ok, code, data } = await fetchJson(watchUrl, 20000);
+  if (!ok) return c.json({ error: data?.error ?? `DesiDub fetch failed HTTP ${code}` });
+
+  const servers = (data?.availableServers ?? []).map((s: string) => ({ name: s, type: audio }));
+  const m3u8 = data?.hlsProxyUrl ?? data?.m3u8 ?? null;
+  const mp4 = data?.mp4ProxyUrl ?? data?.mp4 ?? null;
+
+  if (data?.iframeOnly) return c.json({ servers, embedUrl: data.embedUrl ?? '', iframeOnly: true, server: data.server ?? server });
+  if (m3u8) return c.json({ servers, m3u8, server: data.server ?? server, subtitles: data.subtitles ?? [] });
+  if (mp4) return c.json({ servers, mp4, server: data.server ?? server });
+  return c.json({ error: 'No stream URL in response' });
+});
+
+// ── api/reanime_stream.php ───────────────────────────────────────────────
+// English-dub-only source. Same shape and reasoning as anikoto_stream.php
+// above — a single request lists servers (via /watch's availableServers,
+// no `server=` param) or resolves one specific server (with `server=`).
+scraperRoutes.get('/api/reanime_stream.php', async (c) => {
+  const animeId = parseInt(c.req.query('anime') ?? '0', 10) || 0;
+  const epNum = parseInt(c.req.query('ep') ?? '0', 10) || 0;
+  const audio = ['sub', 'dub', 'raw'].includes(c.req.query('audio') ?? '') ? c.req.query('audio')! : 'sub';
+  const server = (c.req.query('server') ?? '').trim();
+  if (!animeId || !epNum) return c.json({ error: 'Missing anime or ep' }, 400);
+  const base = getScraperBase(c.env);
+  if (!base) return c.json({ error: 'Scraper API not configured' }, 500);
+
+  let watchUrl = `${base}/api/watch/reanime/mal-${animeId}/${epNum}/${audio}`;
+  if (server !== '') watchUrl += `?server=${encodeURIComponent(server)}`;
+
+  const { ok, code, data } = await fetchJson(watchUrl, 20000);
+  if (!ok) return c.json({ error: data?.error ?? `ReAnime fetch failed HTTP ${code}` });
+
+  const servers = (data?.availableServers ?? []).map((s: string) => ({ name: s, type: audio }));
+  const m3u8 = data?.hlsProxyUrl ?? data?.m3u8 ?? null;
+  const mp4 = data?.mp4ProxyUrl ?? data?.mp4 ?? null;
+  const qualities = Array.isArray(data?.qualities) ? data.qualities : [];
+
+  if (data?.iframeOnly) return c.json({ servers, embedUrl: data.embedUrl ?? '', iframeOnly: true, server: data.server ?? server });
+  if (m3u8) return c.json({ servers, m3u8, server: data.server ?? server, subtitles: data.subtitles ?? [], qualities });
+  if (mp4) return c.json({ servers, mp4, server: data.server ?? server, qualities });
+  return c.json({ error: 'No stream URL in response' });
+});
+
+// ── api/animenosub_stream.php ────────────────────────────────────────────
+// English-dub-only source. Same shape as reanime_stream.php above.
+scraperRoutes.get('/api/animenosub_stream.php', async (c) => {
+  const animeId = parseInt(c.req.query('anime') ?? '0', 10) || 0;
+  const epNum = parseInt(c.req.query('ep') ?? '0', 10) || 0;
+  const audio = ['sub', 'dub', 'raw'].includes(c.req.query('audio') ?? '') ? c.req.query('audio')! : 'sub';
+  const server = (c.req.query('server') ?? '').trim();
+  if (!animeId || !epNum) return c.json({ error: 'Missing anime or ep' }, 400);
+  const base = getScraperBase(c.env);
+  if (!base) return c.json({ error: 'Scraper API not configured' }, 500);
+
+  let watchUrl = `${base}/api/watch/animenosub/mal-${animeId}/${epNum}/${audio}`;
+  if (server !== '') watchUrl += `?server=${encodeURIComponent(server)}`;
+
+  const { ok, code, data } = await fetchJson(watchUrl, 20000);
+  if (!ok) return c.json({ error: data?.error ?? `AnimeNoSub fetch failed HTTP ${code}` });
+
+  const servers = (data?.availableServers ?? []).map((s: string) => ({ name: s, type: audio }));
+  const m3u8 = data?.hlsProxyUrl ?? data?.m3u8 ?? null;
+  const mp4 = data?.mp4ProxyUrl ?? data?.mp4 ?? null;
+  const qualities = Array.isArray(data?.qualities) ? data.qualities : [];
+
+  if (data?.iframeOnly) return c.json({ servers, embedUrl: data.embedUrl ?? '', iframeOnly: true, server: data.server ?? server });
+  if (m3u8) return c.json({ servers, m3u8, server: data.server ?? server, subtitles: data.subtitles ?? [], qualities });
+  if (mp4) return c.json({ servers, mp4, server: data.server ?? server, qualities });
+  return c.json({ error: 'No stream URL in response' });
+});
+
+// ── api/aniwaves_stream.php ──────────────────────────────────────────────
+// English-dub-only source. Same shape as reanime_stream.php above.
+scraperRoutes.get('/api/aniwaves_stream.php', async (c) => {
+  const animeId = parseInt(c.req.query('anime') ?? '0', 10) || 0;
+  const epNum = parseInt(c.req.query('ep') ?? '0', 10) || 0;
+  const audio = ['sub', 'dub', 'raw'].includes(c.req.query('audio') ?? '') ? c.req.query('audio')! : 'sub';
+  const server = (c.req.query('server') ?? '').trim();
+  if (!animeId || !epNum) return c.json({ error: 'Missing anime or ep' }, 400);
+  const base = getScraperBase(c.env);
+  if (!base) return c.json({ error: 'Scraper API not configured' }, 500);
+
+  let watchUrl = `${base}/api/watch/aniwaves/mal-${animeId}/${epNum}/${audio}`;
+  if (server !== '') watchUrl += `?server=${encodeURIComponent(server)}`;
+
+  const { ok, code, data } = await fetchJson(watchUrl, 20000);
+  if (!ok) return c.json({ error: data?.error ?? `AniWaves fetch failed HTTP ${code}` });
+
+  const servers = (data?.availableServers ?? []).map((s: string) => ({ name: s, type: audio }));
+  const m3u8 = data?.hlsProxyUrl ?? data?.m3u8 ?? null;
+  const mp4 = data?.mp4ProxyUrl ?? data?.mp4 ?? null;
+  const qualities = Array.isArray(data?.qualities) ? data.qualities : [];
+
+  if (data?.iframeOnly) return c.json({ servers, embedUrl: data.embedUrl ?? '', iframeOnly: true, server: data.server ?? server });
+  if (m3u8) return c.json({ servers, m3u8, server: data.server ?? server, subtitles: data.subtitles ?? [], qualities });
+  if (mp4) return c.json({ servers, mp4, server: data.server ?? server, qualities });
+  return c.json({ error: 'No stream URL in response' });
+});
+
+// ── api/anizone_stream.php ───────────────────────────────────────────────
+// Multi-dub-language source (English, Hindi, Tamil, Telugu, Spanish,
+// German, Portuguese, French, Italian, Thai...) — unlike the three
+// English-only sources above, listing mode here calls the scraper's
+// /servers route instead of /watch, since only /servers exposes each
+// server's `lang` field (needed client-side to bucket into the Dub /
+// Hindi Dub / Multi Dub groups). Resolve mode forwards an optional `lang`
+// to disambiguate same-named servers across languages.
+scraperRoutes.get('/api/anizone_stream.php', async (c) => {
+  const animeId = parseInt(c.req.query('anime') ?? '0', 10) || 0;
+  const epNum = parseInt(c.req.query('ep') ?? '0', 10) || 0;
+  const audio = ['sub', 'dub', 'raw'].includes(c.req.query('audio') ?? '') ? c.req.query('audio')! : 'sub';
+  const server = (c.req.query('server') ?? '').trim();
+  const lang = (c.req.query('lang') ?? '').trim();
+  if (!animeId || !epNum) return c.json({ error: 'Missing anime or ep' }, 400);
+  const base = getScraperBase(c.env);
+  if (!base) return c.json({ error: 'Scraper API not configured' }, 500);
+
+  if (server === '') {
+    const listUrl = `${base}/api/servers?malId=${animeId}&ep=${epNum}&type=${audio}&source=anizone`;
+    const { ok, code, data } = await fetchJson(listUrl, 20000);
+    if (!ok) return c.json({ error: data?.error ?? `AniZone list failed HTTP ${code}` });
+    const servers = (data?.servers ?? []).map((s: any) => ({ name: s.name, type: s.type, lang: String(s.lang ?? '').toLowerCase() }));
+    return c.json({ servers });
+  }
+
+  let watchUrl = `${base}/api/watch/anizone/mal-${animeId}/${epNum}/${audio}?server=${encodeURIComponent(server)}`;
+  if (lang !== '') watchUrl += `&lang=${encodeURIComponent(lang)}`;
+
+  const { ok, code, data } = await fetchJson(watchUrl, 20000);
+  if (!ok) return c.json({ error: data?.error ?? `AniZone fetch failed HTTP ${code}` });
+
+  if (data?.iframeOnly) return c.json({ embedUrl: data.embedUrl ?? '', iframeOnly: true, server: data.server ?? server });
+  const m3u8 = data?.hlsProxyUrl ?? data?.m3u8 ?? null;
+  const mp4 = data?.mp4ProxyUrl ?? data?.mp4 ?? null;
+  const qualities = Array.isArray(data?.qualities) ? data.qualities : [];
+
+  if (m3u8) return c.json({ m3u8, server: data.server ?? server, subtitles: data.subtitles ?? [], qualities });
+  if (mp4) return c.json({ mp4, server: data.server ?? server, qualities });
+  return c.json({ error: 'No stream URL in response' });
+});
+
+// ── api/watchanimeworld_stream.php ───────────────────────────────────────
+// Multi-dub-language source (English, Hindi, Tamil, Telugu...). Same shape
+// and reasoning as anizone_stream.php above.
+scraperRoutes.get('/api/watchanimeworld_stream.php', async (c) => {
+  const animeId = parseInt(c.req.query('anime') ?? '0', 10) || 0;
+  const epNum = parseInt(c.req.query('ep') ?? '0', 10) || 0;
+  const audio = ['sub', 'dub', 'raw'].includes(c.req.query('audio') ?? '') ? c.req.query('audio')! : 'sub';
+  const server = (c.req.query('server') ?? '').trim();
+  const lang = (c.req.query('lang') ?? '').trim();
+  if (!animeId || !epNum) return c.json({ error: 'Missing anime or ep' }, 400);
+  const base = getScraperBase(c.env);
+  if (!base) return c.json({ error: 'Scraper API not configured' }, 500);
+
+  if (server === '') {
+    const listUrl = `${base}/api/servers?malId=${animeId}&ep=${epNum}&type=${audio}&source=watchanimeworld`;
+    const { ok, code, data } = await fetchJson(listUrl, 20000);
+    if (!ok) return c.json({ error: data?.error ?? `WatchAnimeWorld list failed HTTP ${code}` });
+    const servers = (data?.servers ?? []).map((s: any) => ({ name: s.name, type: s.type, lang: String(s.lang ?? '').toLowerCase() }));
+    return c.json({ servers });
+  }
+
+  let watchUrl = `${base}/api/watch/watchanimeworld/mal-${animeId}/${epNum}/${audio}?server=${encodeURIComponent(server)}`;
+  if (lang !== '') watchUrl += `&lang=${encodeURIComponent(lang)}`;
+
+  const { ok, code, data } = await fetchJson(watchUrl, 20000);
+  if (!ok) return c.json({ error: data?.error ?? `WatchAnimeWorld fetch failed HTTP ${code}` });
+
+  if (data?.iframeOnly) return c.json({ embedUrl: data.embedUrl ?? '', iframeOnly: true, server: data.server ?? server });
+  const m3u8 = data?.hlsProxyUrl ?? data?.m3u8 ?? null;
+  const mp4 = data?.mp4ProxyUrl ?? data?.mp4 ?? null;
+  const qualities = Array.isArray(data?.qualities) ? data.qualities : [];
+
+  if (m3u8) return c.json({ m3u8, server: data.server ?? server, subtitles: data.subtitles ?? [], qualities });
+  if (mp4) return c.json({ mp4, server: data.server ?? server, qualities });
+  return c.json({ error: 'No stream URL in response' });
+});
+
 // ── api/server_check.php ───────────────────────────────────────────────────
 const ERROR_PHRASES = ['episode not found', 'video not found', '404 not found', 'page not found', 'no video found', 'no sources found', 'no servers found', 'this episode is not available', 'something went wrong'];
 
@@ -337,7 +535,7 @@ scraperRoutes.get('/api/embed.php', async (c) => {
 
   // Priority: an admin-saved override wins (episode_overrides.image_url,
   // set via the Episode Thumbnails admin panel), then a live lookup against
-  // our own scraper API (cached in KV), then the anime cover as last resort.
+  // our own scraper API (cached in D1), then the anime cover as last resort.
   let ogImage = image;
   try {
     const db = new Db(c.env.DB);
@@ -348,7 +546,7 @@ scraperRoutes.get('/api/embed.php', async (c) => {
     if (row?.image_url) {
       ogImage = row.image_url;
     } else {
-      const scraped = await getEpisodeThumbnail(c.env, c.env.API_CACHE, animeId, epNum);
+      const scraped = await getEpisodeThumbnail(c.env, db, animeId, epNum, animeRes.data?.data?.status);
       if (scraped) ogImage = scraped;
     }
   } catch { /* fall back to anime cover */ }
@@ -432,11 +630,24 @@ scraperRoutes.get('/api/anime_info.php', async (c) => {
 // anime.ts renders instantly off the cache (see EpisodeAir.getCachedAny)
 // and calls this from the client, in the background, only when that cache
 // was missing or stale, so a slow scraper response never blocks the page.
+// In practice anime.ts only ever triggers this for a currently-airing show
+// (see epsNeedsRefresh there) — finished/not-yet-aired shows already have
+// their final count straight from MAL and never need it. The status check
+// below is just a second line of defense (direct hits, stale clients, etc.)
+// so a finished/upcoming show can never end up writing to the cache either.
 scraperRoutes.get('/api/ep_count.php', async (c) => {
   const animeId = parseInt(c.req.query('anime_id') ?? '0', 10) || 0;
   if (!animeId) return c.json({ error: 'Missing anime_id' }, 400);
   const db = new Db(c.env.DB);
   const mal = new MalAPI(c.env, c.env.API_CACHE, db);
+
+  const animeRes = await mal.getAnime(animeId).catch(() => null);
+  const status = animeRes?.data?.status;
+  if (status && status !== 'Currently Airing') {
+    const eps = animeRes?.data?.episodes ?? 0;
+    return c.json({ aired: eps || null, total: eps || null });
+  }
+
   const airedInfo = await EpisodeAir.get(db, c.env, mal, animeId);
   return c.json({ aired: airedInfo?.aired ?? null, total: airedInfo?.total ?? null });
 });

@@ -11,8 +11,66 @@ const DUB_REFRESH_INTERVAL_MS = 20 * 60 * 60 * 1000; // ~daily, with slack
 
 const ANILIST_SEASON_REFRESH_KV_KEY = 'anilist_season_last_refresh';
 const ANILIST_SEASON_REFRESH_INTERVAL_MS = 55 * 60 * 1000; // just under the season cache's own 2h KV TTL, with slack for a missed tick
-const ANILIST_BANNERS_REFRESH_KV_KEY = 'anilist_banners_last_refresh';
-const ANILIST_BANNERS_REFRESH_INTERVAL_MS = 20 * 60 * 60 * 1000; // ~daily — the top-popularity list barely moves day to day
+
+const ART_CACHE_WARM_INTERVAL_MS = 12 * 60 * 1000; // just under the new 15-min cron, with slack for a missed tick
+const ART_CACHE_WARM_BATCH = 20; // stays well inside a single invocation's subrequest budget alongside everything else in this file
+const ART_CACHE_WARM_KV_KEY = 'art_cache_last_warm';
+
+// Home/grid rows (top, upcoming, watch-now, curated hero banners) resolve
+// art cache-only now (see isList/liveFetch in mal-api.ts) so a cold cache
+// entry just shows blank instead of live-fetching from the scraper and
+// risking the Worker's per-request subrequest limit (see the 500 this
+// fixed — the whole home page went down after a cache-key rename cleared
+// every art cache entry at once). This warms those same entries in the
+// background instead, a small batch at a time, so blank posters fill in
+// within a tick or two of a cache miss rather than staying blank forever.
+// Exported so the admin panel's "Warm Art Cache Now" button (see
+// src/routes/admin/anime-images.ts) can trigger this on demand instead of
+// waiting on the next cron tick — useful right after a "Reset All Art
+// Cache" action, which otherwise leaves the home grid blank until cron
+// catches up in batches.
+export async function warmArtCache(db: Db, mal: MalAPI, env: Env, limit: number): Promise<number> {
+  const ids = new Set<number>();
+
+  try {
+    const [seasonal, top, upcoming] = await Promise.all([
+      mal.getAniListSeasonNow(),
+      mal.getTopAnime('bypopularity', 1),
+      mal.getSeasonUpcoming(),
+    ]);
+    for (const a of (seasonal.data ?? []).slice(0, 12)) if (a.mal_id) ids.add(a.mal_id);
+    for (const a of (top.data ?? []).slice(0, 12)) if (a.mal_id) ids.add(a.mal_id);
+    for (const a of (upcoming.data ?? []).slice(0, 8)) if (a.mal_id) ids.add(a.mal_id);
+  } catch (err: any) {
+    console.warn('[scheduled] art cache warm: failed to gather seasonal/top/upcoming ids (continuing):', String(err?.message ?? err));
+  }
+
+  try {
+    const rows = await db.fetchAll<{ anime_id: number }>(
+      'SELECT DISTINCT anime_id FROM episode_videos WHERE is_active = 1 ORDER BY updated_at DESC LIMIT 24'
+    );
+    for (const r of rows) ids.add(r.anime_id);
+  } catch (err: any) {
+    console.warn('[scheduled] art cache warm: failed to gather watch-now ids (continuing):', String(err?.message ?? err));
+  }
+
+  try {
+    const rows = await db.fetchAll<{ anime_id: number }>('SELECT anime_id FROM home_hero_banners');
+    for (const r of rows) ids.add(r.anime_id);
+  } catch (err: any) {
+    console.warn('[scheduled] art cache warm: failed to gather hero banner ids (continuing):', String(err?.message ?? err));
+  }
+
+  let warmed = 0;
+  for (const id of ids) {
+    if (warmed >= limit) break;
+    const cached = await env.API_CACHE.get(`scraper_art_${id}`);
+    if (cached) continue; // already warm -- doesn't count against the batch limit
+    await mal.getScraperArt(id, true).catch(() => {});
+    warmed++;
+  }
+  return warmed;
+}
 
 // Runs on Cloudflare Cron Triggers (see [triggers] in wrangler.toml) —
 // hourly "0 * * * *" and daily "0 3 * * *" both point at this handler.
@@ -66,32 +124,31 @@ export async function handleScheduled(env: Env, cron?: string): Promise<void> {
     }
   }
 
-  const lastBannersRefreshRaw = await env.API_CACHE.get(ANILIST_BANNERS_REFRESH_KV_KEY);
-  const lastBannersRefresh = lastBannersRefreshRaw ? parseInt(lastBannersRefreshRaw, 10) : 0;
-  const bannersRefreshDue = !lastBannersRefresh || (Date.now() - lastBannersRefresh) > ANILIST_BANNERS_REFRESH_INTERVAL_MS;
-
-  if (bannersRefreshDue) {
-    const ok = await mal.refreshAniListTopBanners();
-    console.log(`[scheduled] anilist top-banners refresh (cron=${cron ?? 'n/a'}): ${ok ? 'ok' : 'FAILED'}`);
-    if (ok) {
-      try {
-        await env.API_CACHE.put(ANILIST_BANNERS_REFRESH_KV_KEY, String(Date.now()));
-      } catch (err: any) {
-        console.warn('[scheduled] failed to write anilist banners refresh timestamp (continuing):', String(err?.message ?? err));
-      }
-    }
-  }
-
   const refreshed = await EpisodeAir.refreshStale(db, env, mal, 20);
   console.log(`[scheduled] episode_air_cache (cron=${cron ?? 'n/a'}): refreshed ${refreshed} stale entr${refreshed === 1 ? 'y' : 'ies'}`);
+
+  const lastArtWarmRaw = await env.API_CACHE.get(ART_CACHE_WARM_KV_KEY);
+  const lastArtWarm = lastArtWarmRaw ? parseInt(lastArtWarmRaw, 10) : 0;
+  const artWarmDue = !lastArtWarm || (Date.now() - lastArtWarm) > ART_CACHE_WARM_INTERVAL_MS;
+
+  if (artWarmDue) {
+    const warmed = await warmArtCache(db, mal, env, ART_CACHE_WARM_BATCH);
+    console.log(`[scheduled] art cache warm (cron=${cron ?? 'n/a'}): warmed ${warmed} entr${warmed === 1 ? 'y' : 'ies'}`);
+    try {
+      await env.API_CACHE.put(ART_CACHE_WARM_KV_KEY, String(Date.now()));
+    } catch (err: any) {
+      console.warn('[scheduled] failed to write art cache warm timestamp (continuing):', String(err?.message ?? err));
+    }
+  }
 
   // Currently-airing scanner — separate from the stale-cache sweep above.
   // That sweep just chases whatever's oldest (airing or not); this targets
   // the current season specifically, gated by the toggle/interval set on
   // admin/episode_scanner.php.
   const settings = new Settings(db);
-  const scannerEnabled = (await settings.get('episode_scanner_auto_enabled', '1')) === '1';
-  if (scannerEnabled) {
+  const scannerOn = (await settings.get('episode_scanner_enabled', '1')) === '1';
+  const autoRunEnabled = (await settings.get('episode_scanner_auto_enabled', '1')) === '1';
+  if (scannerOn && autoRunEnabled) {
     const intervalMinutes = parseInt((await settings.get('episode_scanner_interval_minutes', '60')) ?? '60', 10) || 60;
     const lastRunRaw = await env.API_CACHE.get(SCANNER_LAST_RUN_KV_KEY);
     const lastRun = lastRunRaw ? parseInt(lastRunRaw, 10) : 0;

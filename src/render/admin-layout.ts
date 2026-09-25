@@ -66,6 +66,7 @@ ${o.impersonating ? `
     <a href="videos.php" class="${active('videos')}">${icon('play', 'icon-small')} Episode Videos</a>
     <a href="stream_cache.php" class="${active('stream_cache')}">${icon('database', 'icon-small')} Stream Cache</a>
     <a href="ep_thumbnails.php" class="${active('ep_thumbnails')}">${icon('camera', 'icon-small')} EP Thumbnails</a>
+    <a href="episode_cache_import.php" class="${active('episode_cache_import')}">${icon('database', 'icon-small')} Episode Cache Import</a>
     <a href="anime_images.php" class="${active('anime_images')}">${icon('upload', 'icon-small')} Anime Images</a>
     <a href="anime_banners.php" class="${active('anime_banners')}">${icon('camera', 'icon-small')} Anime Banners & Logos</a>
     <a href="home_banners.php" class="${active('home_banners')}">${icon('layout', 'icon-small')} Homepage Hero</a>
@@ -74,6 +75,8 @@ ${o.impersonating ? `
     <div class="nav-group">System</div>
     <a href="episode_scanner.php" class="${active('episode_scanner')}">${icon('airing', 'icon-small')} Episode Scanner</a>
     <a href="cache.php" class="${active('cache')}">${icon('database', 'icon-small')} Clear Cache</a>
+    <a href="turbovid_test.php" class="${active('turbovid_test')}">${icon('play', 'icon-small')} Turbovid Tester (CF)</a>
+    <a href="turbovid_servers.php" class="${active('turbovid_servers')}">${icon('play', 'icon-small')} TurboVid Servers</a>
     <div style="margin-top:auto;padding:1rem 1.5rem;border-top:1px solid var(--border);">
       <a href="${o.siteUrl}/">${icon('arrow-left', 'icon-small')} Back to Site</a>
     </div>

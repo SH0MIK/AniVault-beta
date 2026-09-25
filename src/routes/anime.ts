@@ -17,7 +17,7 @@ import { renderHeader, renderFooter, CurrentUser } from '../render/layout';
 import { animeTailScript } from '../render/anime-tail';
 import { getBannerData } from '../lib/settings';
 import { rowNavScript } from '../render/home-js';
-import { EpisodeAir } from '../lib/episode-air';
+import { EpisodeAir, AiredInfo } from '../lib/episode-air';
 import { DubStatus } from '../lib/dub-status';
 
 export const animeRoutes = new Hono<{ Bindings: Env }>();
@@ -74,47 +74,46 @@ animeRoutes.get('/anime', async (c) => {
   const jpTitle = anime.title_japanese || null;
   const image = anime.images?.jpg?.large_image_url ?? '';
 
-  // MAL's own episode count only firms up once a show finishes airing —
-  // prefer the Jikan-derived "aired so far" count when we have it. This is
-  // the one page where the extra round trip on a cache miss is worth it
-  // (single anime, not a grid), so it's a live refresh-if-stale rather
-  // than a cache-only lookup.
-  const { info: airedInfo, isFresh: airedInfoFresh } = await EpisodeAir.getCachedAny(db, id);
-  const totalEps = airedInfo?.total ?? anime.episodes ?? 0;
-  const airedSoFar = airedInfo?.aired ?? null;
+  // MAL's own episode count only firms up once a show finishes airing, so
+  // the scraper/Jikan-backed episode_air_cache exists purely to correct it
+  // *while a show is still airing*. Finished and not-yet-aired shows skip
+  // that cache entirely and read anime.episodes straight off the mal.getAnime()
+  // call above — that's the "direct from MAL" number and it's already correct
+  // for those two statuses, so there's nothing to cache or refresh.
+  const isAiring = anime.status === 'Currently Airing';
+  let airedInfo: AiredInfo | null = null;
+  let airedInfoFresh = true;
+  if (isAiring) {
+    // This is the one page where the extra round trip on a cache miss is
+    // worth it (single anime, not a grid), so it's a live refresh-if-stale
+    // rather than a cache-only lookup.
+    ({ info: airedInfo, isFresh: airedInfoFresh } = await EpisodeAir.getCachedAny(db, id));
+  }
+  const totalEps = isAiring ? (airedInfo?.total ?? anime.episodes ?? 0) : (anime.episodes ?? 0);
+  const airedSoFar = isAiring ? (airedInfo?.aired ?? null) : null;
   // Nothing cached (or nothing from MAL) to show at all -- render a
   // skeleton for the ep count and fill it in client-side once
   // /api/ep_count.php resolves, instead of blocking this page on the
   // scraper API. If we DO have a number (even a stale one), show it
-  // immediately and just quietly refresh it in the background.
+  // immediately and just quietly refresh it in the background. Only
+  // airing shows ever need this refresh — finished/upcoming already have
+  // their final number straight from MAL above.
   const epsUnknown = totalEps === 0;
-  const epsNeedsRefresh = !airedInfoFresh;
+  const epsNeedsRefresh = isAiring && !airedInfoFresh;
   const dubbedLangs = await DubStatus.getFor(db, id);
 
-  // Same TMDB clear-logo lookup the home hero uses, plus a simple sub/dub
-  // yes-no readout for the meta row -- replaces the old "Watch on" list of
-  // every streaming provider with just the two badges that actually matter.
-  const titleLogo = await mal.getTitleLogo(id, title).catch(() => '');
+  // Logo + cover both come pre-resolved on `anime` itself -- getAnime()
+  // already ran them through getAnimeArt() (scraper poster/cover/logo,
+  // blended with your admin-saved overrides per the Image Source Priority
+  // setting on admin/anime_images.php). Plus a simple sub/dub yes-no
+  // readout for the meta row -- replaces the old "Watch on" list of every
+  // streaming provider with just the two badges that actually matter.
+  const titleLogo = anime.logo_image ?? '';
   const hasSub = videoEpRows.length > 0;
   const hasDub = animeDubConfirmed || dubbedLangs.length > 0 || Object.values(videoEpSet).some((v) => v.dub);
 
-  // Backdrop priority: your own admin-saved banner (admin/anime_banners.php)
-  // > TMDB's textless backdrop (shares the same cached /images lookup as
-  // the logo above, so this is a free KV read, not a second API call)
-  // > AniList's real banner from the current-season cache (currently
-  // airing titles only) > AniList's real banner from the all-time top-200
-  // cache (covers older/finished popular titles) > blurred poster.
-  const bannerInfo = await mal.getLocalAnimeBannerInfo(id);
-  let tmdbBackdrop = '';
-  let aniListBanner = '';
-  if (!bannerInfo?.image_url) {
-    tmdbBackdrop = await mal.getTitleBackdrop(id, title).catch(() => '');
-    if (!tmdbBackdrop) {
-      aniListBanner = (await mal.getAniListBannerFromSeasonCache(id)) || (await mal.getAniListTopBanner(id));
-    }
-  }
-  const backdrop = bannerInfo?.image_url || tmdbBackdrop || aniListBanner || image;
-  const hasBanner = !!(bannerInfo?.image_url || tmdbBackdrop || aniListBanner);
+  const backdrop = anime.cover_image || image;
+  const hasBanner = !!anime.cover_image;
 
   const currentUser = auth.check() ? await auth.getCurrentUser() : null;
   let userEntry: any = null;
@@ -145,7 +144,6 @@ animeRoutes.get('/anime', async (c) => {
 <section class="ih-hero${hasBanner ? '' : ' ih-hero-no-banner'}">
   <div class="ih-bg${hasBanner ? '' : ' ih-bg-fallback'}" style="background-image:url('${h(backdrop)}')"></div>
   <div class="ih-bg-scrim"></div>
-  ${titleLogo ? `<img class="ih-logo-bg" src="${h(titleLogo)}" alt="" aria-hidden="true">` : ''}
 
   <div class="container ih-inner">
     <div class="ih-thumb">
@@ -355,6 +353,7 @@ ${rowNavScript()}
 <script>window.__siteUrl   = ${JSON.stringify(siteUrl)};</script>
 <script>window.__totalEps  = ${JSON.stringify(totalEps)};</script>
 <script>window.__animeCover = ${JSON.stringify(image)};</script>
+<script>window.__animeBanner = ${JSON.stringify(backdrop)};</script>
 <script>window.__tmdbKey    = ${JSON.stringify(c.env.TMDB_API_KEY ?? '')};</script>
 <script>window.__videoEps  = ${JSON.stringify(videoEpSet)};</script>
 ${epsNeedsRefresh ? epsLiveScript(id) : ''}

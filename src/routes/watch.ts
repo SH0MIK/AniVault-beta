@@ -15,6 +15,7 @@ import { Auth, AUTO_SESSION_LIFETIME_SECONDS } from '../lib/auth';
 import { MalAPI, NormalisedAnime } from '../lib/mal-api';
 import { Notification } from '../lib/notification';
 import { h, getAnimeTitle } from '../lib/helpers';
+import { icon } from '../lib/icons';
 import { renderHeader, renderFooter, CurrentUser } from '../render/layout';
 import { WATCH_CSS } from '../render/watch-css';
 import { watchScript1 } from '../render/watch-script1';
@@ -24,9 +25,12 @@ import { playerScript } from '../render/player-script';
 import { playerBody } from '../render/player-body';
 import { getBannerData } from '../lib/settings';
 import { AnimeTracker } from '../lib/tracker';
-import { EpisodeAir } from '../lib/episode-air';
+import { EpisodeAir, AiredInfo } from '../lib/episode-air';
 import { DubStatus, DUB_LANGUAGES } from '../lib/dub-status';
 import { getEpisodeThumbnail } from '../lib/episode-thumb';
+import { SUB_PROVIDERS, DUB_PROVIDERS, HINDI_PROVIDERS, fixedServerBtn } from '../lib/stream-sources';
+
+interface TurboVidServerRow { id:number; anime_id:number; episode_num:number; audio_group:string; language:string; label:string; embed_url:string; is_active:number; }
 
 export const watchRoutes = new Hono<{ Bindings: Env }>();
 
@@ -94,11 +98,11 @@ async function getAnilistIdFromMal(db: Db, malId: number, env: { SCRAPER_API_BAS
  * Priority now: an admin-saved override wins (episode_overrides.image_url,
  * set via the Episode Thumbnails admin panel) -- that lets an admin correct
  * a bad auto-fetched thumbnail. Otherwise, fetch it live from our own
- * scraper API (cached in KV, see getEpisodeThumbnail). Only falls back to
+ * scraper API (cached in D1, see getEpisodeThumbnail). Only falls back to
  * the anime's cover art if neither of those has anything. */
 async function getEpisodeOgImage(
-  db: Db, kv: KVNamespace | undefined, env: { SCRAPER_API_BASE?: string },
-  malId: number, epNum: number, fallback: string
+  db: Db, env: { SCRAPER_API_BASE?: string },
+  malId: number, epNum: number, fallback: string, animeStatus?: string | null
 ): Promise<string> {
   try {
     const row = await db.fetchOne<{ image_url: string | null }>(
@@ -108,21 +112,63 @@ async function getEpisodeOgImage(
     if (row?.image_url) return row.image_url;
   } catch { /* fall through to scraper/fallback */ }
 
-  const scraped = await getEpisodeThumbnail(env, kv, malId, epNum);
+  const scraped = await getEpisodeThumbnail(env, db, malId, epNum, animeStatus);
   return scraped ?? fallback;
 }
 
+// Matches the user-agents link-preview crawlers send (Facebook, Discord,
+// Twitter/X, Slack, Telegram, WhatsApp, LinkedIn, iMessage/Applebot, etc).
+// These never render JS or need the player -- they just read <head> meta
+// tags and move on. The full handler below does ~6 sequential external
+// calls (MAL/Jikan/scraper for anime, episodes, characters, AniList id
+// mapping, episode thumbnail) plus an anonymous-visitor auto-register DB
+// write, since crawlers send no session cookie. That easily adds up past a
+// crawler's own timeout (this is why Facebook's Sharing Debugger was
+// reporting "Curl Timeout" / no OG tags even though the page itself loads
+// fine for a real browser). This fast path skips all of that: one cached
+// anime lookup, no auth/account creation, no watch-history write, no
+// episode/character/AniList calls.
+const PREVIEW_BOT_RE = /facebookexternalhit|Facebot|Twitterbot|Discordbot|Slackbot|TelegramBot|WhatsApp|LinkedInBot|Pinterest|SkypeUriPreview|vkShare|redditbot|Applebot|Google-InspectionTool|W3C_Validator/i;
+
 watchRoutes.get('/watch', async (c) => {
+  const siteUrl = c.env.SITE_URL;
+  const animeId = parseInt(c.req.query('anime') ?? '0', 10) || 0;
+  const epNum = parseInt(c.req.query('ep') ?? '0', 10) || 0;
+  if (!animeId || !epNum) return c.redirect(siteUrl + '/');
+
+  const ua = c.req.header('user-agent') ?? '';
+  if (PREVIEW_BOT_RE.test(ua)) {
+    const db = new Db(c.env.DB);
+    const mal = new MalAPI(c.env, c.env.API_CACHE, db);
+    const result = await mal.getAnime(animeId);
+    const anime = result.data;
+    if (!anime) return c.html('', 404);
+
+    const title = getAnimeTitle(anime);
+    const cover = anime.images?.jpg?.large_image_url ?? '';
+    const bannerInfo = await mal.getLocalAnimeBannerInfo(animeId).catch(() => null);
+    const coverFallback = bannerInfo?.image_url || cover;
+    const image = await getEpisodeOgImage(db, c.env, animeId, epNum, coverFallback, anime.status);
+    const __banner = await getBannerData(db);
+    const html = renderHeader({
+      ...__banner, siteUrl, siteName: c.env.SITE_NAME, pageTitle: `Ep ${epNum} — ${title}`, currentPage: 'watch',
+      currentUser: null, unreadCount: 0, requestUrl: c.req.url,
+      ogData: {
+        title: `Ep ${epNum} — ${title} | AniVault`,
+        description: `Watch ${title} Episode ${epNum} on AniVault`,
+        image, image_width: 1280, image_height: 720,
+        url: `${siteUrl}/watch?anime=${animeId}&ep=${epNum}`,
+        type: 'video.episode',
+      },
+    }) + `</main></body></html>`;
+    return c.html(html);
+  }
+
   const db = new Db(c.env.DB);
   const lifetime = Number(c.env.SESSION_LIFETIME_SECONDS ?? 86400);
   const session = await Session.load(c, db, lifetime);
   const auth = new Auth(db, session, c.env as any, c.req.header('cf-connecting-ip') ?? 'unknown');
   const mal = new MalAPI(c.env, c.env.API_CACHE, db);
-  const siteUrl = c.env.SITE_URL;
-
-  const animeId = parseInt(c.req.query('anime') ?? '0', 10) || 0;
-  const epNum = parseInt(c.req.query('ep') ?? '0', 10) || 0;
-  if (!animeId || !epNum) return c.redirect(siteUrl + '/');
 
   // No more login wall on the watch page: a signed-out visitor gets a real
   // account (random username/password) created transparently right here, so
@@ -152,11 +198,19 @@ watchRoutes.get('/watch', async (c) => {
   // age) and, if that cache is missing/stale, kicks off a background
   // refresh via waitUntil so the scraper/Jikan lookup never holds up this
   // page load; the next visit (or the detail page) picks up the fresh value.
-  const { info: airedInfo, isFresh: airedInfoFresh } = await EpisodeAir.getCachedAny(db, animeId);
-  if (!airedInfoFresh) {
-    c.executionCtx?.waitUntil?.(EpisodeAir.get(db, c.env, mal, animeId).catch(() => {}));
+  // Finished and not-yet-aired shows skip all of that and use anime.episodes
+  // straight from MAL — that field is already accurate once a show isn't
+  // actively airing, so there's nothing for the cache to correct.
+  const isAiring = anime.status === 'Currently Airing';
+  let airedInfo: AiredInfo | null = null;
+  if (isAiring) {
+    const cached = await EpisodeAir.getCachedAny(db, animeId);
+    airedInfo = cached.info;
+    if (!cached.isFresh) {
+      c.executionCtx?.waitUntil?.(EpisodeAir.get(db, c.env, mal, animeId).catch(() => {}));
+    }
   }
-  const totalEps = airedInfo?.total ?? anime.episodes ?? 0;
+  const totalEps = isAiring ? (airedInfo?.total ?? anime.episodes ?? 0) : (anime.episodes ?? 0);
   const dubbedLangs = await DubStatus.getFor(db, animeId);
 
   let epDurationSec = parseDurationSeconds(anime.duration);
@@ -170,6 +224,7 @@ watchRoutes.get('/watch', async (c) => {
   const resumeT = Math.max(0, parseInt(c.req.query('t') ?? '0', 10) || 0);
   const resumeParam = resumeT >= 30 ? resumeT : 0;
   const hasMegaplayFallback = !video;
+  const turbovidServers = await db.fetchAll<TurboVidServerRow>('SELECT id,anime_id,episode_num,audio_group,language,label,embed_url,is_active FROM turbovid_servers WHERE anime_id=? AND episode_num=? AND is_active=1 ORDER BY audio_group, language, id',[animeId,epNum]);
 
   const anilistId = await getAnilistIdFromMal(db, animeId, c.env);
 
@@ -184,13 +239,28 @@ watchRoutes.get('/watch', async (c) => {
 
   const videoEpNumSet = new Set(allVideos.map((v) => v.episode_num));
 
+  // Episode navigation should follow the actual episode list, not only uploaded
+  // episode_videos. Otherwise Prev/Next become disabled whenever the current
+  // episode is the only one uploaded locally.
+  let navEpNums = allEps
+    .map((ep: any) => Number(ep.mal_id ?? 0))
+    .filter((n: number) => n > 0);
+  if (navEpNums.length === 0) {
+    navEpNums = allVideos.map((v) => Number(v.episode_num)).filter((n) => n > 0);
+  }
+  if (navEpNums.length === 0 && totalEps > 0) {
+    navEpNums = Array.from({ length: totalEps }, (_, i) => i + 1);
+  }
+  navEpNums = Array.from(new Set(navEpNums)).sort((a, b) => a - b);
+
   let prevEp: number | null = null;
   let nextEp: number | null = null;
-  for (const v of allVideos) {
-    const n = v.episode_num;
+  for (const n of navEpNums) {
     if (n < epNum && (prevEp === null || n > prevEp)) prevEp = n;
     if (n > epNum && (nextEp === null || n < nextEp)) nextEp = n;
   }
+  if (prevEp === null && epNum > 1) prevEp = epNum - 1;
+  if (nextEp === null && (totalEps === 0 || epNum < totalEps)) nextEp = epNum + 1;
 
   const currentEpInfo = allEps.find((ep) => Number(ep.mal_id ?? 0) === epNum) ?? null;
 
@@ -246,7 +316,8 @@ watchRoutes.get('/watch', async (c) => {
     ? { id: currentUser.id, username: currentUser.username, avatar_url: currentUser.avatar_url, role: currentUser.role }
     : null;
 
-  const ogImage = await getEpisodeOgImage(db, c.env.API_CACHE, c.env, animeId, epNum, image);
+  const bannerInfo = await mal.getLocalAnimeBannerInfo(animeId).catch(() => null);
+  const ogImage = await getEpisodeOgImage(db, c.env, animeId, epNum, bannerInfo?.image_url || image, anime.status);
 
   const __banner = await getBannerData(db);
   let html = renderHeader({
@@ -265,28 +336,11 @@ watchRoutes.get('/watch', async (c) => {
   html += renderWatchBody({
     anime, image, coverSm, title, animeId, epNum, totalEps, video, qSub, hasMegaplayFallback,
     isLoggedIn: auth.check(), prevEp, nextEp, currentEpInfo, chars, allEps, allVideos,
-    videoEpNumSet, resumeT, layoutUser, siteUrl, episodesWatched, dubbedLangs,
+    videoEpNumSet, resumeT, layoutUser, siteUrl, episodesWatched, dubbedLangs, turbovidServers,
   });
 
-  // Server-probing/switching script (always present)
-  // NOTE: watchScript1() already returns its own <script>...</script>-wrapped
-  // string — do NOT wrap it again here. Doing so produces nested <script>
-  // tags, which the browser's HTML parser can't handle (it just scans for
-  // the first literal </script>, closing the tag early and handing the JS
-  // engine a stray leftover "<script>" as its first token — an immediate
-  // syntax error that silently kills this entire block before anything,
-  // including the server probe, ever runs).
-  html += watchScript1({
-    anilistId, epNum, resumeParam, animeId, siteUrl, qSub, qDub, isLoggedIn: auth.check(),
-  });
-
-  // Wall-clock progress tracker (logged-in users only, matches the PHP Auth::check() gate)
-  if (auth.check()) {
-    html += watchScript2(animeId, epNum, siteUrl, epDurationSec, totalEps);
-  }
-
-  html += renderFooter({ siteUrl, currentUser: layoutUser });
-
+  // Senshi player is emitted before the startup scripts so the player DOM
+  // is guaranteed to exist when watchScript1 begins its DOM-ready startup.
   // Senshi player -- pre-rendered hidden, moved into #watch-player-wrap by
   // the server-switching script on demand (same DOM-move pattern as the PHP version).
   const watchBase = `${siteUrl}/watch?anime=${animeId}&ep=`;
@@ -318,12 +372,29 @@ watchRoutes.get('/watch', async (c) => {
   html += playerScript(animeId, epNum, siteUrl);
   html += `</div>`;
 
+// Server-probing/switching script (always present)
+  // NOTE: watchScript1() already returns its own <script>...</script>-wrapped
+  // string — do NOT wrap it again here. Doing so produces nested <script>
+  // tags, which the browser's HTML parser can't handle (it just scans for
+  // the first literal </script>, closing the tag early and handing the JS
+  // engine a stray leftover "<script>" as its first token — an immediate
+  // syntax error that silently kills this entire block before anything,
+  // including the server probe, ever runs).
+  html += watchScript1({
+    anilistId, epNum, resumeParam, animeId, siteUrl, qSub, qDub, isLoggedIn: auth.check(),
+  });
+
+  // Wall-clock progress tracker (logged-in users only, matches the PHP Auth::check() gate)
+  if (auth.check()) {
+    html += watchScript2(animeId, epNum, siteUrl, epDurationSec, totalEps);
+  }
+
   if (justAutoCreated) {
-    // One-time toast (handled in app.js) so the visitor sees their generated
-    // credentials immediately; the same details also live in their
-    // notifications bell (see Auth.autoRegister) in case they miss this.
     html += `<script>window.__autoAccountInfo=${JSON.stringify(justAutoCreated)};</script>`;
   }
+
+  html += renderFooter({ siteUrl, currentUser: layoutUser });
+
 
   await session.save(c, session.data.auto_created ? AUTO_SESSION_LIFETIME_SECONDS : lifetime);
   return c.html(html);
@@ -353,12 +424,13 @@ interface WatchBodyParams {
   siteUrl: string;
   episodesWatched: number;
   dubbedLangs: string[];
+  turbovidServers: TurboVidServerRow[];
 }
 
 export function renderWatchBody(p: WatchBodyParams): string {
   const { anime, image, coverSm, title, animeId, epNum, totalEps, video, qSub, hasMegaplayFallback,
-    isLoggedIn, prevEp, nextEp, currentEpInfo, chars, allEps, allVideos, videoEpNumSet, layoutUser, siteUrl,
-    episodesWatched, dubbedLangs } = p;
+    isLoggedIn, prevEp, nextEp, currentEpInfo, chars, allEps, allVideos, videoEpNumSet, resumeT, layoutUser, siteUrl,
+    episodesWatched, dubbedLangs, turbovidServers } = p;
 
   const genres = (anime.genres ?? []).slice(0, 6);
   const score = anime.score;
@@ -367,23 +439,27 @@ export function renderWatchBody(p: WatchBodyParams): string {
   const animePage = `${siteUrl}/anime?id=${animeId}`;
 
   const hasRealVideo = !!video && (qSub.length > 0 || !!video.video_url);
+  const hasTurboVid = turbovidServers.length > 0;
 
   let playerHtml: string;
   if (hasRealVideo) {
     playerHtml = isLoggedIn
       ? `<div class="wp-player-shell" id="watch-player-wrap">${qSub.length > 0 ? qSub[0].embed : `<iframe id="main-player-iframe" src="${h(video!.video_url ?? '')}" allow="accelerometer;autoplay;clipboard-write;encrypted-media;gyroscope;picture-in-picture;web-share" allowfullscreen loading="lazy"></iframe>`}</div><div class="wp-player-accent-line"></div>`
       : renderSignInGate(image, 'wg-play', 'wg-signin', 'wg-signup');
-  } else if (hasMegaplayFallback) {
+  } else if (hasMegaplayFallback || hasTurboVid) {
+    // Keep the player shell present whenever a saved TurboVid source exists.
+    // The old "Finding the best server" gate could remain visible while the
+    // AV source was already playing because watchScript1 ran before the
+    // hidden Senshi player DOM was emitted.
     playerHtml = isLoggedIn
-      ? `<div class="wp-player-shell" id="watch-player-wrap" style="position:relative;aspect-ratio:unset;overflow:visible;background:transparent;border:none;box-shadow:none;"><div class="wp-finding-server" id="wp-finding-server"><div class="wpfs-ring"></div><div class="wpfs-text">Finding the best server<span class="wpfs-dots"><span>.</span><span>.</span><span>.</span></span></div></div></div><div class="wp-player-accent-line"></div>`
+      ? `<div class="wp-player-shell" id="watch-player-wrap"><div class="wp-player-loading" id="wp-player-loading"><div class="wp-player-loading-ring"></div><span>Loading player...</span></div></div><div class="wp-player-accent-line"></div>`
       : renderSignInGate(image, 'wg-play2', 'wg-signin2', 'wg-signup2');
   } else {
     playerHtml = `<div class="wp-no-video"><div class="nv-icon">🎬</div><p>No video available yet.<br>Check back later or explore other episodes.</p><a href="${animePage}" class="btn btn-ghost btn-sm" style="margin-top:.25rem">← Back to Anime</a></div>`;
   }
 
-  const serverControlsHtml = (isLoggedIn && (video || hasMegaplayFallback)) ? `
+  const serverControlsHtml = (isLoggedIn && (video || hasMegaplayFallback || hasTurboVid)) ? `
         <div class="wp-controls">
-          <div class="wp-controls-top"><span class="wpc-label">Server</span><span class="wpc-hint">F = fullscreen</span></div>
           ${qSub.length > 0 ? `
           <div class="wp-quality-row">
             <span class="wpc-label">Quality</span>
@@ -394,31 +470,38 @@ export function renderWatchBody(p: WatchBodyParams): string {
           <div class="server-panel" id="server-grid">
             <div class="server-panel-head"><span class="server-panel-lbl"><span class="server-panel-dot"></span>Servers</span><span class="server-panel-hint">Click to switch</span></div>
             <div class="server-panel-body">
-              <div class="server-tabs"><button class="server-tab active" data-tab="sub">Sub</button><button class="server-tab" data-tab="dub">Dub</button></div>
+              <div class="server-tabs"><button class="server-tab active" data-tab="sub">${icon('captions', 'server-tab-icon')}<span>Sub</span></button><button class="server-tab" data-tab="dub">${icon('mic', 'server-tab-icon')}<span>Dub</span></button></div>
               <div class="server-tab-panel active" id="tab-panel-sub" data-audio="sub">
-                <div class="server-skel-group" id="servers-sub-loading">
-                  <span class="server-skel"><span class="server-skel-dot"></span><span class="server-skel-bar" style="width:72px"></span></span>
-                  <span class="server-skel"><span class="server-skel-dot"></span><span class="server-skel-bar" style="width:46px"></span></span>
-                  <span class="server-skel"><span class="server-skel-dot"></span><span class="server-skel-bar" style="width:58px"></span></span>
+                <div class="server-btn-row" id="servers-sub-body">
+                  ${turbovidServers.filter(v=>v.audio_group==='sub').map(v=>` <button class="server-btn turbovid-server-btn av-server" data-server="turbovid:${v.id}" data-turbovid-id="${v.id}" title="AniVault Sub"><img class="av-server-logo" src="${siteUrl}/assets/img/site-img/icon.png" alt="" aria-hidden="true"><span class="av-server-label" style="margin-left:4px;">Sub</span></button>`).join('')}
+                  ${SUB_PROVIDERS.map(p => fixedServerBtn('sub', p.source, p.provider, p.label)).join('')}
                 </div>
               </div>
               <div class="server-tab-panel" id="tab-panel-dub" data-audio="dub">
-                <div class="server-skel-group" id="servers-dub-loading">
-                  <span class="server-skel"><span class="server-skel-dot"></span><span class="server-skel-bar" style="width:72px"></span></span>
-                  <span class="server-skel"><span class="server-skel-dot"></span><span class="server-skel-bar" style="width:46px"></span></span>
-                  <span class="server-skel"><span class="server-skel-dot"></span><span class="server-skel-bar" style="width:58px"></span></span>
+                <div class="server-btn-row" id="servers-dub-body">
+                  ${turbovidServers.filter(v=>v.audio_group==='dub').map(v=>` <button class="server-btn turbovid-server-btn av-server" data-server="turbovid:${v.id}" data-turbovid-id="${v.id}" title="AniVault Dub"><img class="av-server-logo" src="${siteUrl}/assets/img/site-img/icon.png" alt="" aria-hidden="true"><span class="av-server-label" style="margin-left:4px;">Dub</span></button>`).join('')}
+                  ${DUB_PROVIDERS.map(p => fixedServerBtn('dub', p.source, p.provider, p.label)).join('')}
+                </div>
+                <div class="server-group" id="dub-hindi-group">
+                  <div class="server-group-label">Hindi Dub</div>
+                  <div class="server-group-body" id="servers-dub-hindi-body">
+                    ${turbovidServers.filter(v=>v.audio_group==='hindi').map(v=>` <button class="server-btn turbovid-server-btn av-server" data-server="turbovid:${v.id}" data-turbovid-id="${v.id}" title="AniVault Hindi"><img class="av-server-logo" src="${siteUrl}/assets/img/site-img/icon.png" alt="" aria-hidden="true"><span class="av-server-label" style="margin-left:4px;">Hindi</span></button>`).join('')}
+                    ${HINDI_PROVIDERS.map(p => fixedServerBtn('hindi', p.source, p.provider, p.label)).join('')}
+                  </div>
+                </div>
+                <div class="server-group" id="dub-multi-group" style="${turbovidServers.some(v=>v.audio_group==='multi') ? '' : 'display:none'}">
+                  <div class="server-group-label">Multi Dub</div>
+                  <div class="server-group-body" id="servers-dub-multi-body">
+                    ${turbovidServers.filter(v=>v.audio_group==='multi').map(v=>` <button class="server-btn turbovid-server-btn av-server" data-server="turbovid:${v.id}" data-turbovid-id="${v.id}" title="AniVault Multi"><img class="av-server-logo" src="${siteUrl}/assets/img/site-img/icon.png" alt="" aria-hidden="true"><span class="av-server-label" style="margin-left:4px;">${h(v.language || 'dub')}</span></button>`).join('')}
+                    <div class="server-skel-group" id="servers-dub-multi-loading">
+                      <span class="server-skel"><span class="server-skel-dot"></span><span class="server-skel-bar" style="width:64px"></span></span>
+                      <span class="server-skel"><span class="server-skel-dot"></span><span class="server-skel-bar" style="width:50px"></span></span>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
-        </div>` : '';
-
-  const navHtml = (prevEp || nextEp) ? `
-        <div class="wp-nav">
-          ${prevEp ? `<a href="${siteUrl}/watch?anime=${animeId}&ep=${prevEp}" class="wp-nav-btn"><svg viewBox="0 0 24 24"><path d="M15.41 16.59L10.83 12l4.58-4.59L14 6l-6 6 6 6z"/></svg><div class="wp-nav-inner"><span class="wp-nav-lbl">Previous</span><span class="wp-nav-ep">Episode ${prevEp}</span></div></a>`
-            : `<div class="wp-nav-btn disabled"><svg viewBox="0 0 24 24"><path d="M15.41 16.59L10.83 12l4.58-4.59L14 6l-6 6 6 6z"/></svg><div class="wp-nav-inner"><span class="wp-nav-lbl">Previous</span><span class="wp-nav-ep">—</span></div></div>`}
-          ${nextEp ? `<a href="${siteUrl}/watch?anime=${animeId}&ep=${nextEp}" class="wp-nav-btn next"><div class="wp-nav-inner"><span class="wp-nav-lbl">Next</span><span class="wp-nav-ep">Episode ${nextEp}</span></div><svg viewBox="0 0 24 24"><path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6z"/></svg></a>`
-            : `<div class="wp-nav-btn next disabled"><div class="wp-nav-inner"><span class="wp-nav-lbl">Next</span><span class="wp-nav-ep">—</span></div><svg viewBox="0 0 24 24"><path d="M8.59 16.59L13.17 12 8.59 7.41 10 6l6 6-6 6z"/></svg></div>`}
         </div>` : '';
 
   const epTitleDisplay = currentEpInfo?.title && currentEpInfo.title !== 'TBA' ? h(currentEpInfo.title) : `Episode ${epNum}`;
@@ -427,7 +510,7 @@ export function renderWatchBody(p: WatchBodyParams): string {
   const jImage = JSON.stringify(coverSm);
 
   const charsHtml = chars.length > 0 ? `
-      <div class="wp-chars">
+      <section class="watch-character-section">
         <div class="wp-chars-head"><span class="wp-chars-ttl">Characters</span><a href="${animePage}#tab-characters">All →</a></div>
         <div class="char-grid-v2">
           ${chars.map((chEntry) => {
@@ -445,7 +528,7 @@ export function renderWatchBody(p: WatchBodyParams): string {
           </a>`;
           }).join('')}
         </div>
-      </div>` : '';
+      </section>` : '';
 
   // Sidebar episode list -- prefer Jikan's episode list (has real titles),
   // falling back to just the anime_list rows we actually have videos for.
@@ -558,6 +641,13 @@ export function renderWatchBody(p: WatchBodyParams): string {
     epListHtml = `<div style="padding:.9rem;color:var(--text-muted);font-size:.85rem;">No episode data available.</div>`;
   }
 
+  const resumeLabel = resumeT > 0
+    ? `${Math.floor(resumeT / 60)}:${String(resumeT % 60).padStart(2, '0')}`
+    : '';
+  const watchProgress = totalEps > 0 && episodesWatched > 0
+    ? Math.min(100, Math.round((episodesWatched / totalEps) * 100))
+    : 0;
+
   return `
 <div class="av-ambient">
   <div class="av-ambient-img" style="background-image:url('${h(image)}')"></div>
@@ -571,80 +661,105 @@ export function renderWatchBody(p: WatchBodyParams): string {
     <span class="now">Episode ${epNum}</span>
   </nav>
 
-  <div class="wp-grid">
-    <div class="wp-left">
-      <div class="wp-player-zone">
+  <div class="watch-layout">
+    <main class="watch-main">
+      <section class="wp-player-zone">
         <div class="wp-player-glow"></div>
         ${playerHtml}
-        ${serverControlsHtml}
-        ${navHtml}
-      </div>
-
-      <div class="wp-info">
-        <div class="wp-info-banner"></div>
-        <div class="wp-info-head">
-          <div class="wp-ep-chip">Episode ${epNum}${totalEps > 0 ? ` of ${totalEps}` : ''}</div>
-          <div class="wp-ep-title">${epTitleDisplay}</div>
-          <div class="wp-ep-meta">
-            <a href="${animePage}">${h(title)}</a>
-            ${currentEpInfo?.aired ? `<span class="dot">·</span><span>${new Date(currentEpInfo.aired).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>` : ''}
-            ${currentEpInfo?.score ? `<span class="dot">·</span><span>⭐ ${currentEpInfo.score}</span>` : ''}
-            ${currentEpInfo?.filler ? `<span class="ep-tag filler">Filler</span>` : ''}
-            ${currentEpInfo?.recap ? `<span class="ep-tag recap">Recap</span>` : ''}
-          </div>
+        <div class="watch-quick-nav" data-next-url="${nextEp ? `${siteUrl}/watch?anime=${animeId}&ep=${nextEp}` : ''}" data-prev-url="${prevEp ? `${siteUrl}/watch?anime=${animeId}&ep=${prevEp}` : ''}">
+          <button type="button" class="watch-auto-next" id="watch-auto-next" aria-pressed="false" title="Auto play next episode">
+            <span class="watch-auto-copy">Auto Next</span>
+            <span class="watch-toggle" aria-hidden="true"><span class="watch-toggle-knob"></span></span>
+          </button>
+          <button type="button" class="watch-native-player" id="watch-native-player" aria-pressed="false" title="Use the browser's native video player">
+            <span class="watch-native-copy">Native</span>
+            <span class="watch-native-toggle" aria-hidden="true"><span class="watch-native-knob"></span></span>
+          </button>
+          ${prevEp ? `<a class="watch-quick-btn prev" href="${siteUrl}/watch?anime=${animeId}&ep=${prevEp}" aria-label="Previous episode">${icon('skip-back', 'watch-ep-icon')}<span>Prev</span></a>` : `<span class="watch-quick-btn prev disabled">${icon('skip-back', 'watch-ep-icon')}<span>Prev</span></span>`}
+          ${nextEp ? `<a class="watch-quick-btn next" href="${siteUrl}/watch?anime=${animeId}&ep=${nextEp}" aria-label="Next episode"><span>Ep ${nextEp}</span>${icon('skip-forward', 'watch-ep-icon')}</a>` : `<span class="watch-quick-btn next disabled"><span>Ep —</span>${icon('skip-forward', 'watch-ep-icon')}</span>`}
+        </div>     <div class="watch-title-under-player">
+          <div class="watch-title-ep">Episode ${epNum}</div>
+          <h1>${h(title)}</h1>
+          ${currentEpInfo?.title && currentEpInfo.title !== 'TBA' ? `<div class="watch-title-sub">${epTitleDisplay}</div>` : ''}
         </div>
+        ${serverControlsHtml}
+      </section>
 
-        <div class="wp-actions">
-          <a href="${animePage}" class="wp-act-btn primary"><svg viewBox="0 0 24 24"><path d="M13 3L4 14h7v7l9-11h-7V3z"/></svg>Anime Page</a>
-          ${isLoggedIn ? `<button class="wp-act-btn" onclick='addToList(${animeId}, ${jTitle}, ${jImage}, ${totalEps})'><svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>My List</button>` : ''}
-          <a href="https://myanimelist.net/anime/${animeId}" target="_blank" rel="noopener" class="wp-act-btn"><svg viewBox="0 0 24 24"><path d="M19 19H5V5h7V3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"/></svg>MAL</a>
+      <div class="watch-content-flow">
+      <section class="watch-episode-card">
+        <div class="watch-episode-main">
+          ${currentEpInfo?.synopsis ? `<p class="watch-synopsis">${h(currentEpInfo.synopsis)}</p>` : ''}
+        </div>
+        <div class="watch-action-row">
+          <a href="${animePage}" class="watch-action primary">
+            <svg viewBox="0 0 24 24"><path d="M13 3 4 14h7v7l9-11h-7V3Z"/></svg> Anime page
+          </a>
+          ${isLoggedIn ? `<button class="watch-action" type="button" onclick='addToList(${animeId}, ${jTitle}, ${jImage}, ${totalEps})'>
+            <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg> My List
+          </button>` : ''}
+          <a href="https://myanimelist.net/anime/${animeId}" target="_blank" rel="noopener" class="watch-action">
+            <svg viewBox="0 0 24 24"><path d="M14 3h7v7M21 3l-9 9M19 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h6"/></svg> MAL
+          </a>
+          <button class="watch-action" type="button" onclick="if(navigator.clipboard){navigator.clipboard.writeText(location.href).then(()=>{this.textContent='Copied';setTimeout(()=>this.textContent='Share',1000)})}">
+            <svg viewBox="0 0 24 24"><path d="M8 7V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2M16 9H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2-2v-8"/></svg> Share
+          </button>
         </div>
 
         ${isLoggedIn ? `
-        <div class="wp-prog-wrap" id="wp-prog">
-          <div class="wp-prog-header"><span class="wp-prog-lbl">Progress</span><span class="wp-prog-time" id="wp-prog-time">—</span></div>
-          <div class="wp-prog-track"><div class="wp-prog-fill" id="wp-prog-fill"></div></div>
+        <div class="watch-progress-card">
+          <div class="watch-progress-head">
+            <span>YOUR WATCH PROGRESS</span>
+            <strong>${episodesWatched > 0 ? `Episode ${episodesWatched} of ${totalEps || '—'}` : 'Start watching'}</strong>
+          </div>
+          <div class="watch-progress-track"><span style="width:${watchProgress}%"></span></div>
+          <div class="watch-progress-foot">
+            <span>${resumeLabel ? `Resume point: ${resumeLabel}` : 'Progress is saved automatically while you watch.'}</span>
+            ${watchProgress > 0 ? `<span>${watchProgress}%</span>` : ''}
+          </div>
         </div>` : ''}
+      </section>
+
+      <div class="watch-character-slot">${charsHtml}</div>
       </div>
+    </main>
 
-      ${charsHtml}
-    </div>
-
-    <div class="wp-sidebar">
-      <div class="wp-anime-card">
-        <div class="wp-anime-banner">
-          <div class="wp-anime-banner-bg" style="background-image:url('${h(image)}')"></div>
-          <div class="wp-anime-banner-grad"></div>
-          <img src="${h(coverSm)}" class="wp-anime-poster" alt="${h(title)}" loading="lazy">
+    <aside class="watch-sidebar">
+      <section class="watch-anime-card">
+        <div class="watch-anime-art">
+          <img src="${h(anime.cover_image || coverSm)}" alt="${h(title)}" loading="lazy">
+          <div class="watch-anime-art-shade"></div>
+          <div class="watch-anime-art-info">
+            <span>${h(animeType || 'ANIME')}</span>
+            <span>${totalEps > 0 ? `${totalEps} EPISODES` : 'EPISODES'}</span>
+          </div>
         </div>
-        <div class="wp-anime-body">
-          <div class="wp-anime-title"><a href="${animePage}">${h(title)}</a></div>
-          <div class="wp-anime-sub">${h(animeType)}${animeType && status ? ' · ' : ''}${h(status)}${totalEps > 0 ? ` · ${totalEps} eps` : ''}</div>
-          ${dubbedLangs.length > 0 ? `<div class="wp-anime-sub" style="color:var(--teal,#2dd4bf);font-size:0.78rem;margin-top:2px;">🎙️ Dubbed: ${h(dubbedLangs.map((l) => DUB_LANGUAGES[l] ?? l).join(', '))} <span style="color:var(--text-muted);">(© <a href="https://mydublist.com" target="_blank" rel="noopener" style="color:inherit;">MyDubList</a>)</span></div>` : ''}
-          ${score ? `
-          <div class="wp-score-row">
-            <div class="wp-score"><svg viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>${score}</div>
-            <div class="wp-score-bar-wrap"><div class="wp-score-bar" style="width:${Math.min(100, (score / 10) * 100)}%"></div></div>
-          </div>` : ''}
-          ${genres.length > 0 ? `<div class="wp-genres">${genres.map((g) => `<span class="wp-genre">${h(g.name)}</span>`).join('')}</div>` : ''}
+        <div class="watch-anime-body">
+          <a class="watch-anime-title" href="${animePage}">${h(title)}</a>
+          <div class="watch-anime-status">${h(status || 'Status unavailable')}${score ? ` <span>·</span> ★ ${score}` : ''}</div>
+          ${score ? `<div class="watch-score-line"><strong>★ ${score}</strong><div><span style="width:${Math.min(100, (score / 10) * 100)}%"></span></div></div>` : ''}
+          <a class="watch-anime-open" href="${animePage}">Open anime details <span>→</span></a>
         </div>
-      </div>
+      </section>
 
-      <div class="wp-ep-card">
-        <div class="wp-ep-head">
-          <span class="wp-ep-ttl">Episodes</span>
-          ${allVideos.length > 0 ? `<span class="wp-ep-count">${allVideos.length} available</span>` : ''}
+      <section class="watch-queue-card">
+        <div class="watch-queue-head">
+          <div>
+            <div class="watch-section-eyebrow">QUEUE</div>
+            <h2>Episodes</h2>
+          </div>
+          ${allVideos.length > 0 ? `<span class="watch-queue-count">${allVideos.length} ready</span>` : ''}
         </div>
         ${epRangeWrapHtml}
-        <div class="wp-ep-search-wrap">
-          <div class="wp-ep-search-ico"><svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0016 9.5 6.5 6.5 0 109.5 16a6.471 6.471 0 004.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg></div>
-          <input type="text" class="wp-ep-search" id="ep-search" placeholder="Search episodes…" oninput="filterEps(this.value)">
+        <div class="watch-queue-search">
+          <svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.27-.27A6.47 6.47 0 1 0 14 15.5l.27.27v.79l5 5L20.5 20l-5-5Zm-6 0A4.5 4.5 0 1 1 14 9.5 4.5 4.5 0 0 1 9.5 14Z"/></svg>
+          <input type="text" id="ep-search" placeholder="Find an episode…" oninput="filterEps(this.value)">
         </div>
         <div class="wp-ep-list" id="ep-list">${epListHtml}</div>
-      </div>
-    </div>
+      </section>
+    </aside>
   </div>
 </div>`;
+
 }
 
 function renderSignInGate(image: string, playId: string, signinId: string, signupId: string): string {

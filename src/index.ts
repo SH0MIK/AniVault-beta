@@ -1,5 +1,9 @@
 import { Hono } from 'hono';
 import { authRoutes } from './routes/auth';
+import { mobileAuthRoutes } from './routes/api-mobile-auth';
+import { mobileContentRoutes } from './routes/api-mobile-content';
+import { mobileHomeRoutes } from './routes/api-mobile-home';
+import { mobileDiscoverRoutes } from './routes/api-mobile-discover';
 import { homeRoutes } from './routes/home';
 import { browseRoutes } from './routes/browse';
 import { discoverRoutes } from './routes/discover';
@@ -21,6 +25,7 @@ import { episodeOverrideRoutes } from './routes/api-episode-override';
 import { adminVideosRoutes } from './routes/admin/videos';
 import { apiVideosRoutes } from './routes/api-videos';
 import { adminEpThumbnailsRoutes } from './routes/admin/ep-thumbnails';
+import { adminEpisodeCacheImportRoutes } from './routes/admin/episode-cache-import';
 import { thumbSearchRoutes } from './routes/api-thumb-search';
 import { adminMiscSmallRoutes } from './routes/admin/misc-small';
 import { adminAnnouncementsRoutes } from './routes/admin/announcements';
@@ -37,6 +42,9 @@ import { adminCacheRoutes } from './routes/admin/cache';
 import { adminEpisodeScannerRoutes } from './routes/admin/episode-scanner';
 import { adminWatchStatsRoutes } from './routes/admin/watch-stats';
 import { adminHealImagesRoutes } from './routes/admin/heal-images';
+import { adminTurbovidRoutes } from './routes/admin/turbovid-test';
+import { adminTurbovidServerRoutes } from './routes/admin/turbovid-servers';
+import { turbovidApiRoutes } from './routes/api-turbovid';
 import { scraperRoutes } from './routes/api-scraper';
 import { legalRoutes } from './routes/legal';
 import { watchNowRoutes } from './routes/watch-now';
@@ -45,7 +53,6 @@ import { apiChatRoutes } from './routes/api-chat';
 import { healthRoutes } from './routes/health';
 import { handleScheduled } from './scheduled';
 
-// Env bindings + secrets (set secrets via `wrangler secret put NAME`, see wrangler.toml)
 export interface Env {
   DB: D1Database;
   API_CACHE: KVNamespace;
@@ -53,6 +60,7 @@ export interface Env {
   SITE_NAME: string;
   SITE_URL: string;
   SESSION_LIFETIME_SECONDS: string;
+  MOBILE_SESSION_LIFETIME_SECONDS?: string;
   API_CACHE_ENABLED?: string;
   API_CACHE_TIME?: string;
   GOOGLE_CLIENT_ID?: string;
@@ -64,10 +72,6 @@ export interface Env {
   DISCORD_SERVER_ID?: string;
   DISCORD_BOT_TOKEN?: string;
   DISCORD_LOG_CHANNEL_ID?: string;
-  // Shared secret between this Worker and the AniVault Discord bot (Vercel).
-  // Used both ways: the bot doesn't call in with it anymore for notifications
-  // (the Worker posts those to Discord directly), but the bot DOES send it
-  // as `x-bot-secret` when hitting /api/discord/user-lookup for /user.
   BOT_SECRET?: string;
   MAL_CLIENT_ID?: string;
   MAL_CLIENT_SECRET?: string;
@@ -83,6 +87,10 @@ const app = new Hono<{ Bindings: Env }>();
 
 app.route('/', healthRoutes);
 app.route('/', authRoutes);
+app.route('/', mobileAuthRoutes);
+app.route('/', mobileHomeRoutes);
+app.route('/', mobileContentRoutes);
+app.route('/', mobileDiscoverRoutes);
 app.route('/', homeRoutes);
 app.route('/', browseRoutes);
 app.route('/', discoverRoutes);
@@ -104,6 +112,7 @@ app.route('/', episodeOverrideRoutes);
 app.route('/', adminVideosRoutes);
 app.route('/', apiVideosRoutes);
 app.route('/', adminEpThumbnailsRoutes);
+app.route('/', adminEpisodeCacheImportRoutes);
 app.route('/', thumbSearchRoutes);
 app.route('/', adminMiscSmallRoutes);
 app.route('/', adminAnnouncementsRoutes);
@@ -120,17 +129,15 @@ app.route('/', adminCacheRoutes);
 app.route('/', adminEpisodeScannerRoutes);
 app.route('/', adminWatchStatsRoutes);
 app.route('/', adminHealImagesRoutes);
+app.route('/', adminTurbovidRoutes);
+app.route('/', adminTurbovidServerRoutes);
+app.route('/', turbovidApiRoutes);
 app.route('/', scraperRoutes);
 app.route('/', legalRoutes);
 app.route('/', watchNowRoutes);
 app.route('/', legacyRedirectRoutes);
 app.route('/', apiChatRoutes);
 
-// Global error handler — without this, an unhandled exception anywhere just
-// shows a bare "Internal Server Error" with no detail in the logs beyond
-// whatever single stack frame Cloudflare happens to capture. This logs the
-// full error (message + stack + which URL triggered it) and returns a
-// plain but on-brand error page instead of a blank one.
 app.onError((err, c) => {
   console.error(`[unhandled] ${c.req.method} ${c.req.url} — ${err.message}\n${err.stack ?? ''}`);
   return c.html(
@@ -144,7 +151,6 @@ app.onError((err, c) => {
 
 export default {
   fetch: app.fetch,
-  // Cloudflare Cron Trigger entry point — see [triggers] in wrangler.toml.
   async scheduled(event: ScheduledController, env: Env, ctx: ExecutionContext) {
     ctx.waitUntil(handleScheduled(env, event.cron));
   },

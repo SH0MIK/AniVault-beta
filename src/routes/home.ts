@@ -19,7 +19,7 @@ import { CONTINUE_WATCHING_CSS } from '../render/home-css';
 import { continueWatchingScript, heroSliderScript, rowNavScript } from '../render/home-js';
 import type { NormalisedAnime } from '../lib/mal-api';
 import { getBannerData } from '../lib/settings';
-import { getEpisodeThumbnail } from '../lib/episode-thumb';
+import { getAnimeEpisodeThumbnails } from '../lib/episode-thumb';
 
 export const homeRoutes = new Hono<{ Bindings: Env }>();
 
@@ -59,7 +59,7 @@ homeRoutes.get('/', async (c) => {
     const rows = await db.fetchAll<{ anime_id: number }>(
       'SELECT DISTINCT anime_id FROM episode_videos WHERE is_active = 1 ORDER BY updated_at DESC LIMIT 12'
     );
-    const results = await Promise.all(rows.map((r) => mal.getAnime(r.anime_id)));
+    const results = await Promise.all(rows.map((r) => mal.getAnime(r.anime_id, true)));
     watchNowList = results.map((r) => r.data).filter(Boolean);
   } catch {
     watchNowList = [];
@@ -104,13 +104,28 @@ homeRoutes.get('/', async (c) => {
 
       const missing = watchHistory.filter((r) => !episodeThumbOverrides[`${r.anime_id}:${r.episode_num}`]);
       if (missing.length > 0) {
-        const scraped = await Promise.all(
-          missing.map((r) => getEpisodeThumbnail(c.env, c.env.API_CACHE, r.anime_id, r.episode_num))
-        );
-        missing.forEach((r, i) => {
-          const thumb = scraped[i];
-          if (thumb) episodeThumbOverrides[`${r.anime_id}:${r.episode_num}`] = thumb;
-        });
+        // Use the same bulk thumbnail resolver as the anime detail page.
+        // That endpoint seeds/reads one D1 cache entry per anime, while the
+        // old home-page path asked the scraper once per history card. Besides
+        // being slower, that meant a cold individual lookup could miss while
+        // the anime page's already-populated bulk cache had the thumbnail.
+        // Resolve each distinct show once, then pick the watched episode.
+        const distinctIds = [...new Set(missing.map((r) => r.anime_id))];
+        await Promise.all(distinctIds.map(async (id) => {
+          const animeData = await mal.getAnime(id, true).catch(() => null);
+          const thumbs = await getAnimeEpisodeThumbnails(
+            c.env,
+            db,
+            id,
+            animeData?.data?.status,
+            animeData?.data?.episodes ?? null
+          );
+          for (const row of missing) {
+            if (row.anime_id !== id) continue;
+            const thumb = thumbs[row.episode_num];
+            if (thumb) episodeThumbOverrides[`${row.anime_id}:${row.episode_num}`] = thumb;
+          }
+        }));
       }
     }
   }
@@ -150,39 +165,48 @@ homeRoutes.get('/', async (c) => {
   // (sourced from AniList since MAL/Jikan's season/now data is frequently
   // stale), matching Anivexa's "spotlight" behaviour rather than the
   // all-time popular list.
+  // This entire hero section is saved-only, by design -- it never calls the
+  // scraper API for banner/logo/cover, even though getAnimeArt() would
+  // technically have those values available. Only home_hero_banners
+  // (curated) and the anime_banners/anime_logos/anime_images libraries
+  // (auto pool) are ever used here.
   let heroPool: NormalisedAnime[] = [];
   let heroBanners: string[] = [];
   let heroLogos: string[] = [];
+  let heroCovers: string[] = [];
 
   if (curatedRows.length > 0) {
-    const curatedAnime = await Promise.all(curatedRows.map((r) => mal.getAnime(r.anime_id)));
+    const curatedAnime = await Promise.all(curatedRows.map((r) => mal.getAnime(r.anime_id, true)));
+    const curatedImageMap = await mal.getLocalAnimeImagesMany(curatedRows.map((r) => r.anime_id));
     for (let i = 0; i < curatedRows.length; i++) {
       const r = curatedRows[i];
       const anime = curatedAnime[i].data;
       if (!anime) continue; // skip slides whose Anime ID no longer resolves
       heroPool.push(anime);
       heroBanners.push(r.banner_image_url || '');
-      // No manually-saved logo on this slide — fall back to the same TMDB
-      // clear-logo lookup the auto pool uses, rather than showing nothing.
-      const logo = r.logo_image_url || (await mal.getTitleLogo(anime.title_english || anime.title).catch(() => ''));
-      heroLogos.push(logo);
+      heroLogos.push(r.logo_image_url || '');
+      heroCovers.push(curatedImageMap.get(anime.mal_id) || '');
     }
   }
 
   if (heroPool.length === 0) {
     heroPool = (seasonalList.length > 0 ? seasonalList : topList).slice(0, 6);
-    // Desktop shows the wide banner (your own curated upload if you've
-    // saved one for that title, else AniList's, else the poster). Mobile
-    // shows the portrait cover instead — your own saved local cover if
-    // there is one, matching Anivexa's mobile behaviour — via a <picture>
-    // breakpoint swap, no JS needed.
-    [heroBanners, heroLogos] = await Promise.all([
-      Promise.all(heroPool.map((a) => mal.getLocalAnimeBanner(a.mal_id))),
-      Promise.all(heroPool.map((a) => mal.getTitleLogo(a.title_english || a.title))),
+    // Desktop shows the wide banner (your own saved override if there is
+    // one), mobile shows the portrait cover instead via a <picture>
+    // breakpoint swap (no JS needed). Batched into 3 IN(...) queries total
+    // instead of one query per anime per field (was ~18 queries for a
+    // 6-item pool; anime_banners/anime_logos misses each also fell through
+    // to a second home_hero_banners query, so it was closer to ~24-30).
+    const heroIds = heroPool.map((a) => a.mal_id);
+    const [bannerMap, logoMap, imageMap] = await Promise.all([
+      mal.getLocalAnimeBannerInfoMany(heroIds),
+      mal.getLocalAnimeLogosMany(heroIds),
+      mal.getLocalAnimeImagesMany(heroIds),
     ]);
+    heroBanners = heroPool.map((a) => bannerMap.get(a.mal_id)?.image_url || '');
+    heroLogos = heroPool.map((a) => logoMap.get(a.mal_id) || '');
+    heroCovers = heroPool.map((a) => imageMap.get(a.mal_id) || '');
   }
-  const heroCovers = await Promise.all(heroPool.map((a) => mal.getLocalAnimeImage(a.mal_id)));
-
   html += `
 <section id="hero">
   <div id="hero-slides">

@@ -1,3 +1,5 @@
+import { SUB_PROVIDERS, DUB_PROVIDERS, HINDI_PROVIDERS } from '../lib/stream-sources';
+
 export function watchScript1(params: {
   anilistId: number | null; epNum: number; resumeParam: number; animeId: number;
   siteUrl: string; qSub: any[]; qDub: any[]; isLoggedIn: boolean;
@@ -10,6 +12,9 @@ const epNum = ${epNum};
 const resumeTime = ${resumeParam};
 const ANIME_ID = ${animeId};
 const SITE_URL = '${siteUrl}';
+const SUB_PROVIDERS = ${JSON.stringify(SUB_PROVIDERS)};
+const DUB_PROVIDERS = ${JSON.stringify(DUB_PROVIDERS)};
+const HINDI_PROVIDERS = ${JSON.stringify(HINDI_PROVIDERS)};
 let currentServer = 'animeheaven';
 let currentAudio  = 'sub';
 
@@ -97,6 +102,30 @@ function updateActiveServerButton(serverName, audio) {
     if (btn) btn.classList.add('active');
 }
 
+
+function preparePlayerShell() {
+    const pw = document.getElementById('watch-player-wrap');
+    const sp = document.getElementById('senshi-player-root');
+    if (!pw || !sp) return { pw, sp };
+    // Never blank/rebuild the player wrapper: doing so can detach the
+    // custom player and makes repeated server taps hide the whole player.
+    Array.from(pw.children).forEach(el => { if (el !== sp) el.remove(); });
+    if (sp.parentNode !== pw) pw.appendChild(sp);
+    sp.style.cssText = 'display:block;width:100%;';
+    pw.style.opacity = '1';
+    pw.style.aspectRatio = 'unset';
+    pw.style.overflow = 'visible';
+    pw.style.background = 'transparent';
+    pw.style.borderRadius = '14px';
+    const spinEl = document.getElementById('sp-spinner');
+    const errEl = document.getElementById('sp-error');
+    const preplay = document.getElementById('sp-preplay');
+    if (spinEl) spinEl.classList.remove('hide');
+    if (errEl) errEl.classList.remove('show');
+    if (preplay) preplay.classList.add('hide');
+    return { pw, sp };
+}
+
 // ── AnimeHeaven (MP4 via fetch, plays in the custom player) ──────────────
 function switchToAnimeHeaven(audio) {
     const pw = document.getElementById('watch-player-wrap');
@@ -107,25 +136,8 @@ function switchToAnimeHeaven(audio) {
     stopCurrentVideo();
 
     // Detach player node first so innerHTML='' doesn't destroy it
-    const sp = document.getElementById('senshi-player-root');
-    if (sp && sp.parentNode) sp.parentNode.removeChild(sp);
-
-    pw.style.opacity = '0';
-    if (pw._senshiHls) { pw._senshiHls.destroy(); pw._senshiHls = null; }
-
-    // Restore shell to player mode
-    pw.style.aspectRatio  = 'unset';
-    pw.style.overflow     = 'visible';
-    pw.style.background   = 'transparent';
-    pw.style.borderRadius = '14px';
-    pw.innerHTML = '';
-
-    // Show a loading state in the player
-    if (sp) {
-        sp.style.cssText = 'display:block;width:100%;';
-        pw.appendChild(sp);
-    }
-    pw.style.opacity = '1';
+    const shell = preparePlayerShell();
+    const sp = shell.sp;
 
     // Show spinner in player while fetching
     if (window.SenshiPlayer) {
@@ -225,6 +237,7 @@ function switchToAnimeHeaven(audio) {
         }, 12000);
 
         console.log('[AniVault player] setting <video> src to AnimeHeaven proxy URL and calling play()');
+        if (window._setSenshiLastSource) window._setSenshiLastSource(d.mp4, d.subtitles || []);
         vid.src = d.mp4;
         vid.load();
         vid.play().then(() => {
@@ -287,22 +300,8 @@ function switchToAnikoto(providerName, audio) {
     // running underneath the loading spinner / error state below.
     stopCurrentVideo();
 
-    const sp = document.getElementById('senshi-player-root');
-    if (sp && sp.parentNode) sp.parentNode.removeChild(sp);
-
-    pw.style.opacity = '0';
-
-    pw.style.aspectRatio  = 'unset';
-    pw.style.overflow     = 'visible';
-    pw.style.background   = 'transparent';
-    pw.style.borderRadius = '14px';
-    pw.innerHTML = '';
-
-    if (sp) {
-        sp.style.cssText = 'display:block;width:100%;';
-        pw.appendChild(sp);
-    }
-    pw.style.opacity = '1';
+    const shell = preparePlayerShell();
+    const sp = shell.sp;
 
     if (window.SenshiPlayer) window.SenshiPlayer.destroy();
     const spinEl = document.getElementById('sp-spinner');
@@ -360,16 +359,444 @@ function switchToAnikoto(providerName, audio) {
         });
 }
 
-function switchToServer(serverName, audio = currentAudio) {
+// ── DesiDub (Hindi Dub HLS/MP4, or raw embed-only sources) ────────────────
+// realType is 'dub' (VidMoly/StreamRuby/Mirror/other HLS-capable hosts) or
+// 'raw' (embed-only hosts like Abyss/CLOUD the scraper couldn't resolve to
+// a direct stream — those get dropped straight into a plain iframe below
+// instead of the custom SenshiPlayer).
+function switchToDesidub(providerName, realType) {
     const pw = document.getElementById('watch-player-wrap');
     if (!pw) return;
+
+    stopCurrentVideo();
+
+    const shell = preparePlayerShell();
+    const sp = shell.sp;
+
+    if (window.SenshiPlayer) window.SenshiPlayer.destroy();
+    const spinEl = document.getElementById('sp-spinner');
+    if (spinEl) spinEl.classList.remove('hide');
+    const errEl = document.getElementById('sp-error');
+    if (errEl) errEl.classList.remove('show');
+    const preplay = document.getElementById('sp-preplay');
+    if (preplay) preplay.classList.add('hide');
+
+    function fail(msg) {
+        const errMsg = document.getElementById('sp-err-msg');
+        if (errMsg) errMsg.textContent = msg;
+        if (errEl) errEl.classList.add('show');
+        if (spinEl) spinEl.classList.add('hide');
+    }
+
+    function applyDesidubResult(d) {
+        if (d.error) { fail(\`DesiDub (\${providerName}): \${d.error}\`); return; }
+
+        // Raw/embed-only source — no direct stream was extracted, so this
+        // one plays back as a real iframe instead of the custom player.
+        if (d.iframeOnly && d.embedUrl) {
+            pw.innerHTML = \`<iframe id="main-player-iframe" src="\${d.embedUrl}" allow="accelerometer;autoplay;clipboard-write;encrypted-media;gyroscope;picture-in-picture;web-share" allowfullscreen loading="lazy"></iframe>\`;
+            pw.style.opacity = '1';
+            return;
+        }
+
+        const badge = document.getElementById('sp-hls-badge');
+        if (d.m3u8) {
+            if (badge) badge.textContent = 'HLS';
+            if (window.SenshiPlayer && window.SenshiPlayer.loadWithSubs) {
+                window.SenshiPlayer.loadWithSubs(d.m3u8, d.subtitles || []);
+            } else if (window.SenshiPlayer) {
+                window.SenshiPlayer.load(d.m3u8);
+            } else {
+                const vid = document.getElementById('sp-video');
+                if (vid) { vid.src = d.m3u8; vid.load(); vid.play().catch(() => {}); }
+            }
+            return;
+        }
+        if (d.mp4) {
+            if (badge) badge.textContent = 'MP4';
+            if (window._setSenshiLastSource) window._setSenshiLastSource(d.mp4, d.subtitles || []);
+            const vid = document.getElementById('sp-video');
+            if (!vid) { fail('Player element missing (sp-video not found).'); return; }
+            vid.src = d.mp4;
+            vid.load();
+            vid.play().catch(err => {
+                if (err && err.name === 'NotAllowedError') {
+                    if (spinEl) spinEl.classList.add('hide');
+                    const preplayEl = document.getElementById('sp-preplay');
+                    const ppBtn = document.getElementById('sp-pp-btn');
+                    if (preplayEl) {
+                        preplayEl.classList.remove('hide');
+                        (ppBtn || preplayEl).addEventListener('click', () => vid.play().catch(() => {}), { once: true });
+                    }
+                }
+            });
+            return;
+        }
+        fail('No stream URL returned.');
+    }
+
+    // Same reuse-the-probe-response pattern as Anikoto — avoids requesting
+    // the same provider twice back-to-back right after the probe found it.
+    window._desidubCache = window._desidubCache || {};
+    const cacheKey = realType + '::' + providerName.toLowerCase().trim();
+    const cached = window._desidubCache[cacheKey];
+    if (cached && (Date.now() - cached.ts) < 8000) {
+        delete window._desidubCache[cacheKey];
+        applyDesidubResult(cached.data);
+        return;
+    }
+
+    fetch(\`${siteUrl}/api/desidub_stream.php?anime=${animeId}&ep=${epNum}&audio=\${realType}&server=\${encodeURIComponent(providerName)}\`)
+        .then(r => r.json())
+        .then(applyDesidubResult)
+        .catch(() => fail('Could not reach stream server.'));
+}
+
+// ── Dynamic quality switcher ──────────────────────────────────────────────
+// Only shown when the active server exposed more than one resolution
+// (the sources with a single adaptive HLS master rarely need this — it's
+// mainly AniWaves/AniZone/WatchAnimeWorld/ReAnime/DesiDub, which can hand
+// back separate per-resolution URLs). Index 0 is always already the
+// highest quality (sorted server-side) and is what's playing by default;
+// this just lets you drop down from it.
+function clearDynQualityRow() {
+    const row = document.getElementById('dyn-quality-row');
+    if (row) row.remove();
+}
+function renderQualityRow(qualities, onPick) {
+    clearDynQualityRow();
+    if (!qualities || qualities.length < 2) return;
+    const panel = document.getElementById('server-grid');
+    if (!panel || !panel.parentNode) return;
+    const row = document.createElement('div');
+    row.id = 'dyn-quality-row';
+    row.className = 'wp-quality-row';
+    const lbl = document.createElement('span');
+    lbl.className = 'wpc-label';
+    lbl.textContent = 'Quality';
+    row.appendChild(lbl);
+    const wrap = document.createElement('div');
+    wrap.className = 'wpc-quals';
+    qualities.forEach((q, i) => {
+        const b = document.createElement('button');
+        b.className = 'wpc-q' + (i === 0 ? ' on' : '');
+        b.textContent = q.label || ('Q' + (i + 1));
+        b.addEventListener('click', function() {
+            wrap.querySelectorAll('.wpc-q').forEach(x => x.classList.remove('on'));
+            b.classList.add('on');
+            onPick(q);
+        });
+        wrap.appendChild(b);
+    });
+    row.appendChild(wrap);
+    panel.parentNode.insertBefore(row, panel);
+}
+
+// ── ReAnime / AnimeNoSub / AniWaves / AniZone / WatchAnimeWorld ───────────
+// Playback rendering is shared (identical HLS/MP4/iframe/quality-switcher
+// logic regardless of source) but the actual network calls now go straight
+// to each source's own dedicated *_stream.php route and its own cache
+// namespace — no shared source_stream.php dispatch endpoint anymore.
+const STREAM_ENDPOINT = {
+    reanime: 'reanime_stream.php',
+    animenosub: 'animenosub_stream.php',
+    aniwaves: 'aniwaves_stream.php',
+    anizone: 'anizone_stream.php',
+    watchanimeworld: 'watchanimeworld_stream.php',
+};
+function switchToGenericSource(source, providerName, realType, langKey) {
+    const pw = document.getElementById('watch-player-wrap');
+    if (!pw) return;
+
+    stopCurrentVideo();
+    clearDynQualityRow();
+
+    const shell = preparePlayerShell();
+    const sp = shell.sp;
+
+    if (window.SenshiPlayer) window.SenshiPlayer.destroy();
+    const spinEl = document.getElementById('sp-spinner');
+    if (spinEl) spinEl.classList.remove('hide');
+    const errEl = document.getElementById('sp-error');
+    if (errEl) errEl.classList.remove('show');
+    const preplay = document.getElementById('sp-preplay');
+    if (preplay) preplay.classList.add('hide');
+
+    function fail(msg) {
+        const errMsg = document.getElementById('sp-err-msg');
+        if (errMsg) errMsg.textContent = msg;
+        if (errEl) errEl.classList.add('show');
+        if (spinEl) spinEl.classList.add('hide');
+    }
+
+    function loadUrl(url, isMp4, subs) {
+        const badge = document.getElementById('sp-hls-badge');
+        if (isMp4) {
+            if (badge) badge.textContent = 'MP4';
+            if (window._setSenshiLastSource) window._setSenshiLastSource(url, subs || []);
+            const vid = document.getElementById('sp-video');
+            if (!vid) { fail('Player element missing (sp-video not found).'); return; }
+            vid.src = url;
+            vid.load();
+            vid.play().catch(err => {
+                if (err && err.name === 'NotAllowedError') {
+                    if (spinEl) spinEl.classList.add('hide');
+                    const preplayEl = document.getElementById('sp-preplay');
+                    const ppBtn = document.getElementById('sp-pp-btn');
+                    if (preplayEl) {
+                        preplayEl.classList.remove('hide');
+                        (ppBtn || preplayEl).addEventListener('click', () => vid.play().catch(() => {}), { once: true });
+                    }
+                }
+            });
+            return;
+        }
+        if (badge) badge.textContent = 'HLS';
+        if (window.SenshiPlayer && window.SenshiPlayer.loadWithSubs) {
+            window.SenshiPlayer.loadWithSubs(url, subs || []);
+        } else if (window.SenshiPlayer) {
+            window.SenshiPlayer.load(url);
+        } else {
+            const vid = document.getElementById('sp-video');
+            if (vid) { vid.src = url; vid.load(); vid.play().catch(() => {}); }
+        }
+    }
+
+    function applyResult(d) {
+        if (d.error) { fail(\`\${source} (\${providerName}): \${d.error}\`); return; }
+
+        if (d.iframeOnly && d.embedUrl) {
+            pw.innerHTML = \`<iframe id="main-player-iframe" src="\${d.embedUrl}" allow="accelerometer;autoplay;clipboard-write;encrypted-media;gyroscope;picture-in-picture;web-share" allowfullscreen loading="lazy"></iframe>\`;
+            pw.style.opacity = '1';
+            return;
+        }
+
+        const subs = d.subtitles || [];
+
+        // AniZone / ReAnime / WatchAnimeWorld serve demuxed HLS — audio and
+        // video are separate renditions linked only inside the *master*
+        // playlist (#EXT-X-MEDIA:TYPE=AUDIO). Their per-resolution
+        // "qualities" URLs are video-only child playlists with the audio
+        // rendition stripped out, so loading one directly plays silently no
+        // matter what the mute button does. For these three, always load
+        // the master and let hls.js's own adaptive engine handle
+        // resolution switching — that keeps the linked audio track intact
+        // and feeds the player's built-in quality menu (buildQual/qualList
+        // in player-pro-script.ts) straight from hls.js's parsed levels, so
+        // there's no separate quality row to maintain for these sources.
+        const DEMUXED_AUDIO_SOURCES = ['reanime', 'anizone', 'watchanimeworld'];
+        if (DEMUXED_AUDIO_SOURCES.indexOf(source) !== -1) {
+            clearDynQualityRow();
+            if (!d.m3u8) { fail('No stream URL returned.'); return; }
+            loadUrl(d.m3u8, false, subs);
+            return;
+        }
+
+        // Already sorted highest-first server-side — [0] is "top quality as
+        // top priority", the rest populate the manual switcher below.
+        const qualities = Array.isArray(d.qualities) ? d.qualities : [];
+        const top = qualities.length ? (qualities[0].hlsProxyUrl || qualities[0].url) : null;
+        const initialUrl = top || d.m3u8 || d.mp4;
+        const initialIsMp4 = !!(!top && d.mp4 && !d.m3u8);
+
+        if (!initialUrl) { fail('No stream URL returned.'); return; }
+        loadUrl(initialUrl, initialIsMp4, subs);
+
+        if (qualities.length > 1) {
+            renderQualityRow(qualities, function(q) {
+                const url = q.hlsProxyUrl || q.url;
+                if (url) loadUrl(url, false, subs);
+            });
+        }
+    }
+
+    // Per-source cache namespace (window._reanimeCache, window._anizoneCache,
+    // etc.) — set by that source's own checkXProvider function below, keyed
+    // the same way there and here so a successful probe can be reused
+    // without firing a second identical request at the embed host.
+    const cacheKey = [realType, langKey || '', providerName.toLowerCase().trim()].join('::');
+    const cacheName = '_' + source + 'Cache';
+    window[cacheName] = window[cacheName] || {};
+    const cached = window[cacheName][cacheKey];
+    if (cached && (Date.now() - cached.ts) < 8000) {
+        delete window[cacheName][cacheKey];
+        applyResult(cached.data);
+        return;
+    }
+
+    const endpoint = STREAM_ENDPOINT[source];
+    let url = \`${siteUrl}/api/\${endpoint}?anime=${animeId}&ep=${epNum}&audio=\${realType}&server=\${encodeURIComponent(providerName)}\`;
+    if (langKey) url += \`&lang=\${encodeURIComponent(langKey)}\`;
+    fetch(url)
+        .then(r => r.json())
+        .then(applyResult)
+        .catch(() => fail('Could not reach stream server.'));
+}
+
+// displayKey is the STABLE key used for click handling + button
+// highlighting — for a fixed server button that's "fixed:<source>" (e.g.
+// "fixed:animeheaven"); for the fully-dynamic Multi Dub buttons it's the
+// same as serverName, same as before. serverName is always the REAL
+// key that says what to actually fetch/play — for a fixed button whose
+// own source came up empty for this episode, that's a DIFFERENT source's
+// key (same-group fallback), even though the button being highlighted
+// still shows its own original label. Defaults to the old single-key
+// behavior when displayKey isn't passed, so nothing else calling this
+// needs to change.
+let currentDisplayServer = 'fixed:animeheaven';
+function switchToTurboVid(id, audio) {
+    const pw = document.getElementById('watch-player-wrap');
+    if (!pw) return;
+    stopCurrentVideo();
+    clearDynQualityRow();
+    const shell = preparePlayerShell();
+    const sp = shell.sp;
+    if (window.SenshiPlayer) window.SenshiPlayer.destroy();
+    const spinEl = document.getElementById('sp-spinner');
+    const errEl = document.getElementById('sp-error');
+    if (spinEl) spinEl.classList.remove('hide');
+    if (errEl) errEl.classList.remove('show');
+
+    fetch(\`\${SITE_URL}/api/turbovid_stream.php?id=\${encodeURIComponent(id)}\`)
+      .then(r => r.json())
+      .then(d => {
+        if (d.error) throw new Error(d.error);
+        if (d.type === 'iframe' && d.embedUrl) {
+          pw.innerHTML = \`<iframe id="main-player-iframe" src="\${d.embedUrl}" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen loading="lazy"></iframe>\`;
+          return;
+        }
+
+        // TurboVid direct MP4: use the resolved video URL directly.
+        // No proxy is needed — the media host is already browser-playable.
+        if (d.type === 'mp4' && d.videoUrl) {
+          if (window._setSenshiLastSource) window._setSenshiLastSource(d.videoUrl, d.subtitles || []);
+          const vid = document.getElementById('sp-video');
+          if (!vid) throw new Error('Player video element not found.');
+          const badge = document.getElementById('sp-hls-badge');
+          if (badge) badge.textContent = 'MP4';
+          vid.src = d.videoUrl;
+          vid.load();
+          vid.addEventListener('playing', () => {
+            if (spinEl) spinEl.classList.add('hide');
+          }, { once: true });
+          vid.addEventListener('error', () => {
+            if (spinEl) spinEl.classList.add('hide');
+            const msg = document.getElementById('sp-err-msg');
+            if (msg) msg.textContent = 'TurboVid: direct MP4 failed to load. Try another server.';
+            if (errEl) errEl.classList.add('show');
+          }, { once: true });
+          vid.play().catch(err => {
+            if (err && err.name === 'NotAllowedError') {
+              if (spinEl) spinEl.classList.add('hide');
+              const preplay = document.getElementById('sp-preplay');
+              const ppBtn = document.getElementById('sp-pp-btn');
+              if (preplay) {
+                preplay.classList.remove('hide');
+                (ppBtn || preplay).addEventListener('click', () => { vid.play().catch(() => {}); }, { once: true });
+              }
+            }
+          });
+          return;
+        }
+
+        const streamUrl = d.m3u8 || d.hlsProxyUrl;
+        if (!streamUrl) throw new Error('TurboVid did not return a playable stream.');
+        const badge = document.getElementById('sp-hls-badge');
+        if (badge) badge.textContent = 'HLS';
+        if (window.SenshiPlayer && window.SenshiPlayer.loadWithSubs) {
+          window.SenshiPlayer.loadWithSubs(streamUrl, d.subtitles || []);
+        } else if (window.SenshiPlayer) {
+          window.SenshiPlayer.load(streamUrl);
+        } else {
+          const vid = document.getElementById('sp-video');
+          if (vid) { vid.src = streamUrl; vid.load(); vid.play().catch(()=>{}); }
+        }      })
+      .catch(e => {
+        const msg = document.getElementById('sp-err-msg');
+        if (msg) msg.textContent = 'TurboVid: ' + (e.message || 'Resolve failed');
+        if (errEl) errEl.classList.add('show');
+        if (spinEl) spinEl.classList.add('hide');
+      });
+}
+
+function ensureInitialAvPlayback() {
+    // The saved AniVault source is the primary server, so its first load
+    // should start without requiring a second click on the AV button.
+    // Browsers may block audible autoplay, so first try normally and then
+    // retry muted when the browser only permits inaudible autoplay.
+    const startedAt = Date.now();
+    const maxWait = 15000;
+
+    const attempt = () => {
+        const vid = document.getElementById('sp-video');
+        if (!vid) {
+            if (Date.now() - startedAt < maxWait) setTimeout(attempt, 200);
+            return;
+        }
+
+        // Keep the native autoplay flag on for browsers that honor it.
+        vid.autoplay = true;
+
+        const tryPlay = () => {
+            const p = vid.play();
+            if (!p || typeof p.then !== 'function') return;
+
+            p.then(() => {
+                // Restore the user's normal audio state after a successful
+                // muted-autoplay fallback. If the browser permits audible
+                // autoplay, this simply leaves the existing state untouched.
+                if (vid.dataset.avAutoMuted === '1') {
+                    vid.muted = false;
+                    delete vid.dataset.avAutoMuted;
+                }
+            }).catch(err => {
+                if (err && err.name === 'NotAllowedError' && !vid.muted) {
+                    // Muted media is generally permitted to autoplay even
+                    // where audible autoplay is blocked.
+                    vid.muted = true;
+                    vid.dataset.avAutoMuted = '1';
+                    const retry = vid.play();
+                    if (retry && typeof retry.catch === 'function') {
+                        retry.catch(() => {});
+                    }
+                }
+            });
+        };
+
+        // Once enough media is available, make the play attempt. We also
+        // retry briefly because HLS attaches MediaSource asynchronously.
+        if (vid.readyState >= 2) {
+            tryPlay();
+        } else if (Date.now() - startedAt < maxWait) {
+            setTimeout(attempt, 200);
+        }
+    };
+
+    attempt();
+}
+
+function switchToServer(serverName, audio = currentAudio, displayKey) {
+    const pw = document.getElementById('watch-player-wrap');
+    if (!pw) return;
+    const dKey = displayKey || serverName;
+
+    // ── Saved TurboVid sources ───────────────────────────────────────────
+    if (serverName.startsWith('turbovid:')) {
+        switchToTurboVid(serverName.slice('turbovid:'.length), audio);
+        currentServer = serverName;
+        currentDisplayServer = dKey;
+        currentAudio = audio;
+        updateActiveServerButton(dKey, audio);
+        return;
+    }
 
     // ── AnimeHeaven (MP4) ────────────────────────────────────────────────
     if (serverName === 'animeheaven') {
         switchToAnimeHeaven(audio);
         currentServer = serverName;
+        currentDisplayServer = dKey;
         currentAudio  = audio;
-        updateActiveServerButton(serverName, audio);
+        updateActiveServerButton(dKey, audio);
         return;
     }
 
@@ -378,11 +805,68 @@ function switchToServer(serverName, audio = currentAudio) {
         const providerName = serverName.slice('anikoto-'.length);
         switchToAnikoto(providerName, audio);
         currentServer = serverName;
+        currentDisplayServer = dKey;
         currentAudio  = audio;
-        updateActiveServerButton(serverName, audio);
+        updateActiveServerButton(dKey, audio);
         return;
     }
+
+    // ── DesiDub Hindi Dub / raw sources ────────────────────────────────────
+    // Key shape: "desidub:<dub|raw>:<provider name>" — the middle segment is
+    // the real type sent to the scraper API, independent of which UI tab
+    // ("dub") the button lives under.
+    if (serverName.startsWith('desidub:')) {
+        const parts = serverName.split(':');
+        const realType = parts[1];
+        const providerName = parts.slice(2).join(':');
+        switchToDesidub(providerName, realType);
+        currentServer = serverName;
+        currentDisplayServer = dKey;
+        currentAudio  = audio;
+        updateActiveServerButton(dKey, audio);
+        return;
+    }
+
+    // ── ReAnime / AnimeNoSub / AniWaves / AniZone / WatchAnimeWorld ────────
+    // Key shape: "<source>:<sub|dub>:<langKey>:<provider name>" — langKey is
+    // empty for sub and for the 3 English-only-dub sources, and the actual
+    // language (e.g. "hin", "tam", "spa") for AniZone/WatchAnimeWorld dub.
+    const GENERIC_SOURCES = ['reanime', 'animenosub', 'aniwaves', 'anizone', 'watchanimeworld'];
+    for (let i = 0; i < GENERIC_SOURCES.length; i++) {
+        const src = GENERIC_SOURCES[i];
+        if (serverName.startsWith(src + ':')) {
+            const parts = serverName.split(':');
+            const realType = parts[1];
+            const langKey = parts[2] || '';
+            const providerName = parts.slice(3).join(':');
+            switchToGenericSource(src, providerName, realType, langKey);
+            currentServer = serverName;
+            currentDisplayServer = dKey;
+            currentAudio  = audio;
+            updateActiveServerButton(dKey, audio);
+            return;
+        }
+    }
 }
+
+// Retry button hook (called by player-script.ts when the player shows its
+// error state and the person taps "Retry") — clears the Anikoto/
+// AnimeHeaven probe caches and re-runs whichever server was last active,
+// or falls back to whichever server button is currently marked active.
+window.retryCurrentServer = function() {
+    console.log('[AniVault player] retryCurrentServer called, currentServer:', currentServer, 'currentAudio:', currentAudio);
+    if (window._anikotoCache) window._anikotoCache = {};
+    if (window._animeheavenReq) window._animeheavenReq = {};
+    if (currentServer && typeof switchToServer === 'function') {
+        switchToServer(currentServer, currentAudio, currentDisplayServer);
+    } else {
+        const activeBtn = document.querySelector('.server-tab-panel.active .server-btn.active') || document.querySelector('.server-btn.active');
+        if (activeBtn && activeBtn.dataset.server) {
+            const realKey = activeBtn.dataset.realServer || activeBtn.dataset.server;
+            switchToServer(realKey, currentAudio, activeBtn.dataset.server);
+        }
+    }
+};
 
 // Gate buttons — sign in / join popup
 ['wg-play','wg-play2'].forEach(function(id) {
@@ -409,13 +893,28 @@ document.querySelectorAll('.server-tab').forEach(tab => {
 });
 
 // ── Server button clicks ──────────────────────────────────────────────────
+// For fixed server buttons, data-server holds the STABLE display key
+// ("fixed:<source>") and data-real-server (set once probeAndRenderServers
+// resolves that source, possibly to a fallback from elsewhere in the same
+// group) holds what to actually play. Buttons still marked
+// server-btn-pending/server-btn-dead are non-interactive via CSS
+// (pointer-events: none) — nothing to resolve yet, or nothing to play.
 document.querySelectorAll('.server-tab-panel').forEach(panel => {
     panel.addEventListener('click', e => {
         const btn = e.target.closest('.server-btn');
         if (!btn) return;
-        const serverName = btn.dataset.server;
+        // A real user selection must permanently win over the background
+        // server-probing/autoplay chain. Previously the probe could finish
+        // a few seconds later and silently activate Sub/HD-1 even after the
+        // user had selected Hindi/another server.
+        window._manualServerSelection = true;
+        // A manual tap is an explicit playback choice. The probe/watchdog
+        // logic inside the player bootstrap sees this flag and must never
+        // replace the player while the selected source is resolving.
+        const displayKey = btn.dataset.server;
+        const realKey = btn.dataset.realServer || displayKey;
         const audio = panel.dataset.audio;
-        switchToServer(serverName, audio);
+        switchToServer(realKey, audio, displayKey);
     });
 });
 
@@ -423,6 +922,7 @@ document.querySelectorAll('.server-tab-panel').forEach(panel => {
 // Hits the real stream endpoints for this anime/episode (not just a
 // provider listing) so broken/404 servers never show up as clickable.
 (function probeAndRenderServers() {
+  function startServerProbe() {
     // The server tab panels only exist for logged-in users with a video
     // (see the Auth::check() && ($video || $megaplayEmbed) guard above).
     // For everyone else #watch-player-wrap holds the sign-in gate — don't
@@ -435,21 +935,158 @@ document.querySelectorAll('.server-tab-panel').forEach(panel => {
     const EP    = ${epNum};
     console.log('[AniVault player] probing servers on', SITE, 'anime', ANIME, 'ep', EP);
 
-    function makeBtn(serverKey, label, badge) {
-        const btn = document.createElement('button');
-        btn.className = 'server-btn';
-        btn.dataset.server = serverKey;
-        btn.innerHTML = badge ? \`\${label} <span class="ad-badge">\${badge}</span>\` : label;
-        return btn;
+    const MULTI_LANG_SOURCES = ['anizone', 'watchanimeworld'];
+    const MULTI_PRIORITY = ['anizone', 'watchanimeworld'];
+    const SOURCE_LABELS = { reanime: 'ReAnime', animenosub: 'NoSub', aniwaves: 'Waves', anizone: 'Zone', watchanimeworld: 'World', anikoto: 'Anikoto', animeheaven: 'AnimeHeaven', desidub: 'DesiDub' };
+
+    function priorityOf(list, source) {
+        const i = list.indexOf(source);
+        return i === -1 ? list.length : i;
     }
 
-    // Same reuse-the-probe-response pattern as Anikoto below — hitting
-    // animeheaven_stream.php twice back-to-back (once here to confirm it
-    // works, then again when switchToAnimeHeaven actually loads it) was
-    // invalidating the session/token AnimeHeaven hands out, so the button
-    // would show up, auto-activate, then immediately error out with
-    // "Could not reach stream server." Switching servers and back masked
-    // it because that's just a single fresh request outside the race.
+    // Mirrors providerId() in stream-sources.ts exactly — must produce the
+    // same id both sides, since watch.ts bakes it into data-server
+    // server-side and this script looks buttons up by it client-side.
+    function providerId(source, provider) {
+        const slug = (provider || source).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-+|-+$)/g, '');
+        return \`\${source}__\${slug}\`;
+    }
+
+    let playbackStarted = false;
+
+    // AniVault TurboVid is the primary server when one is saved for this
+    // episode. Start it immediately instead of waiting for the slower
+    // third-party server probes. The button remains first in every group.
+    // Start the first saved AniVault source immediately. Prefer Sub, then
+    // English Dub, Hindi Dub, and finally Multi Dub. Hindi/Multi buttons live
+    // inside the Dub tab, so they use the "dub" playback bucket.
+    let initialAv = document.querySelector('#tab-panel-sub .turbovid-server-btn');
+    let initialAvAudio = 'sub';
+    if (!initialAv) {
+        initialAv = document.querySelector('#servers-dub-body .turbovid-server-btn');
+        initialAvAudio = 'dub';
+    }
+    if (!initialAv) {
+        initialAv = document.querySelector('#servers-dub-hindi-body .turbovid-server-btn');
+        initialAvAudio = 'dub';
+    }
+    if (!initialAv) {
+        initialAv = document.querySelector('#servers-dub-multi-body .turbovid-server-btn');
+        initialAvAudio = 'dub';
+    }
+    if (initialAv) {
+        playbackStarted = true;
+        document.querySelectorAll('.server-btn').forEach(b => b.classList.remove('active'));
+        initialAv.classList.add('active');
+        if (initialAvAudio === 'dub') {
+            document.querySelectorAll('.server-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === 'dub'));
+            document.querySelectorAll('.server-tab-panel').forEach(p => p.classList.toggle('active', p.id === 'tab-panel-dub'));
+        }
+        switchToServer(initialAv.dataset.server, initialAvAudio, initialAv.dataset.server);
+        // AV is the primary source: keep trying the actual video element
+        // until the stream has attached, instead of requiring the user to
+        // click the same AV button again.
+        ensureInitialAvPlayback();
+    }
+
+    // Plain fetch() has no timeout: if the scraper backend hangs on one
+    // particular source instead of erroring, that fetch's promise never
+    // settles. Force a hard ceiling so "never responds" is treated the
+    // same as "responded with an error".
+    function fetchJsonTimeout(url, ms = 12000) {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), ms);
+        return fetch(url, { signal: controller.signal })
+            .then(r => r.json())
+            .finally(() => clearTimeout(timer));
+    }
+
+    function langBucket(lang) {
+        const l = (lang || '').toLowerCase();
+        if (/^en|eng|english/.test(l)) return 'en';
+        if (/^hi|hin|hindi/.test(l)) return 'hindi';
+        return 'multi';
+    }
+    function prettyLang(lang) {
+        const l = (lang || '').toLowerCase();
+        const known = { eng: 'English', en: 'English', hin: 'Hindi', hi: 'Hindi', tam: 'Tamil', ta: 'Tamil', tel: 'Telugu', te: 'Telugu', mal: 'Malayalam', ml: 'Malayalam', kan: 'Kannada', kn: 'Kannada', spa: 'Spanish', es: 'Spanish', ger: 'German', deu: 'German', de: 'German', por: 'Portuguese', pt: 'Portuguese', fre: 'French', fra: 'French', fr: 'French', ita: 'Italian', it: 'Italian', tha: 'Thai', th: 'Thai' };
+        return known[l] || (lang ? lang.charAt(0).toUpperCase() + lang.slice(1) : 'Dub');
+    }
+
+    // ── Button UI helpers ────────────────────────────────────────────────
+    // group (sub/dub/hindi) + id (providerId(source, provider)) together
+    // identify a button — the SAME source (e.g. AniZone/Anikoto) can have
+    // several buttons, each its own separate provider, and some sources
+    // recur across groups too, so looking up by source alone would find
+    // the wrong button and stomp on its state.
+    function fixedBtnEl(group, id) {
+        return document.querySelector(\`.server-btn[data-server="fixed:\${group}:\${id}"]\`);
+    }
+    function setBtnPending(group, id) {
+        const btn = fixedBtnEl(group, id);
+        if (btn) btn.classList.add('server-btn-pending');
+    }
+    function setBtnResolved(group, id, realKey, isFallback) {
+        const btn = fixedBtnEl(group, id);
+        if (!btn) return;
+        btn.classList.remove('server-btn-pending', 'server-btn-dead');
+        btn.dataset.realServer = realKey;
+        btn.classList.toggle('server-btn-fallback', !!isFallback);
+        btn.title = isFallback ? \`Playing a different working server (this one had nothing for this episode)\` : '';
+    }
+    function setBtnDead(group, id) {
+        const btn = fixedBtnEl(group, id);
+        if (!btn) return;
+        btn.classList.remove('server-btn-pending');
+        btn.classList.add('server-btn-dead');
+    }
+
+    function activateFixedButton(group, id, tabAudio) {
+        playbackStarted = true;
+        _clearOverallWatchdog();
+        document.querySelectorAll('.server-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tabAudio));
+        document.querySelectorAll('.server-tab-panel').forEach(p => p.classList.toggle('active', p.id === 'tab-panel-' + tabAudio));
+        document.querySelectorAll('.server-btn').forEach(b => b.classList.remove('active'));
+        const btn = fixedBtnEl(group, id);
+        const realKey = btn ? (btn.dataset.realServer || id) : id;
+        if (btn) btn.classList.add('active');
+        switchToServer(realKey, tabAudio, \`fixed:\${group}:\${id}\`);
+    }
+
+    function showNoServersAtAll(msg) {
+        const pw = document.getElementById('watch-player-wrap');
+        if (!pw) return;
+        // Never replace the player DOM here. The old watchdog used
+        // innerHTML and could destroy #senshi-player-root; a late stream
+        // response would then leave a black/empty player that could not
+        // recover when another server was selected.
+        const errEl = document.getElementById('sp-error');
+        const errMsg = document.getElementById('sp-err-msg');
+        const spinEl = document.getElementById('sp-spinner');
+        if (errMsg) errMsg.textContent = msg || 'No working servers found for this episode.';
+        if (errEl) errEl.classList.add('show');
+        if (spinEl) spinEl.classList.add('hide');
+    }
+
+    // Do not replace/destroy the player while the scraper is still working.
+    // Individual provider requests already have their own timeouts/retries,
+    // and the user can manually switch servers at any time.
+    const _overallWatchdog = setTimeout(() => {
+        if (!playbackStarted && !window._manualServerSelection) {
+            const errEl = document.getElementById('sp-error');
+            const errMsg = document.getElementById('sp-err-msg');
+            if (errMsg) errMsg.textContent = 'Servers are taking longer than usual to respond. You can still choose a server below.';
+            if (errEl) errEl.classList.add('show');
+        }
+    }, 45000);
+    const _clearOverallWatchdog = () => clearTimeout(_overallWatchdog);
+
+    // ── AnimeHeaven (sub-only) ───────────────────────────────────────────
+    // Reuses fetchAnimeHeavenOnce's own in-flight/recent-request dedup —
+    // hitting animeheaven_stream.php twice back-to-back for the same
+    // audio invalidates the session/token it hands out, so this probe's
+    // request is the SAME one switchToAnimeHeaven ends up using, not a
+    // second one.
     function checkAnimeHeaven(audio) {
         return fetchAnimeHeavenOnce(audio)
             .then(d => {
@@ -458,31 +1095,18 @@ document.querySelectorAll('.server-tab-panel').forEach(panel => {
                 return ok;
             }).catch(e => { console.error('[AniVault player] animeheaven fetch threw', e); return false; });
     }
-    // Same pattern as AnimeHeaven's probe above, but for Anikoto (which also returns subtitles,
-    // handled separately in switchToAnikoto/loadWithSubs — no change needed
-    // to the discovery/probing logic here).
-    function fetchAnikotoList(audio, attempt = 1) {
-        return fetch(\`\${SITE}/api/anikoto_stream.php?anime=\${ANIME}&ep=\${EP}&audio=\${audio}\`)
-            .then(r => r.json())
-            .then(d => { console.log('[AniVault player] anikoto list', audio, 'attempt', attempt, d); return (d.servers || []).filter(s => s.type === audio); })
-            .catch(e => { console.error('[AniVault player] anikoto list fetch threw', audio, e); return []; })
-            .then(list => {
-                if (list.length > 0 || attempt >= 3) return list;
-                return new Promise(res => setTimeout(res, attempt * 1500))
-                    .then(() => fetchAnikotoList(audio, attempt + 1));
-            });
-    }
+
+    // ── Anikoto (its own dedicated endpoint/cache shape) ────────────────
     function checkAnikotoProvider(provider, audio) {
         return fetch(\`\${SITE}/api/anikoto_stream.php?anime=\${ANIME}&ep=\${EP}&audio=\${audio}&server=\${encodeURIComponent(provider)}\`)
             .then(r => r.json()).then(d => {
                 const ok = !d.error && !!d.m3u8;
                 console.log('[AniVault player] anikoto', provider, audio, ok ? 'OK' : 'FAILED', d);
-                // Stash the response so the auto-activated first play
-                // (triggered right below in markServerFound) can reuse it
-                // instead of firing a second identical request at the
-                // scraper for the same provider — some embed hosts hand
-                // out session/token-locked links that don't survive being
-                // requested twice in a row.
+                // Stash the response so the auto-activated first play can
+                // reuse it instead of firing a second identical request
+                // at the scraper for the same provider — some embed
+                // hosts hand out session/token-locked links that don't
+                // survive being requested twice in a row.
                 if (ok) {
                     window._anikotoCache = window._anikotoCache || {};
                     window._anikotoCache[audio + '::' + provider.toLowerCase().trim()] = { data: d, ts: Date.now() };
@@ -491,156 +1115,275 @@ document.querySelectorAll('.server-tab-panel').forEach(panel => {
             }).catch(() => false);
     }
 
-    // ── Incremental probing ───────────────────────────────────────────────
-    // Every server check below runs independently (no Promise.all gate).
-    // The instant ANY server for the active "sub" tab is confirmed, its
-    // button is rendered AND playback starts immediately — everything else
-    // keeps probing in the background and just slots its button in next to
-    // it whenever it finishes. If sub comes up completely empty, we fall
-    // back to whatever's already working (or shows up next) on dub.
-    let playbackStarted = false;
-    let subPending = 0, dubPending = 0;
-    let subHasAny  = false, dubHasAny  = false;
-
-    function setSearching(audio, stillSearching) {
-        const loading = document.getElementById('servers-' + audio + '-loading');
-        if (!loading) return;
-        if (stillSearching) {
-            // Collapse the 3-bar skeleton down to a single "still looking"
-            // pill once real buttons are already showing next to it.
-            loading.innerHTML = '<span class="server-skel"><span class="server-skel-dot"></span><span class="server-skel-bar" style="width:80px"></span></span>';
-        } else {
-            const hasAny = audio === 'sub' ? subHasAny : dubHasAny;
-            if (hasAny) loading.remove();
-            else { loading.className = 'no-servers-msg'; loading.textContent = 'No working servers found'; }
-        }
+    // ── Generic (ReAnime / AnimeNoSub / AniWaves / AniZone / WatchAnimeWorld) ──
+    // All 5 share the exact same *_stream.php list/check shape — one
+    // dedicated endpoint each, differing only in which one. STREAM_ENDPOINT
+    // is declared once, up in switchToGenericSource, and is reused here.
+    function fetchSourceList(source, audio, attempt = 1) {
+        return fetchJsonTimeout(\`\${SITE}/api/\${STREAM_ENDPOINT[source]}?anime=\${ANIME}&ep=\${EP}&audio=\${audio}\`)
+            .then(d => { console.log('[AniVault player]', source, 'list', audio, 'attempt', attempt, d); return d.servers || []; })
+            .catch(e => { console.error('[AniVault player]', source, 'list fetch failed/timed out', audio, e); return []; })
+            .then(list => {
+                if (list.length > 0 || attempt >= 3) return list;
+                return new Promise(res => setTimeout(res, attempt * 1500)).then(() => fetchSourceList(source, audio, attempt + 1));
+            });
     }
+    function checkSourceProvider(source, providerName, audio, lang) {
+        let url = \`\${SITE}/api/\${STREAM_ENDPOINT[source]}?anime=\${ANIME}&ep=\${EP}&audio=\${audio}&server=\${encodeURIComponent(providerName)}\`;
+        if (lang) url += \`&lang=\${encodeURIComponent(lang)}\`;
 
-    function activateButton(audio, key) {
-        playbackStarted = true;
-        _clearOverallWatchdog();
-        document.querySelectorAll('.server-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === audio));
-        document.querySelectorAll('.server-tab-panel').forEach(p => p.classList.toggle('active', p.id === 'tab-panel-' + audio));
-        const btn = document.querySelector(\`#tab-panel-\${audio} .server-btn[data-server="\${key}"]\`);
-        if (btn) btn.classList.add('active');
-        switchToServer(key, audio);
-    }
+        return fetchJsonTimeout(url, 15000).then(d => {
+            const ok = !d.error && !!(d.m3u8 || d.mp4 || d.iframeOnly);
+            console.log('[AniVault player]', source, providerName, audio, lang || '', ok ? 'OK' : 'FAILED', d);
 
-    function showNoServersAtAll(msg) {
-        const pw = document.getElementById('watch-player-wrap');
-        if (pw) pw.innerHTML = \`<div style="display:flex;flex-direction:column;gap:10px;align-items:center;justify-content:center;height:100%;min-height:240px;color:var(--text-muted);font-family:var(--font-body);text-align:center;padding:1rem;"><div>\${msg || 'No working servers found for this episode.'}</div><button onclick="location.reload()" style="padding:8px 16px;border-radius:8px;border:1px solid currentColor;background:transparent;color:inherit;cursor:pointer;font:inherit;">Try Again</button></div>\`;
-    }
-
-    // Hard overall cap — the individual probes (especially fetchAnikotoList's
-    // retry/backoff loop) have no client-side timeout of their own and can
-    // legitimately take a while if the scraper backend is slow, but the
-    // "Finding the best server..." screen should never sit there forever
-    // with no feedback. If nothing has started playing within 25s, give up
-    // and show a clear message + retry button instead of an endless spinner.
-    const _overallWatchdog = setTimeout(() => {
-        if (!playbackStarted) showNoServersAtAll('Servers are taking longer than usual to respond. The stream backend may be slow or down right now.');
-    }, 25000);
-    const _clearOverallWatchdog = () => clearTimeout(_overallWatchdog);
-
-    function markServerFound(audio, key, label, badge) {
-        const panel   = document.getElementById('tab-panel-' + audio);
-        const loading = document.getElementById('servers-' + audio + '-loading');
-        if (!panel || panel.querySelector(\`.server-btn[data-server="\${key}"]\`)) return;
-
-        const btn = makeBtn(key, label, badge);
-        if (loading) panel.insertBefore(btn, loading); else panel.appendChild(btn);
-
-        if (audio === 'sub') {
-            subHasAny = true;
-            if (!playbackStarted) activateButton('sub', key);
-        } else {
-            dubHasAny = true;
-            // Sub already came up empty by the time this dub result landed
-            // (or never had a chance) — play this one instead of waiting.
-            if (!playbackStarted && subPending === 0 && !subHasAny) activateButton('dub', key);
-        }
-    }
-
-    function subTaskDone() {
-        subPending--;
-        if (subPending === 0) {
-            setSearching('sub', false);
-            // Sub fully exhausted with nothing working — fall back to a
-            // dub server that's already been found, if any.
-            if (!playbackStarted && !subHasAny && dubHasAny) {
-                const firstBtn = document.querySelector('#tab-panel-dub .server-btn');
-                if (firstBtn) activateButton('dub', firstBtn.dataset.server);
+            if (ok) {
+                const cacheName = '_' + source + 'Cache';
+                window[cacheName] = window[cacheName] || {};
+                window[cacheName][[audio, lang || '', providerName.toLowerCase().trim()].join('::')] = {
+                    data: d, ts: Date.now()
+                };
             }
-            if (dubPending === 0 && !subHasAny && !dubHasAny && !playbackStarted) { _clearOverallWatchdog(); showNoServersAtAll(); }
-        } else if (subHasAny) {
-            setSearching('sub', true);
-        }
-    }
-    function dubTaskDone() {
-        dubPending--;
-        if (dubPending === 0) {
-            setSearching('dub', false);
-            if (subPending === 0 && !subHasAny && !dubHasAny && !playbackStarted) { _clearOverallWatchdog(); showNoServersAtAll(); }
-        } else if (dubHasAny) {
-            setSearching('dub', true);
-        }
+            return ok;
+        }).catch(e => {
+            console.error('[AniVault player]', source, providerName, audio, lang || '', 'timed out/failed', e);
+            return false;
+        });
     }
 
-    // AnimeHeaven(sub) + Anikoto-list(sub) = 2 sub tasks.
-    // Anikoto-list(dub) = 1 dub task. AnimeHeaven is sub-only
-    // (api/animeheaven_stream.php ignores the audio param), so it never
-    // contributes a dub task.
-    // Senshi and Miruro have been removed — only AnimeHeaven and Anikoto
-    // are probed and shown on the watch page now.
-    subPending = 2;
-    dubPending = 1;
+    // Dub-list fetches for the multi-language sources get reused three
+    // ways (English resolution, Hindi resolution, Multi Dub population) —
+    // memoize so each source's dub list is only ever fetched once.
+    const _dubListPromise = {};
+    function getDubListOnce(source) {
+        if (!_dubListPromise[source]) _dubListPromise[source] = fetchSourceList(source, 'dub');
+        return _dubListPromise[source];
+    }
 
-    // ── SERVER DISPLAY NAMES ─────────────────────────────────────────────────
-    // Change any value here to rename that button on the watch page.
-    const SERVER_NAMES = {
-        animeheaven:  'Eden',
-        kiwi:         'Jade',
-        bonk:         'Bash',
-        bee:          'Hex',
-        bun:          'Puff',
-        twin:         'Echo',
-        ally:         'Pact',
-        moo:          'Haze',
-        cog:          'Gear',
-        pewe:         'Wren',
-        nun:          'Veil',
-        telli:        'Flux',
-        hop:          'Dart',
-        animedunya:   'Dune',
-    };
+    // ── DesiDub (Hindi group's second source) ───────────────────────────
+    // ── Per-provider resolver used by the Sub / Dub(English) / Hindi
+    // fixed groups. Every button maps to EXACTLY one hardcoded provider —
+    // no "try the next one in the list" here, since there's no list:
+    // each provider gets checked directly against its own endpoint.
+    // Returns the exact real key switchToServer expects, or null.
+    function resolveProvider(def, audio) {
+        if (def.source === 'animeheaven') {
+            return checkAnimeHeaven(audio).then(ok => ok ? 'animeheaven' : null);
+        }
+        if (def.source === 'anikoto') {
+            return checkAnikotoProvider(def.provider, audio).then(ok => ok ? ('anikoto-' + def.provider) : null);
+        }
+        if (def.source === 'desidub') {
+            // Every DesiDub provider in HINDI_PROVIDERS is a "dub"-type
+            // name (per the scraper's own /servers listing) — no raw
+            // fallback needed here since each is its own fixed button.
+            const providerName = def.provider;
+            return fetch(\`\${SITE}/api/desidub_stream.php?anime=\${ANIME}&ep=\${EP}&audio=dub&server=\${encodeURIComponent(providerName)}\`)
+                .then(r => r.json())
+                .then(d => {
+                    const ok = !d.error && !!(d.m3u8 || d.mp4 || d.iframeOnly);
+                    console.log('[AniVault player] desidub', providerName, ok ? 'OK' : 'FAILED', d);
+                    if (ok) {
+                        window._desidubCache = window._desidubCache || {};
+                        window._desidubCache['dub::' + providerName.toLowerCase().trim()] = { data: d, ts: Date.now() };
+                    }
+                    return ok ? (\`desidub:dub:\${providerName}\`) : null;
+                }).catch(e => { console.error('[AniVault player] desidub', providerName, 'threw', e); return null; });
+        }
+        // Generic (ReAnime / AniWaves / WatchAnimeWorld / AnimeNoSub) —
+        // WatchAnimeWorld's English/Hindi providers are literally named
+        // that ("English", "Hindi"), so pass the name as lang too; the
+        // scraper only uses it to disambiguate providers that share an
+        // identical display name across languages, and ignores it
+        // harmlessly otherwise.
+        const lang = (def.source === 'watchanimeworld' && audio === 'dub') ? def.provider.toLowerCase() : '';
+        return checkSourceProvider(def.source, def.provider, audio, lang)
+            .then(ok => ok ? (\`\${def.source}:\${audio}:\${lang}:\${def.provider.toLowerCase().trim()}\`) : null);
+    }
 
-    checkAnimeHeaven('sub').then(ok => { if (ok) markServerFound('sub', 'animeheaven', SERVER_NAMES.animeheaven); subTaskDone(); });
+    // ── Resolve one whole fixed group (sub / dub / hindi) ───────────────
+    // Every provider in "defs" is probed in parallel (fast — no button
+    // waits on another). Once every provider in the group has an answer,
+    // any provider that came up empty gets wired to play the first OTHER
+    // provider in the group that DID resolve, so its button — same
+    // label, same position — quietly plays that instead of showing an
+    // error.
+    async function resolveGroupUI(group, defs, audio) {
+        const ids = defs.map(d => providerId(d.source, d.provider));
+        ids.forEach(id => setBtnPending(group, id));
+        const resolvedMap = {};
 
-    fetchAnikotoList('sub').then(list => {
-        list.map(s => s.name).forEach(p => {
-            const pKey = p.toLowerCase().trim();
-            subPending++;
-            checkAnikotoProvider(p, 'sub').then(ok => {
-                if (ok) markServerFound('sub', \`anikoto-\${pKey}\`, SERVER_NAMES[pKey] ?? ('AK-' + (pKey.charAt(0).toUpperCase() + pKey.slice(1))));
-                subTaskDone();
+        // IMPORTANT: probe API providers one-by-one. The old Promise.all()
+        // fired every resolver at once and could overload the scraper API,
+        // causing several requests to time out together.
+        for (let i = 0; i < defs.length; i++) {
+            const id = ids[i];
+            let realKey = null;
+            try {
+                realKey = await resolveProvider(defs[i], audio);
+            } catch (e) {
+                console.error('[AniVault player] sequential probe failed', group, defs[i], e);
+            }
+
+            if (realKey) {
+                resolvedMap[id] = realKey;
+                setBtnResolved(group, id, realKey, false);
+
+                // Start the FIRST working API server immediately. Do not
+                // wait for the remaining providers to finish probing.
+                if (!playbackStarted && !window._manualServerSelection) {
+                    activateFixedButton(group, id, audio);
+                }
+            } else {
+                setBtnDead(group, id);
+            }
+        }
+
+        // Preserve the existing visual fallback behavior without doing any
+        // additional network requests.
+        const fallbackId = ids.find(id => resolvedMap[id]);
+        if (fallbackId) {
+            ids.forEach(id => {
+                if (!resolvedMap[id]) {
+                    setBtnResolved(group, id, resolvedMap[fallbackId], true);
+                }
+            });
+        }
+
+        return resolvedMap;
+    }
+    function firstPlayable(defs, resolvedMap) {
+        for (let i = 0; i < defs.length; i++) {
+            const id = providerId(defs[i].source, defs[i].provider);
+            if (resolvedMap[id]) return id;
+        }
+        return null;
+    }
+
+    // Run the groups themselves in sequence as well. This keeps the
+    // scraper API from receiving Sub + Dub + Hindi resolver bursts.
+    const subMapPromise = resolveGroupUI('sub', SUB_PROVIDERS, 'sub');
+    const dubMapPromise = subMapPromise.then(() => resolveGroupUI('dub', DUB_PROVIDERS, 'dub'));
+    const hindiMapPromise = dubMapPromise.then(() => resolveGroupUI('hindi', HINDI_PROVIDERS, 'dub'));
+
+    // Autoplay priority: Sub first; if Sub has nothing at all for this
+    // episode, fall to English Dub; if that's also empty, fall to Hindi
+    // Dub as a last resort. Every group still resolves and updates its
+    // own buttons in the background regardless of this chain.
+    subMapPromise.then(subMap => {
+        const pick = firstPlayable(SUB_PROVIDERS, subMap);
+        if (pick) {
+            if (!playbackStarted && !window._manualServerSelection) activateFixedButton('sub', pick, 'sub');
+            return;
+        }
+        return dubMapPromise.then(dubMap => {
+            const dpick = firstPlayable(DUB_PROVIDERS, dubMap);
+            if (dpick) {
+                if (!playbackStarted && !window._manualServerSelection) activateFixedButton('dub', dpick, 'dub');
+                return;
+            }
+            return hindiMapPromise.then(hindiMap => {
+                const hpick = firstPlayable(HINDI_PROVIDERS, hindiMap);
+                if (hpick && !playbackStarted && !window._manualServerSelection) activateFixedButton('hindi', hpick, 'dub');
+                else if (!hpick && !playbackStarted && !window._manualServerSelection) showNoServersAtAll();
             });
         });
-        subTaskDone();
     });
 
-    fetchAnikotoList('dub').then(list => {
-        list.map(s => s.name).forEach(p => {
-            const pKey = p.toLowerCase().trim();
-            dubPending++;
-            checkAnikotoProvider(p, 'dub').then(ok => {
-                if (ok) markServerFound('dub', \`anikoto-\${pKey}\`, SERVER_NAMES[pKey] ?? ('AK-' + (pKey.charAt(0).toUpperCase() + pKey.slice(1))));
-                dubTaskDone();
+    // ── Multi Dub (Tamil/Telugu/Spanish/German/... everything that isn't
+    // English or Hindi) ─────────────────────────────────────────────────
+    // Fully dynamic, per-language buttons — NOT part of the fixed-button/
+    // fallback system above. Each language is searched and shown on its
+    // own; if a particular language has nothing, it simply never gets a
+    // button (no fallback substitution — a Tamil button standing in for
+    // German would be actively wrong, unlike Sub/Dub/Hindi where any
+    // working source is an acceptable stand-in).
+    function makeBtn(serverKey, label, badge) {
+        const btn = document.createElement('button');
+        btn.className = 'server-btn';
+        btn.dataset.server = serverKey;
+        btn.innerHTML = badge ? \`\${label} <span class="ad-badge">\${badge}</span>\` : label;
+        return btn;
+    }
+    function insertPriorityBtn(bodyEl, loadingEl, groupEl, key, label, badge, priority) {
+        if (!bodyEl || bodyEl.querySelector(\`.server-btn[data-server="\${key}"]\`)) return null;
+        if (groupEl) groupEl.style.display = '';
+        const btn = makeBtn(key, label, badge);
+        btn.dataset.priority = priority;
+        const siblings = Array.from(bodyEl.querySelectorAll('.server-btn'));
+        const next = siblings.find(b => parseFloat(b.dataset.priority) > priority);
+        if (next) bodyEl.insertBefore(btn, next);
+        else if (loadingEl && loadingEl.parentNode === bodyEl) bodyEl.insertBefore(btn, loadingEl);
+        else bodyEl.appendChild(btn);
+        return btn;
+    }
+    let multiPending = 0, multiHasAny = false;
+    function finishMultiUI() {
+        const loading = document.getElementById('servers-dub-multi-loading');
+        if (multiHasAny) { if (loading) loading.remove(); }
+        else {
+            const grp = document.getElementById('dub-multi-group');
+            if (grp) grp.remove();
+        }
+    }
+
+    // Multi-language discovery is sequential too: one source/list/provider
+    // request at a time, preventing a burst against the scraper API.
+    (async function probeMultiSequentially() {
+        for (const source of MULTI_LANG_SOURCES) {
+            let list = [];
+            try {
+                list = await getDubListOnce(source);
+            } catch (e) {
+                console.error('[AniVault player] multi list failed', source, e);
+            }
+
+            const multiList = list.filter(s => {
+                const b = langBucket(s.lang);
+                if (b === 'en') return false;
+                if (b === 'hindi' && source === 'watchanimeworld') return false;
+                return true;
             });
-        });
-        dubTaskDone();
-    });
-  } catch (e) {
-    _showFatalClientError('probeAndRenderServers crashed: ' + (e && e.message ? e.message : e));
+
+            for (const entry of multiList) {
+                multiPending++;
+                const pKey = entry.name.toLowerCase().trim();
+                const langKey = entry.lang;
+                const ok = await checkSourceProvider(source, entry.name, 'dub', langKey);
+                multiPending--;
+
+                if (!ok) continue;
+
+                const body = document.getElementById('servers-dub-multi-body');
+                const loading = document.getElementById('servers-dub-multi-loading');
+                const grp = document.getElementById('dub-multi-group');
+                const label = \`\${SOURCE_LABELS[source]}-\${entry.name} (\${prettyLang(entry.lang)})\`;
+                const inserted = insertPriorityBtn(
+                    body, loading, grp,
+                    \`\${source}:dub:\${langKey}:\${pKey}\`,
+                    label, prettyLang(entry.lang), priorityOf(MULTI_PRIORITY, source)
+                );
+                if (inserted) multiHasAny = true;
+            }
+        }
+
+        finishMultiUI();
+    })();
+
+    // Debug hook — inspect live group resolution from the console
+    // (window._debugPending() at any time) if a button seems stuck.
+    window._debugPending = () => ({ playbackStarted, multiPending, multiHasAny, probeMode: 'sequential' });
+    } catch (e) {
+      _showFatalClientError('probeAndRenderServers crashed: ' + (e && e.message ? e.message : e));
+    }
+  }
+
+  // watchScript1 is emitted before the hidden Senshi player markup. Wait
+  // until the DOM is complete so the AV primary can start with a real
+  // player element instead of playing behind the initial finding-server gate.
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', startServerProbe, { once: true });
+  } else {
+    startServerProbe();
   }
 })();
 
@@ -739,6 +1482,217 @@ function filterEps(q){
     try{var ov=await fetch('/api/episode_override.php?anime_id='+animeId+'&all=1');if(ov.ok){var od=await ov.json();(od.overrides||[]).forEach(function(o){if(o.image_url)applyThumb(o.episode_num,o.image_url);});}}catch(e){}
   }
   setTimeout(loadThumbs,300);
+})();
+
+(function initNativePlayerSwitch(){
+  var nav=document.querySelector('.watch-quick-nav');
+  var btn=document.getElementById('watch-native-player');
+  var root=document.getElementById('senshi-player-root');
+  var video=document.getElementById('sp-video');
+  if(!nav || !btn || !root || !video) return;
+
+  var native=false;
+  var waitingForReswitch=false;
+  var reswitchTimer=null;
+
+  function setReady(){
+    var ready=!!(window._senshiLastSource && window._senshiLastSource.url);
+    btn.disabled=!ready;
+    btn.classList.toggle('is-ready',ready);
+  }
+  function clearTracks(){
+    Array.from(video.querySelectorAll('track[data-anivault-native]')).forEach(function(t){ t.remove(); });
+  }
+
+  function showNative(source){
+    if(!source || !source.url) return;
+    source = {
+      url: source.url,
+      type: source.type || (/\\.mp4(?:$|[?#])/i.test(source.url) ? 'mp4' : 'hls'),
+      subtitles: Array.isArray(source.subtitles) ? source.subtitles.slice() : []
+    };
+
+    native=true;
+    waitingForReswitch=false;
+    if(reswitchTimer){ clearTimeout(reswitchTimer); reswitchTimer=null; }
+
+    btn.classList.add('is-on');
+    btn.setAttribute('aria-pressed','true');
+    root.classList.add('native-player-mode');
+
+    var currentMediaUrl = video.currentSrc || video.src || '';
+    var keepCurrentMp4 = source.type === 'mp4' && !!currentMediaUrl &&
+      (currentMediaUrl === source.url || currentMediaUrl.split('#')[0] === source.url.split('#')[0]);
+    var keepCurrentHls = source.type === 'hls' && window._senshiHlsLoadedUrl === source.url;
+
+    // If the source is already loaded, take over the exact same media
+    // element. This is the same state reached after switching servers once.
+    if(!keepCurrentMp4 && !keepCurrentHls){
+      if(source.type === 'hls'){
+        // Don't set video.src to the m3u8 directly: most browsers besides
+        // Safari can't parse HLS natively, and our own TurboVid servers
+        // wrap segments as fake PNGs that only the custom TurboVidFragmentLoader
+        // (used inside hls.js via SenshiPlayer) knows how to unwrap. Route
+        // through the same pipeline the custom player uses instead.
+        if(window.SenshiPlayer && window.SenshiPlayer.loadWithSubs){
+          window.SenshiPlayer.loadWithSubs(source.url, source.subtitles);
+        }
+      } else {
+        try { if(window.SenshiPlayer && window.SenshiPlayer.destroy) window.SenshiPlayer.destroy(); }catch(e){}
+        try { video.pause(); }catch(e){}
+        try { video.srcObject=null; }catch(e){}
+        video.removeAttribute('src');
+        try { video.load(); }catch(e){}
+        video.src=source.url;
+        video.preload='metadata';
+        video.load();
+      }
+    }
+
+    clearTracks();
+    video.controls=true;
+    video.setAttribute('controlsList','nodownload');
+    video.setAttribute('disablePictureInPicture','');
+    video.setAttribute('playsinline','');
+
+    (Array.isArray(source.subtitles) ? source.subtitles : []).forEach(function(s,i){
+      if(!s || !s.url) return;
+      var tr=document.createElement('track');
+      tr.kind='subtitles';
+      tr.label=s.label || s.lang || ('Track '+(i+1));
+      tr.srclang=(s.lang || 'en').slice(0,2);
+      tr.src=s.url;
+      if(i===0) tr.default=true;
+      tr.setAttribute('data-anivault-native','1');
+      video.appendChild(tr);
+    });
+
+    video.play().catch(function(){});
+  }
+
+  function forceReswitchThenNative(){
+    var source=window._senshiLastSource;
+    if(!source || !source.url) return;
+
+    waitingForReswitch=true;
+    native=false;
+    btn.classList.remove('is-on');
+    btn.setAttribute('aria-pressed','false');
+    root.classList.remove('native-player-mode');
+    clearTracks();
+
+    // Do exactly what a server re-switch does: resolve/load the currently
+    // selected server again, then hand the newly loaded media to native mode.
+    // This is intentionally used instead of trying to mutate the current
+    // custom-player state in place.
+    if(typeof window.retryCurrentServer === 'function'){
+      window.retryCurrentServer();
+    }else if(typeof switchToServer === 'function'){
+      switchToServer(currentServer,currentAudio,currentDisplayServer);
+    }else{
+      waitingForReswitch=false;
+      showNative(source);
+      return;
+    }
+
+    var started=false;
+    function handoff(){
+      if(started || !waitingForReswitch) return;
+      var latest=window._senshiLastSource;
+      if(!latest || !latest.url) return;
+      started=true;
+      video.removeEventListener('playing',handoff);
+      video.removeEventListener('canplay',handoff);
+      showNative(latest);
+    }
+
+    video.addEventListener('playing',handoff);
+    video.addEventListener('canplay',handoff);
+
+    // Some browsers load the MP4 but don't autoplay it. In that case canplay
+    // may still fire; this timeout is a final handoff once media metadata is
+    // available, so the switch never depends on a second manual server tap.
+    reswitchTimer=setTimeout(function(){
+      if(started) return;
+      var latest=window._senshiLastSource;
+      if(latest && latest.url && video.readyState>=1){
+        handoff();
+      }
+    },1500);
+
+    // Hard fallback for hosts that take longer to report media readiness.
+    setTimeout(function(){
+      if(!started && waitingForReswitch){
+        var latest=window._senshiLastSource;
+        if(latest && latest.url) handoff();
+      }
+    },10000);
+  }
+
+  function showCustom(){
+    var source=window._senshiLastSource;
+    waitingForReswitch=false;
+    if(reswitchTimer){ clearTimeout(reswitchTimer); reswitchTimer=null; }
+    native=false;
+    btn.classList.remove('is-on');
+    btn.setAttribute('aria-pressed','false');
+    root.classList.remove('native-player-mode');
+    clearTracks();
+    video.pause();
+    video.controls=false;
+    video.removeAttribute('controlsList');
+    video.removeAttribute('disablePictureInPicture');
+    video.removeAttribute('src');
+    try { video.load(); }catch(e){}
+    if(!source || !window.SenshiPlayer) return;
+    if(Array.isArray(source.subtitles) && source.subtitles.length && window.SenshiPlayer.loadWithSubs)
+      window.SenshiPlayer.loadWithSubs(source.url,source.subtitles);
+    else if(window.SenshiPlayer.load)
+      window.SenshiPlayer.load(source.url);
+  }
+
+  btn.addEventListener('click',function(){
+    if(native) showCustom();
+    else forceReswitchThenNative();
+  });
+
+  window.addEventListener('anivault:source-ready',setReady);
+  setReady();
+})();\n\n(function initWatchQuickNav(){
+  var nav=document.querySelector('.watch-quick-nav');
+  var toggle=document.getElementById('watch-auto-next');
+  if(!nav || !toggle) return;
+  var nextUrl=nav.getAttribute('data-next-url') || '';
+  var key='anivault:auto-next';
+  var enabled=localStorage.getItem(key)==='1';
+  function paint(){
+    toggle.classList.toggle('is-on',enabled);
+    toggle.setAttribute('aria-pressed',enabled?'true':'false');
+    var state=document.getElementById('watch-auto-next-state');
+    if(state) state.textContent=enabled?'On':'Off';
+  }
+  toggle.addEventListener('click',function(){
+    enabled=!enabled;
+    localStorage.setItem(key,enabled?'1':'0');
+    paint();
+  });
+  paint();
+  if(!nextUrl) return;
+  var attached=null;
+  function bindVideo(){
+    var video=document.getElementById('sp-video');
+    if(!video || video===attached) return;
+    attached=video;
+    video.addEventListener('ended',function(){
+      if(enabled && nextUrl){
+        window.location.href=nextUrl;
+      }
+    });
+  }
+  bindVideo();
+  var observer=new MutationObserver(bindVideo);
+  observer.observe(document.body,{childList:true,subtree:true});
+  setTimeout(function(){observer.disconnect();},120000);
 })();
 
 </script>
