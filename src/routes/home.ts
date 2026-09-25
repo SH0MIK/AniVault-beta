@@ -404,7 +404,7 @@ function renderHeroSlide(a: NormalisedAnime, i: number, siteUrl: string, banner?
   <div class="hero-bg${banner ? '' : ' hero-bg-fallback'}">
     <picture>
       ${cover ? `<source media="(max-width: 768px)" srcset="${h(cover)}">` : ''}
-      ${bg ? `<img src="${h(bg)}" alt="${h(title)}" loading="${i === 0 ? 'eager' : 'lazy'}">` : ''}
+      ${bg ? `<img src="${h(bg)}" alt="${h(title)}" loading="${i === 0 ? 'eager' : 'lazy'}" decoding="async"${i === 0 ? ' fetchpriority="high"' : ''}>` : ''}
     </picture>
   </div>
   <div class="hero-gradient"></div>
@@ -412,7 +412,7 @@ function renderHeroSlide(a: NormalisedAnime, i: number, siteUrl: string, banner?
     <div class="container">
       <div class="hero-info${logo ? ' has-logo' : ''}">
         <h1 class="hero-title">${h(title)}</h1>
-        ${logo ? `<img class="hero-logo" src="${h(logo)}" alt="${h(title)}" loading="${i === 0 ? 'eager' : 'lazy'}">` : ''}
+        ${logo ? `<img class="hero-logo" src="${h(logo)}" alt="${h(title)}" loading="${i === 0 ? 'eager' : 'lazy'}" decoding="async">` : ''}
         ${desc ? `<p class="hero-desc">${h(desc)}</p>` : ''}
         ${genres.length ? `<div class="hero-genres">${genres.map((g) => `<span class="hero-genre-tag">${h(g.name)}</span>`).join('')}</div>` : ''}
         <div class="hero-stat-strip">
