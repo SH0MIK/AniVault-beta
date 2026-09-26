@@ -484,8 +484,10 @@ listRoutes.get('/notifications', async (c) => {
   const page = Math.max(1, parseInt(c.req.query('page') ?? '1', 10) || 1);
   const limit = 25;
   const offset = (page - 1) * limit;
-  const notifs = await Notification.getForUser(db, userId, limit, offset);
-  const total = await db.count('SELECT COUNT(*) as cnt FROM notifications WHERE user_id=?', [userId]);
+  const [notifs, total] = await Promise.all([
+    Notification.getForUser(db, userId, limit, offset),
+    db.count('SELECT COUNT(*) as cnt FROM notifications WHERE user_id=?', [userId]),
+  ]);
   const pages = Math.ceil(total / limit);
 
   const { unreadCount, layoutUser } = await commonLayoutData(db, auth);
