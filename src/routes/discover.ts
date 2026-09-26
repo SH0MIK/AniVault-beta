@@ -66,7 +66,7 @@ discoverRoutes.get('/seasonal', async (c) => {
     </div>
   </div>
   ${items.length === 0 ? `<p class="text-muted text-center">API may be rate-limited. Please wait a moment and refresh.</p>` : `
-  <div class="anime-grid">${items.map((a) => renderAnimeCard(a, siteUrl, userStatuses[a.mal_id] ?? null, cardMeta.get(a.mal_id))).join('')}</div>
+  <div class="anime-grid">${items.map((a, i) => renderAnimeCard(a, siteUrl, userStatuses[a.mal_id] ?? null, cardMeta.get(a.mal_id), i < 4)).join('')}</div>
   ${totalPages > 1 ? `<div class="pagination">${Array.from({ length: totalPages }, (_, i) => i + 1).map((i) => `<a href="/seasonal?season=${season}&page=${i}" class="${i === page ? 'current' : ''}">${i}</a>`).join('')}</div>` : ''}`}
 </div>`;
 
