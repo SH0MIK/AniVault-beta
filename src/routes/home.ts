@@ -280,7 +280,7 @@ ${heroSliderScript(heroPool.length)}
       <section class="content-section">
         ${sectionHeader('Watch Now', 'row-watchnow', `${siteUrl}/watch-now`)}
         <div class="scroll-row" id="row-watchnow">
-          ${watchNowList.map((a) => renderAnimeCard(a, siteUrl, userStatuses[a.mal_id] ?? null, cardMeta.get(a.mal_id))).join('')}
+          ${watchNowList.map((a, i) => renderAnimeCard(a, siteUrl, userStatuses[a.mal_id] ?? null, cardMeta.get(a.mal_id), i < 4)).join('')}
         </div>
       </section>`;
   }
@@ -291,7 +291,7 @@ ${heroSliderScript(heroPool.length)}
         ${sectionHeader('Trending Now', 'row-trending', `${siteUrl}/seasonal`)}
         ${seasonalList.length === 0
           ? `<p class="text-muted text-center">Could not load seasonal anime. API may be rate limited — try again shortly.</p>`
-          : `<div class="scroll-row" id="row-trending">${seasonalList.map((a) => renderAnimeCard(a, siteUrl, userStatuses[a.mal_id] ?? null, cardMeta.get(a.mal_id))).join('')}</div>`}
+          : `<div class="scroll-row" id="row-trending">${seasonalList.map((a, i) => renderAnimeCard(a, siteUrl, userStatuses[a.mal_id] ?? null, cardMeta.get(a.mal_id), i < 4)).join('')}</div>`}
       </section>
 
       <section class="content-section">
