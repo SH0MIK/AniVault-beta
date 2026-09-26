@@ -618,10 +618,20 @@ export class MalAPI {
     const genres = (node.genres ?? []).filter(Boolean).map((g: any) => ({ mal_id: g?.id ?? 0, name: g?.name ?? '' }));
     const studios = (node.studios ?? []).filter(Boolean).map((s: any) => ({ mal_id: s?.id ?? 0, name: s?.name ?? '' }));
 
-    const related = await Promise.all((node.related_anime ?? []).filter(Boolean).map(async (r: any) => {
+    // Related/recommendation cards used to issue one D1 lookup per item.
+    // Detail responses can contain dozens of entries, so collect all IDs
+    // first and resolve their saved art with one batched IN(...) query.
+    const relatedNodes = (node.related_anime ?? []).filter(Boolean);
+    const recommendationNodes = (node.recommendations ?? []).filter(Boolean);
+    const relatedIds = relatedNodes.map((r: any) => Number(r?.node?.id ?? 0)).filter((id: number) => id > 0);
+    const recommendationIds = recommendationNodes.map((r: any) => Number(r?.node?.id ?? 0)).filter((id: number) => id > 0);
+    const relatedImageIds = [...new Set([...relatedIds, ...recommendationIds])];
+    const relatedImageMap = await this.getLocalAnimeImagesMany(relatedImageIds);
+
+    const related = relatedNodes.map((r: any) => {
       const entry = r?.node ?? {};
       const entryId = Number(entry?.id ?? 0);
-      const entryLocalImage = entryId ? await this.getLocalAnimeImage(entryId) : '';
+      const entryLocalImage = relatedImageMap.get(entryId) || '';
       return {
         entry: {
           mal_id: entryId,
@@ -630,12 +640,12 @@ export class MalAPI {
         },
         relation_type_formatted: r?.relation_type_formatted ?? '',
       };
-    }));
+    });
 
-    const recommendations = await Promise.all((node.recommendations ?? []).filter(Boolean).map(async (r: any) => {
+    const recommendations = recommendationNodes.map((r: any) => {
       const entry = r?.node ?? {};
       const entryId = Number(entry?.id ?? 0);
-      const entryLocalImage = entryId ? await this.getLocalAnimeImage(entryId) : '';
+      const entryLocalImage = relatedImageMap.get(entryId) || '';
       return {
         entry: {
           mal_id: entryId,
@@ -643,7 +653,7 @@ export class MalAPI {
           images: { jpg: { image_url: entryLocalImage || entry?.main_picture?.medium || '' } },
         },
       };
-    }));
+    });
 
     const altTitles = node.alternative_titles ?? {};
     const duration = node.average_episode_duration !== undefined
