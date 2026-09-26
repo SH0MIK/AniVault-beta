@@ -63,7 +63,7 @@ watchNowRoutes.get('/watch-now', async (c) => {
 
   ${animeList.length === 0 ? `<p class="text-muted text-center">No anime with episodes available yet.</p>` : `
   <div class="anime-grid">
-    ${animeList.map((a) => renderAnimeCard(a, siteUrl, userStatuses[a.mal_id] ?? null, cardMeta.get(a.mal_id))).join('')}
+    ${animeList.map((a, i) => renderAnimeCard(a, siteUrl, userStatuses[a.mal_id] ?? null, cardMeta.get(a.mal_id), i < 4)).join('')}
   </div>
   ${totalPages > 1 ? renderPagination(page, totalPages) : ''}`}
 </div>`;
