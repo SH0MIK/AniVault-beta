@@ -324,10 +324,13 @@ watchRoutes.get('/watch', async (c) => {
     } catch { /* best-effort, same as the PHP version's try/catch */ }
   }
 
-  const listEntry = currentUser ? await AnimeTracker.getUserEntry(db, currentUser.id, animeId) : null;
+  const [listEntry, unreadCount] = currentUser
+    ? await Promise.all([
+        AnimeTracker.getUserEntry(db, currentUser.id, animeId),
+        Notification.unreadCount(db, currentUser.id),
+      ])
+    : [null, 0];
   const episodesWatched = listEntry?.episodes_watched ?? 0;
-
-  const unreadCount = currentUser ? await Notification.unreadCount(db, currentUser.id) : 0;
   const layoutUser: CurrentUser | null = currentUser
     ? { id: currentUser.id, username: currentUser.username, avatar_url: currentUser.avatar_url, role: currentUser.role }
     : null;
