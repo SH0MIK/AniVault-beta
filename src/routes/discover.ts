@@ -20,12 +20,21 @@ async function commonCtx(c: any) {
   const auth = new Auth(db, session, c.env as any, c.req.header('cf-connecting-ip') ?? 'unknown');
   const mal = new MalAPI(c.env, c.env.API_CACHE, db);
   const currentUser = auth.check() ? await auth.getCurrentUser() : null;
-  const unreadCount = currentUser ? await Notification.unreadCount(db, currentUser.id) : 0;
-  const userStatuses = currentUser ? await getUserAnimeStatuses(db, currentUser.id) : {};
+  const [unreadCount, userStatuses, banner] = currentUser
+    ? await Promise.all([
+        Notification.unreadCount(db, currentUser.id),
+        getUserAnimeStatuses(db, currentUser.id),
+        getBannerData(db),
+      ])
+    : await Promise.all([
+        Promise.resolve(0),
+        Promise.resolve({}),
+        getBannerData(db),
+      ]);
   const layoutUser: CurrentUser | null = currentUser
     ? { id: currentUser.id, username: currentUser.username, avatar_url: currentUser.avatar_url, role: currentUser.role }
     : null;
-  return { db, session, lifetime, auth, mal, currentUser, unreadCount, userStatuses, layoutUser };
+  return { db, session, lifetime, auth, mal, currentUser, unreadCount, userStatuses, layoutUser, banner };
 }
 
 // ── pages/seasonal.php ────────────────────────────────────────────────────
@@ -40,7 +49,7 @@ discoverRoutes.get('/seasonal', async (c) => {
   const totalPages = (result as any).pagination?.last_visible_page ?? 1;
   const cardMeta = await buildCardMetaMap(db, items);
 
-  const __banner = await getBannerData(db);
+  const __banner = banner;
   let html = renderHeader({ ...__banner, siteUrl, siteName: c.env.SITE_NAME, pageTitle: 'Seasonal Anime', currentPage: 'seasonal', currentUser: layoutUser, unreadCount, requestUrl: c.req.url });
   const seasonYear = new Date().getUTCFullYear();
   const seasonLabel = mal.currentSeasonPublic().replace(/^./, (c) => c.toUpperCase());
@@ -82,7 +91,7 @@ discoverRoutes.get('/top', async (c) => {
   const totalPages = result.pagination?.last_visible_page ?? 1;
   const cardMeta = await buildCardMetaMap(db, items);
 
-  const __banner = await getBannerData(db);
+  const __banner = banner;
   let html = renderHeader({ ...__banner, siteUrl, siteName: c.env.SITE_NAME, pageTitle: 'Top Anime', currentPage: 'top', currentUser: layoutUser, unreadCount, requestUrl: c.req.url });
   html += `
 <style>
@@ -190,7 +199,7 @@ discoverRoutes.get('/schedule', async (c) => {
   const items = result.data ?? [];
   const cardMeta = await buildCardMetaMap(db, items);
 
-  const __banner = await getBannerData(db);
+  const __banner = banner;
   let html = renderHeader({ ...__banner, siteUrl, siteName: c.env.SITE_NAME, pageTitle: 'Schedule', currentPage: 'schedule', currentUser: layoutUser, unreadCount, requestUrl: c.req.url });
   const now = new Date();
   const dateLabel = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: 'UTC' });
