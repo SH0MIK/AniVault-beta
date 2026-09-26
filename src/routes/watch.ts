@@ -201,40 +201,56 @@ watchRoutes.get('/watch', async (c) => {
   // Finished and not-yet-aired shows skip all of that and use anime.episodes
   // straight from MAL — that field is already accurate once a show isn't
   // actively airing, so there's nothing for the cache to correct.
-  const isAiring = anime.status === 'Currently Airing';
-  let airedInfo: AiredInfo | null = null;
-  if (isAiring) {
-    const cached = await EpisodeAir.getCachedAny(db, animeId);
-    airedInfo = cached.info;
-    if (!cached.isFresh) {
-      c.executionCtx?.waitUntil?.(EpisodeAir.get(db, c.env, mal, animeId).catch(() => {}));
-    }
-  }
-  const totalEps = isAiring ? (airedInfo?.total ?? anime.episodes ?? 0) : (anime.episodes ?? 0);
-  const dubbedLangs = await DubStatus.getFor(db, animeId);
-
   let epDurationSec = parseDurationSeconds(anime.duration);
   if (epDurationSec <= 0) epDurationSec = 1380;
 
-  const video = await db.fetchOne<EpisodeVideoRow>(
-    'SELECT * FROM episode_videos WHERE anime_id=? AND episode_num=? AND is_active=1',
-    [animeId, epNum]
-  );
+  // All of these lookups are independent after the anime metadata arrives.
+  // Running them concurrently removes several D1/API round trips from the
+  // critical path without changing the rendered data.
+  const [
+    airingCache,
+    dubbedLangs,
+    video,
+    turbovidServers,
+    anilistId,
+    allVideos,
+    epData,
+    charData,
+  ] = await Promise.all([
+    anime.status === 'Currently Airing'
+      ? EpisodeAir.getCachedAny(db, animeId)
+      : Promise.resolve({ info: null, isFresh: true }),
+    DubStatus.getFor(db, animeId),
+    db.fetchOne<EpisodeVideoRow>(
+      'SELECT * FROM episode_videos WHERE anime_id=? AND episode_num=? AND is_active=1',
+      [animeId, epNum]
+    ),
+    db.fetchAll<TurboVidServerRow>(
+      'SELECT id,anime_id,episode_num,audio_group,language,label,embed_url,is_active FROM turbovid_servers WHERE anime_id=? AND episode_num=? AND is_active=1 ORDER BY audio_group, language, id',
+      [animeId, epNum]
+    ),
+    getAnilistIdFromMal(db, animeId, c.env),
+    db.fetchAll<{ episode_num: number; title: string | null }>(
+      'SELECT episode_num, title FROM episode_videos WHERE anime_id=? AND is_active=1 ORDER BY episode_num ASC',
+      [animeId]
+    ),
+    mal.getAnimeEpisodes(animeId),
+    mal.getAnimeCharacters(animeId),
+  ]);
+
+  const airedInfo: AiredInfo | null = airingCache.info;
+  if (anime.status === 'Currently Airing' && !airingCache.isFresh) {
+    c.executionCtx?.waitUntil?.(EpisodeAir.get(db, c.env, mal, animeId).catch(() => {}));
+  }
+
+  const totalEps = anime.status === 'Currently Airing'
+    ? (airedInfo?.total ?? anime.episodes ?? 0)
+    : (anime.episodes ?? 0);
 
   const resumeT = Math.max(0, parseInt(c.req.query('t') ?? '0', 10) || 0);
   const resumeParam = resumeT >= 30 ? resumeT : 0;
   const hasMegaplayFallback = !video;
-  const turbovidServers = await db.fetchAll<TurboVidServerRow>('SELECT id,anime_id,episode_num,audio_group,language,label,embed_url,is_active FROM turbovid_servers WHERE anime_id=? AND episode_num=? AND is_active=1 ORDER BY audio_group, language, id',[animeId,epNum]);
-
-  const anilistId = await getAnilistIdFromMal(db, animeId, c.env);
-
-  const allVideos = await db.fetchAll<{ episode_num: number; title: string | null }>(
-    'SELECT episode_num, title FROM episode_videos WHERE anime_id=? AND is_active=1 ORDER BY episode_num ASC',
-    [animeId]
-  );
-  const epData = await mal.getAnimeEpisodes(animeId);
   const allEps: any[] = epData?.data ?? [];
-  const charData = await mal.getAnimeCharacters(animeId);
   const chars: any[] = (charData?.data ?? []).slice(0, 16);
 
   const videoEpNumSet = new Set(allVideos.map((v) => v.episode_num));
