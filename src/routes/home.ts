@@ -141,16 +141,17 @@ homeRoutes.get('/', async (c) => {
   // section below) — fetch just the IDs now so they can go into the same
   // cache-only cardMeta lookup as everything else, instead of a second
   // query later that the hero slides were silently missing out on.
-  const curatedRows = await db
-    .fetchAll<any>('SELECT anime_id, banner_image_url, logo_image_url FROM home_hero_banners ORDER BY display_order ASC LIMIT 8')
-    .catch(() => []);
+  const [curatedRows, stats, __banner] = await Promise.all([
+    db.fetchAll<any>('SELECT anime_id, banner_image_url, logo_image_url FROM home_hero_banners ORDER BY display_order ASC LIMIT 8').catch(() => []),
+    currentUser ? AnimeTracker.getStats(db, currentUser.id) : Promise.resolve(null),
+    getBannerData(db),
+  ]);
   const cardMeta = await buildCardMetaMap(db, [...watchNowList, ...seasonalList, ...topList, ...upcomingList, ...curatedRows.map((r) => ({ mal_id: r.anime_id } as NormalisedAnime))]);
 
   const layoutUser = currentUser
     ? { id: currentUser.id, username: currentUser.username, avatar_url: currentUser.avatar_url, role: currentUser.role }
     : null;
 
-  const __banner = await getBannerData(db);
   let html = renderHeader({
     ...__banner,    siteUrl,
     siteName: c.env.SITE_NAME,
@@ -180,8 +181,10 @@ homeRoutes.get('/', async (c) => {
   let heroCovers: string[] = [];
 
   if (curatedRows.length > 0) {
-    const curatedAnime = await Promise.all(curatedRows.map((r) => mal.getAnime(r.anime_id, true)));
-    const curatedImageMap = await mal.getLocalAnimeImagesMany(curatedRows.map((r) => r.anime_id));
+    const [curatedAnime, curatedImageMap] = await Promise.all([
+      Promise.all(curatedRows.map((r) => mal.getAnime(r.anime_id, true))),
+      mal.getLocalAnimeImagesMany(curatedRows.map((r) => r.anime_id)),
+    ]);
     for (let i = 0; i < curatedRows.length; i++) {
       const r = curatedRows[i];
       const anime = curatedAnime[i].data;
@@ -227,7 +230,6 @@ ${heroSliderScript(heroPool.length)}
 <div class="container">`;
 
   if (currentUser) {
-    const stats = await AnimeTracker.getStats(db, currentUser.id);
     html += `
   <div class="grid-4 mb-3">
     <div class="stat-card">${icon('list', 'stat-icon')}<div class="stat-value">${stats.total}</div><div class="stat-label">Total Tracked</div></div>
