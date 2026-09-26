@@ -43,13 +43,14 @@ animeRoutes.get('/anime', async (c) => {
 
   // These three reads are independent once the anime metadata is known.
   // Run them together so D1 latency doesn't stack on every anime page.
-  const [videoEpRows, dubRow, airingCache] = await Promise.all([
+  const [videoEpRows, dubRow, airingCache, dubbedLangs] = await Promise.all([
     db.fetchAll<{ episode_num: number; qualities: string | null }>(
       'SELECT episode_num, qualities FROM episode_videos WHERE anime_id = ? AND is_active = 1',
       [id]
     ).catch(() => []),
     db.fetchOne('SELECT has_dub FROM anime_dub_status WHERE anime_id = ? AND has_dub = 1', [id]).catch(() => null),
     anime.status === 'Currently Airing' ? EpisodeAir.getCachedAny(db, id) : Promise.resolve({ info: null, isFresh: true }),
+    DubStatus.getFor(db, id),
   ]);
 
   const videoEpSet: Record<number, { sub: boolean; dub: boolean }> = {};
@@ -93,8 +94,6 @@ animeRoutes.get('/anime', async (c) => {
   // their final number straight from MAL above.
   const epsUnknown = totalEps === 0;
   const epsNeedsRefresh = isAiring && !airedInfoFresh;
-  const dubbedLangs = await DubStatus.getFor(db, id);
-
   // Logo + cover both come pre-resolved on `anime` itself -- getAnime()
   // already ran them through getAnimeArt() (scraper poster/cover/logo,
   // blended with your admin-saved overrides per the Image Source Priority
