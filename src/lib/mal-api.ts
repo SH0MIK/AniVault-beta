@@ -65,6 +65,8 @@ export class MalAPI {
   // requests; it just stops the same request from re-querying the same
   // anime_id's art more than once.
   private artCache = new Map<number, { poster: string; cover: string; logo: string }>();
+  private artPromises = new Map<number, Promise<{ poster: string; cover: string; logo: string }>>();
+  private imagePriorityCache: 'api' | 'saved' | null = null;
 
   constructor(private env: MalEnv, private kv: KVNamespace | undefined, private db: Db) {}
 
@@ -405,9 +407,11 @@ export class MalAPI {
   // as a fallback either way -- this only controls which one is *preferred*,
   // for comparing load speed between the two sources.
   async getImagePriority(): Promise<'api' | 'saved'> {
+    if (this.imagePriorityCache) return this.imagePriorityCache;
     const settings = new Settings(this.db);
     const val = await settings.get('image_source_priority', 'saved');
-    return val === 'api' ? 'api' : 'saved';
+    this.imagePriorityCache = val === 'api' ? 'api' : 'saved';
+    return this.imagePriorityCache;
   }
 
   // Calls our own scraper's combined GET /api/anime?malId=X endpoint (see
@@ -547,25 +551,33 @@ export class MalAPI {
     // anime_images/anime_banners/anime_logos/home_hero_banners/settings.
     const cached = this.artCache.get(animeId);
     if (cached) return cached;
+    const existing = this.artPromises.get(animeId);
+    if (existing) return existing;
 
-    const [priority, scraperArt, savedPoster, savedBanner, savedLogo] = await Promise.all([
-      this.getImagePriority(),
-      this.getScraperArt(animeId, liveFetch),
-      this.getLocalAnimeImage(animeId),
-      this.getLocalAnimeBannerInfo(animeId),
-      this.getLocalAnimeLogo(animeId),
-    ]);
-    const savedCover = savedBanner?.image_url || '';
-
-    const pick = (api: string, saved: string) => (priority === 'api' ? (api || saved) : (saved || api));
-
-    const result = {
-      poster: pick(scraperArt.poster, savedPoster),
-      cover: pick(scraperArt.cover, savedCover),
-      logo: pick(scraperArt.logo, savedLogo),
-    };
-    this.artCache.set(animeId, result);
-    return result;
+    const promise = (async () => {
+      const [priority, scraperArt, savedPoster, savedBanner, savedLogo] = await Promise.all([
+        this.getImagePriority(),
+        this.getScraperArt(animeId, liveFetch),
+        this.getLocalAnimeImage(animeId),
+        this.getLocalAnimeBannerInfo(animeId),
+        this.getLocalAnimeLogo(animeId),
+      ]);
+      const savedCover = savedBanner?.image_url || '';
+      const pick = (api: string, saved: string) => (priority === 'api' ? (api || saved) : (saved || api));
+      const result = {
+        poster: pick(scraperArt.poster, savedPoster),
+        cover: pick(scraperArt.cover, savedCover),
+        logo: pick(scraperArt.logo, savedLogo),
+      };
+      this.artCache.set(animeId, result);
+      return result;
+    })();
+    this.artPromises.set(animeId, promise);
+    try {
+      return await promise;
+    } finally {
+      this.artPromises.delete(animeId);
+    }
   }
 
   // Call this with every anime_id you're about to normalise() as a batch
