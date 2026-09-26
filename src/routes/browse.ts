@@ -50,13 +50,20 @@ browseRoutes.get('/browse', async (c) => {
   const genreList = mal.getAnimeGenres().data;
 
   const currentUser = auth.check() ? await auth.getCurrentUser() : null;
-  const unreadCount = currentUser ? await Notification.unreadCount(db, currentUser.id) : 0;
-  const userStatuses = currentUser ? await getUserAnimeStatuses(db, currentUser.id) : {};
+  const [unreadCount, userStatuses, __banner] = currentUser
+    ? await Promise.all([
+        Notification.unreadCount(db, currentUser.id),
+        getUserAnimeStatuses(db, currentUser.id),
+        getBannerData(db),
+      ])
+    : await Promise.all([
+        Promise.resolve(0),
+        Promise.resolve({}),
+        getBannerData(db),
+      ]);
   const layoutUser = currentUser
     ? { id: currentUser.id, username: currentUser.username, avatar_url: currentUser.avatar_url, role: currentUser.role }
     : null;
-
-  const __banner = await getBannerData(db);
   let html = renderHeader({
     ...__banner,    siteUrl, siteName: c.env.SITE_NAME, pageTitle: 'Browse Anime', currentPage: 'browse',
     currentUser: layoutUser, unreadCount, requestUrl: c.req.url,
