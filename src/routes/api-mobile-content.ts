@@ -35,7 +35,13 @@ mobileContentRoutes.get('/api/mobile/anime/:id', async (c) => {
   const isAiring = anime.status === 'Currently Airing'; let airedInfo = null; if (isAiring) ({ info: airedInfo } = await EpisodeAir.getCachedAny(db, id));
   const totalEps = isAiring ? (airedInfo?.total ?? anime.episodes ?? 0) : (anime.episodes ?? 0); const airedSoFar = isAiring ? (airedInfo?.aired ?? null) : null; const dubbedLangs = (await DubStatus.getForMany(db, [id])).get(id) ?? [];
   const currentUser = auth.check() ? await auth.getCurrentUser() : null; let userEntry = null; let isFavorite = false;
-  if (currentUser) { const { AnimeTracker } = await import('../lib/tracker'); userEntry = await AnimeTracker.getUserEntry(db, currentUser.id, id); isFavorite = await AnimeTracker.isFavorite(db, currentUser.id, id); }
+  if (currentUser) {
+    const { AnimeTracker } = await import('../lib/tracker');
+    [userEntry, isFavorite] = await Promise.all([
+      AnimeTracker.getUserEntry(db, currentUser.id, id),
+      AnimeTracker.isFavorite(db, currentUser.id, id),
+    ]);
+  }
   const seriesEntries = (anime.related_anime ?? []).filter((rel: any) => rel).map((rel: any) => ({ id: rel?.entry?.mal_id ?? 0, title: rel?.entry?.title ?? '', type: rel?.relation_type_formatted ?? '' }));
   return c.json({ success: true, anime: { id: anime.mal_id, title: anime.title_english && anime.title_english !== anime.title ? anime.title_english : anime.title, titleJapanese: anime.title_japanese ?? null, image: anime.images?.jpg?.large_image_url ?? '', synopsis: anime.synopsis ?? '', score: anime.score ?? null, status: anime.status ?? '', type: anime.type ?? '', genres: (anime.genres ?? []).map((g: any) => ({ id: g.mal_id, name: g.name })), totalEpisodes: totalEps, airedSoFar, isAiring, dubbedLangs, related: seriesEntries }, userEntry, isFavorite });
 });
