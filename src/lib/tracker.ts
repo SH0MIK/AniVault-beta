@@ -99,14 +99,16 @@ export const AnimeTracker = {
     const score = data.score ? parseInt(data.score, 10) : null;
     const review = data.review ?? null;
     const title = data.anime_title ?? '';
-    const localImage = await getLocalAnimeImage(db, animeId);
-    const image = localImage || data.anime_image || '';
     const episodes = parseInt(data.anime_episodes ?? '0', 10) || 0;
 
-    const existing = await db.fetchOne<{ id: number; genres: string | null }>(
-      'SELECT id, genres FROM anime_list WHERE user_id = ? AND anime_id = ?',
-      [userId, animeId]
-    );
+    const [localImage, existing] = await Promise.all([
+      getLocalAnimeImage(db, animeId),
+      db.fetchOne<{ id: number; genres: string | null }>(
+        'SELECT id, genres FROM anime_list WHERE user_id = ? AND anime_id = ?',
+        [userId, animeId]
+      ),
+    ]);
+    const image = localImage || data.anime_image || '';
 
     if (existing) {
       let genresUpdate = '';
