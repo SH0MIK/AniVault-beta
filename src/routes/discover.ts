@@ -39,7 +39,7 @@ async function commonCtx(c: any) {
 
 // ── pages/seasonal.php ────────────────────────────────────────────────────
 discoverRoutes.get('/seasonal', async (c) => {
-  const { db, session, lifetime, mal, unreadCount, userStatuses, layoutUser } = await commonCtx(c);
+  const { db, session, lifetime, mal, unreadCount, userStatuses, layoutUser, banner } = await commonCtx(c);
   const siteUrl = c.env.SITE_URL;
   const page = Math.max(1, parseInt(c.req.query('page') ?? '1', 10) || 1);
   const season = c.req.query('season') ?? 'now';
