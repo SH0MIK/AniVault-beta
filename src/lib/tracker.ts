@@ -42,8 +42,10 @@ export const AnimeTracker = {
     let where = 'WHERE user_id = ?';
     const params: unknown[] = [userId];
     if (status) { where += ' AND status = ?'; params.push(status); }
-    const items = await db.fetchAll<AnimeListEntry>(`SELECT * FROM anime_list ${where} ORDER BY updated_at DESC LIMIT ${ITEMS_PER_PAGE} OFFSET ${offset}`, params);
-    const total = await db.count(`SELECT COUNT(*) as cnt FROM anime_list ${where}`, params);
+    const [items, total] = await Promise.all([
+      db.fetchAll<AnimeListEntry>(`SELECT * FROM anime_list ${where} ORDER BY updated_at DESC LIMIT ${ITEMS_PER_PAGE} OFFSET ${offset}`, params),
+      db.count(`SELECT COUNT(*) as cnt FROM anime_list ${where}`, params),
+    ]);
     return { items, total, pages: Math.ceil(total / ITEMS_PER_PAGE) };
   },
 
