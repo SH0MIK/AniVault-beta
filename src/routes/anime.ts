@@ -41,10 +41,16 @@ animeRoutes.get('/anime', async (c) => {
     return c.html(`<script>location.replace(${JSON.stringify(siteUrl + '/')});</script>`);
   }
 
-  let videoEpRows: { episode_num: number; qualities: string | null }[] = [];
-  try {
-    videoEpRows = await db.fetchAll('SELECT episode_num, qualities FROM episode_videos WHERE anime_id = ? AND is_active = 1', [id]);
-  } catch { /* table may not exist on fresh install */ }
+  // These three reads are independent once the anime metadata is known.
+  // Run them together so D1 latency doesn't stack on every anime page.
+  const [videoEpRows, dubRow, airingCache] = await Promise.all([
+    db.fetchAll<{ episode_num: number; qualities: string | null }>(
+      'SELECT episode_num, qualities FROM episode_videos WHERE anime_id = ? AND is_active = 1',
+      [id]
+    ).catch(() => []),
+    db.fetchOne('SELECT has_dub FROM anime_dub_status WHERE anime_id = ? AND has_dub = 1', [id]).catch(() => null),
+    anime.status === 'Currently Airing' ? EpisodeAir.getCachedAny(db, id) : Promise.resolve({ info: null, isFresh: true }),
+  ]);
 
   const videoEpSet: Record<number, { sub: boolean; dub: boolean }> = {};
   for (const row of videoEpRows) {
@@ -55,14 +61,7 @@ animeRoutes.get('/anime', async (c) => {
     videoEpSet[row.episode_num] = { sub: true, dub: hasDub };
   }
 
-  let animeDubConfirmed = false;
-  try {
-    const dubRow = await db.fetchOne('SELECT has_dub FROM anime_dub_status WHERE anime_id = ? AND has_dub = 1', [id]);
-    animeDubConfirmed = !!dubRow;
-    if (animeDubConfirmed) {
-      for (const epNum of Object.keys(videoEpSet)) videoEpSet[Number(epNum)].dub = true;
-    }
-  } catch { /* ignore */ }
+  const animeDubConfirmed = !!dubRow;
 
   const title = anime.title_english && anime.title_english !== anime.title ? anime.title_english : anime.title || 'Unknown';
 
@@ -81,14 +80,8 @@ animeRoutes.get('/anime', async (c) => {
   // call above — that's the "direct from MAL" number and it's already correct
   // for those two statuses, so there's nothing to cache or refresh.
   const isAiring = anime.status === 'Currently Airing';
-  let airedInfo: AiredInfo | null = null;
-  let airedInfoFresh = true;
-  if (isAiring) {
-    // This is the one page where the extra round trip on a cache miss is
-    // worth it (single anime, not a grid), so it's a live refresh-if-stale
-    // rather than a cache-only lookup.
-    ({ info: airedInfo, isFresh: airedInfoFresh } = await EpisodeAir.getCachedAny(db, id));
-  }
+  const airedInfo: AiredInfo | null = airingCache.info;
+  const airedInfoFresh = airingCache.isFresh;
   const totalEps = isAiring ? (airedInfo?.total ?? anime.episodes ?? 0) : (anime.episodes ?? 0);
   const airedSoFar = isAiring ? (airedInfo?.aired ?? null) : null;
   // Nothing cached (or nothing from MAL) to show at all -- render a
