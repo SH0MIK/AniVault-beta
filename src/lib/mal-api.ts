@@ -67,6 +67,12 @@ export class MalAPI {
   private artCache = new Map<number, { poster: string; cover: string; logo: string }>();
   private artPromises = new Map<number, Promise<{ poster: string; cover: string; logo: string }>>();
   private imagePriorityCache: 'api' | 'saved' | null = null;
+  // Request-level deduplication: multiple components/routes can ask for the same
+  // MAL/Jikan/scraper URL during one Worker request. Share the in-flight promise
+  // instead of issuing duplicate external requests.
+  private malPromises = new Map<string, Promise<any>>();
+  private jikanPromises = new Map<string, Promise<any>>();
+  private scraperPromises = new Map<string, Promise<any | null>>();
 
   constructor(private env: MalEnv, private kv: KVNamespace | undefined, private db: Db) {}
 
@@ -112,49 +118,72 @@ export class MalAPI {
 
   private async get(endpoint: string, params: Record<string, string | number> = {}): Promise<any> {
     const url = MAL_API_BASE + endpoint + (Object.keys(params).length ? '?' + new URLSearchParams(params as any).toString() : '');
+    const existing = this.malPromises.get(url);
+    if (existing) return existing;
 
-    if (this.kv && this.cacheEnabled()) {
-      const cacheKey = 'mal_' + (await sha1(url));
-      const cached = await this.safeKvGet(cacheKey, 'json');
-      if (cached) return cached;
+    const promise = (async () => {
+      if (this.kv && this.cacheEnabled()) {
+        const cacheKey = 'mal_' + (await sha1(url));
+        const cached = await this.safeKvGet(cacheKey, 'json');
+        if (cached) return cached;
+
+        const res = await fetch(url, { headers: { 'X-MAL-CLIENT-ID': this.env.MAL_CLIENT_ID ?? '', Accept: 'application/json' } });
+        if (!res.ok) return { error: 'API request failed' };
+        const json = await res.json();
+        await this.safeKvPut(cacheKey, JSON.stringify(json), { expirationTtl: this.cacheTtl() });
+        return json;
+      }
 
       const res = await fetch(url, { headers: { 'X-MAL-CLIENT-ID': this.env.MAL_CLIENT_ID ?? '', Accept: 'application/json' } });
       if (!res.ok) return { error: 'API request failed' };
-      const json = await res.json();
-      await this.safeKvPut(cacheKey, JSON.stringify(json), { expirationTtl: this.cacheTtl() });
-      return json;
-    }
+      return res.json();
+    })();
 
-    const res = await fetch(url, { headers: { 'X-MAL-CLIENT-ID': this.env.MAL_CLIENT_ID ?? '', Accept: 'application/json' } });
-    if (!res.ok) return { error: 'API request failed' };
-    return res.json();
+    this.malPromises.set(url, promise);
+    try {
+      return await promise;
+    } finally {
+      if (this.malPromises.get(url) === promise) this.malPromises.delete(url);
+    }
   }
 
   async jikanGet(url: string): Promise<any> {
-    if (this.kv && this.cacheEnabled()) {
-      const cacheKey = 'jikan_' + (await sha1(url));
-      const cached = await this.safeKvGet(cacheKey, 'json') as any;
-      if (cached && cached.data !== undefined) return cached;
-    }
+    const existing = this.jikanPromises.get(url);
+    if (existing) return existing;
 
-    // Jikan rate-limit: 3 req/sec. Retry once after a short wait on 429.
-    for (let attempt = 0; attempt < 2; attempt++) {
-      const res = await fetch(url, { headers: { Accept: 'application/json', 'User-Agent': 'AnimeApp/1.0' } });
-      if (res.status === 429) {
-        await new Promise((r) => setTimeout(r, 1000));
-        continue;
-      }
-      if (!res.ok) return { data: [] };
-      const decoded: any = await res.json().catch(() => null);
-      if (!decoded || decoded.data === undefined) return { data: [] };
-
+    const promise = (async () => {
       if (this.kv && this.cacheEnabled()) {
         const cacheKey = 'jikan_' + (await sha1(url));
-        await this.safeKvPut(cacheKey, JSON.stringify(decoded), { expirationTtl: this.cacheTtl() });
+        const cached = await this.safeKvGet(cacheKey, 'json') as any;
+        if (cached && cached.data !== undefined) return cached;
       }
-      return decoded;
+
+      // Jikan rate-limit: 3 req/sec. Retry once after a short wait on 429.
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const res = await fetch(url, { headers: { Accept: 'application/json', 'User-Agent': 'AnimeApp/1.0' } });
+        if (res.status === 429) {
+          await new Promise((r) => setTimeout(r, 1000));
+          continue;
+        }
+        if (!res.ok) return { data: [] };
+        const decoded: any = await res.json().catch(() => null);
+        if (!decoded || decoded.data === undefined) return { data: [] };
+
+        if (this.kv && this.cacheEnabled()) {
+          const cacheKey = 'jikan_' + (await sha1(url));
+          await this.safeKvPut(cacheKey, JSON.stringify(decoded), { expirationTtl: this.cacheTtl() });
+        }
+        return decoded;
+      }
+      return { data: [] };
+    })();
+
+    this.jikanPromises.set(url, promise);
+    try {
+      return await promise;
+    } finally {
+      if (this.jikanPromises.get(url) === promise) this.jikanPromises.delete(url);
     }
-    return { data: [] };
   }
 
   // AniList's "this season" data is far more current than MAL/Jikan's
@@ -857,20 +886,36 @@ export class MalAPI {
   private async scraperGet(path: string, timeoutMs = 8000): Promise<any | null> {
     const base = this.env.SCRAPER_API_BASE?.replace(/\/+$/, '').replace(/\/api$/i, '');
     if (!base) return null;
-    try {
-      const controller = new AbortController();
-      const t = setTimeout(() => controller.abort(), timeoutMs);
-      const res = await fetch(`${base}${path}`, { headers: { Accept: 'application/json' }, signal: controller.signal });
-      clearTimeout(t);
-      if (!res.ok) {
-        console.warn(`[mal-api] scraper API HTTP ${res.status} for ${path} — falling back to Jikan`);
+    const url = `${base}${path}`;
+    const existing = this.scraperPromises.get(url);
+    if (existing) return existing;
+
+    const promise = (async () => {
+      try {
+        const controller = new AbortController();
+        const t = setTimeout(() => controller.abort(), timeoutMs);
+        try {
+          const res = await fetch(url, { headers: { Accept: 'application/json' }, signal: controller.signal });
+          if (!res.ok) {
+            console.warn(`[mal-api] scraper API HTTP ${res.status} for ${path} — falling back to Jikan`);
+            return null;
+          }
+          return await res.json().catch(() => null);
+        } finally {
+          clearTimeout(t);
+        }
+      } catch (err: any) {
+        const reason = err?.name === 'AbortError' ? `timed out after ${timeoutMs}ms` : String(err?.message ?? err);
+        console.warn(`[mal-api] scraper API call failed for ${path} —`, reason, '— falling back to Jikan');
         return null;
       }
-      return await res.json().catch(() => null);
-    } catch (err: any) {
-      const reason = err?.name === 'AbortError' ? `timed out after ${timeoutMs}ms` : String(err?.message ?? err);
-      console.warn(`[mal-api] scraper API call failed for ${path} —`, reason, '— falling back to Jikan');
-      return null;
+    })();
+
+    this.scraperPromises.set(url, promise);
+    try {
+      return await promise;
+    } finally {
+      if (this.scraperPromises.get(url) === promise) this.scraperPromises.delete(url);
     }
   }
 
