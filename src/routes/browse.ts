@@ -166,7 +166,7 @@ browseRoutes.get('/browse', async (c) => {
         <p class="text-muted">No results found. Try a different search.</p>
       </div>` : `
       <div class="anime-grid">
-        ${items.map((a) => renderAnimeCard(a, siteUrl, userStatuses[a.mal_id] ?? null, cardMeta.get(a.mal_id))).join('')}
+        ${items.map((a, i) => renderAnimeCard(a, siteUrl, userStatuses[a.mal_id] ?? null, cardMeta.get(a.mal_id), i < 4)).join('')}
       </div>
       ${totalPages > 1 ? renderPagination(q, type, status, genres, page, totalPages) : ''}`}
     </div>
