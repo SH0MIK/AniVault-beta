@@ -304,12 +304,14 @@ listRoutes.get('/history', async (c) => {
   const limit = 24;
   const offset = (page - 1) * limit;
 
-  const total = await db.count('SELECT COUNT(*) as cnt FROM watch_history WHERE user_id = ?', [userId]);
-  const history = await db.fetchAll<any>(
-    `SELECT anime_id, anime_title, anime_image, episode_num, ep_title, ep_thumb, watched_at, watch_time, episode_duration
-     FROM watch_history WHERE user_id = ? ORDER BY watched_at DESC LIMIT ? OFFSET ?`,
-    [userId, limit, offset]
-  );
+  const [total, history] = await Promise.all([
+    db.count('SELECT COUNT(*) as cnt FROM watch_history WHERE user_id = ?', [userId]),
+    db.fetchAll<any>(
+      `SELECT anime_id, anime_title, anime_image, episode_num, ep_title, ep_thumb, watched_at, watch_time, episode_duration
+       FROM watch_history WHERE user_id = ? ORDER BY watched_at DESC LIMIT ? OFFSET ?`,
+      [userId, limit, offset]
+    ),
+  ]);
   const totalPages = total ? Math.ceil(total / limit) : 1;
 
   // History thumbnails: an admin-saved override wins where one exists
