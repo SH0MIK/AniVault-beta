@@ -110,16 +110,28 @@ animeRoutes.get('/anime', async (c) => {
   const currentUser = auth.check() ? await auth.getCurrentUser() : null;
   let userEntry: any = null;
   let isFav = false;
+  let unreadCount = 0;
+  let __banner: Awaited<ReturnType<typeof getBannerData>>;
   if (currentUser) {
-    userEntry = await AnimeTracker.getUserEntry(db, currentUser.id, id);
-    isFav = await AnimeTracker.isFavorite(db, currentUser.id, id);
+    const [entry, favorite, unread, banner] = await Promise.all([
+      AnimeTracker.getUserEntry(db, currentUser.id, id),
+      AnimeTracker.isFavorite(db, currentUser.id, id),
+      Notification.unreadCount(db, currentUser.id),
+      getBannerData(db),
+    ]);
+    userEntry = entry;
+    isFav = favorite;
+    unreadCount = unread;
+    __banner = banner;
+  } else {
+    [unreadCount, __banner] = await Promise.all([
+      Promise.resolve(0),
+      getBannerData(db),
+    ]);
   }
-  const unreadCount = currentUser ? await Notification.unreadCount(db, currentUser.id) : 0;
   const layoutUser: CurrentUser | null = currentUser
     ? { id: currentUser.id, username: currentUser.username, avatar_url: currentUser.avatar_url, role: currentUser.role }
     : null;
-
-  const __banner = await getBannerData(db);
   let html = renderHeader({
     ...__banner,    siteUrl, siteName: c.env.SITE_NAME, pageTitle: title, currentPage: 'anime', currentUser: layoutUser, unreadCount,
     requestUrl: c.req.url,
