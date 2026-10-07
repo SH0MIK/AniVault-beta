@@ -1098,7 +1098,9 @@ document.querySelectorAll('.server-tab-panel').forEach(panel => {
 
     // ── Anikoto (its own dedicated endpoint/cache shape) ────────────────
     function checkAnikotoProvider(provider, audio) {
-        return fetch(\`\${SITE}/api/anikoto_stream.php?anime=\${ANIME}&ep=\${EP}&audio=\${audio}&server=\${encodeURIComponent(provider)}\`)
+        let url = \`\${SITE}/api/anikoto_stream.php?anime=\${ANIME}&ep=\${EP}&audio=\${audio}\`;
+        if (provider) url += \`&server=\${encodeURIComponent(provider)}\`;
+        return fetch(url)
             .then(r => r.json()).then(d => {
                 const ok = !d.error && !!d.m3u8;
                 console.log('[AniVault player] anikoto', provider, audio, ok ? 'OK' : 'FAILED', d);
@@ -1176,8 +1178,10 @@ document.querySelectorAll('.server-tab-panel').forEach(panel => {
             // Every DesiDub provider in HINDI_PROVIDERS is a "dub"-type
             // name (per the scraper's own /servers listing) — no raw
             // fallback needed here since each is its own fixed button.
-            const providerName = def.provider;
-            return fetch(\`\${SITE}/api/desidub_stream.php?anime=\${ANIME}&ep=\${EP}&audio=dub&server=\${encodeURIComponent(providerName)}\`)
+            const providerName = def.provider || '';
+            let url = \`\${SITE}/api/desidub_stream.php?anime=\${ANIME}&ep=\${EP}&audio=dub\`;
+            if (providerName) url += \`&server=\${encodeURIComponent(providerName)}\`;
+            return fetch(url)
                 .then(r => r.json())
                 .then(d => {
                     const ok = !d.error && !!(d.m3u8 || d.mp4 || d.iframeOnly);
