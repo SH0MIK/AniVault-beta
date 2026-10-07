@@ -22,49 +22,21 @@ export interface FixedProviderDef {
 
 // Sub tab.
 export const SUB_PROVIDERS: FixedProviderDef[] = [
-  { source: 'anikoto', provider: 'Hd-1', label: 'Hd-1' },
-  { source: 'anikoto', provider: 'Vidstream-2', label: 'Vidstream-2' },
-  { source: 'anizone', provider: 'Japanese', label: 'Japanese (Zone)' },
+  // Current scraper backend exposes only AnimeHeaven + Anikoto for subtitles.
+  // Leave provider selection to the scraper so this page never hardcodes
+  // server names from the retired backend.
+  { source: 'anikoto', provider: null, label: 'Anikoto' },
   { source: 'animeheaven', provider: null, label: 'AnimeHeaven' },
-  { source: 'reanime', provider: 'Hd-2', label: 'Hd-2' },
-  { source: 'aniwaves', provider: 'Vidplay', label: 'Vidplay' },
-  { source: 'aniwaves', provider: 'BYFMS', label: 'BYFMS' },
-  { source: 'watchanimeworld', provider: 'Japanese', label: 'Japanese' },
-  { source: 'animenosub', provider: 'Sub - Moon', label: 'Moon' },
-  { source: 'animenosub', provider: 'Sub - Omega', label: 'Omega' },
-  { source: 'animenosub', provider: 'Sub - Nova', label: 'Nova' },
-  { source: 'animenosub', provider: 'Sub - Turbo', label: 'Turbo' },
 ];
 
-// Dub (English) tab. AnimeHeaven and DesiDub have no English dub, so
-// they're excluded here entirely.
+// English dub is currently provided by Anikoto in the new scraper backend.
 export const DUB_PROVIDERS: FixedProviderDef[] = [
-  { source: 'anikoto', provider: 'Hd-1', label: 'Hd-1' },
-  { source: 'anikoto', provider: 'Vidstream-2', label: 'Vidstream-2' },
-  { source: 'anizone', provider: 'English', label: 'English (Zone)' },
-  { source: 'reanime', provider: 'Hd-2', label: 'Hd-2' },
-  { source: 'aniwaves', provider: 'Vidplay', label: 'Vidplay' },
-  { source: 'aniwaves', provider: 'BYFMS', label: 'BYFMS' },
-  { source: 'watchanimeworld', provider: 'English', label: 'English' },
-  { source: 'animenosub', provider: 'Dub - Moon', label: 'Moon' },
-  { source: 'animenosub', provider: 'Dub - Omega', label: 'Omega' },
-  { source: 'animenosub', provider: 'Dub - Nova', label: 'Nova' },
-  { source: 'animenosub', provider: 'Dub - Turbo', label: 'Turbo' },
+  { source: 'anikoto', provider: null, label: 'Anikoto' },
 ];
 
-// Hindi Dub group — its own separate fallback pool, independent of the
-// English Dub group above.
+// Hindi/regional dub is provided by DesiDub in the new scraper backend.
 export const HINDI_PROVIDERS: FixedProviderDef[] = [
-  { source: 'watchanimeworld', provider: 'Hindi', label: 'Hindi' },
-  { source: 'desidub', provider: 'Abyssdub', label: 'Abyss' },
-  { source: 'desidub', provider: 'VMolydub', label: 'VMoly' },
-  { source: 'desidub', provider: 'Mirrordub', label: 'Mirror' },
-  { source: 'desidub', provider: 'Rubydub', label: 'Ruby' },
-  { source: 'desidub', provider: 'VMoly (Muse)dub', label: 'VMoly (Muse)' },
-  { source: 'desidub', provider: 'Mirror (Muse)dub', label: 'Mirror (Muse)' },
-  { source: 'desidub', provider: 'Abyss (Muse)dub', label: 'Abyss (Muse)' },
-  { source: 'desidub', provider: 'FileMoondub', label: 'FileMoon' },
-  { source: 'desidub', provider: 'PlayerXdub', label: 'PlayerX' },
+  { source: 'desidub', provider: null, label: 'DesiDub' },
 ];
 
 // AniZone + WatchAnimeWorld also carry OTHER languages (Tamil, Telugu,
