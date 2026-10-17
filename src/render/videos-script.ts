@@ -190,6 +190,21 @@ document.getElementById('vm-anime-search').addEventListener('input', function() 
 });
 document.getElementById('vm-anime-search').addEventListener('blur', function() { setTimeout(hideDropdown, 200); });
 
+async function enrichWithHoshika(a) {
+  if (!a || !a.mal_id) return a;
+  try {
+    var title = a.title_english || a.title || '';
+    var r = await fetch((window.__siteUrl || '') + '/api/hoshika_anime_meta.php?mal_id=' + a.mal_id + '&title=' + encodeURIComponent(title));
+    var data = r.ok ? await r.json() : null;
+    a.hoshikaPoster = data && data.poster || '';
+    a.hoshikaEpisodes = data && data.episodes != null ? data.episodes : null;
+  } catch(e) {
+    a.hoshikaPoster = '';
+    a.hoshikaEpisodes = null;
+  }
+  return a;
+}
+
 async function lookupById(id) {
   var dd = document.getElementById('anime-search-dropdown');
   dd.style.display='block';
@@ -200,6 +215,7 @@ async function lookupById(id) {
     var json = await r.json();
     var a = json.data;
     if (!a) throw new Error();
+    a = await enrichWithHoshika(a);
     dd.innerHTML = renderResult(a);
   } catch(e) { dd.innerHTML='<div style="padding:.5rem .75rem;color:var(--text-muted);">No anime found for ID ' + id + '</div>'; }
 }
@@ -213,19 +229,21 @@ async function searchByName(q) {
     var json = await r.json();
     var data = json.data;
     if (!data || !data.length) { dd.innerHTML='<div style="padding:.5rem .75rem;color:var(--text-muted);">No results</div>'; return; }
+    data = await Promise.all(data.map(enrichWithHoshika));
     dd.innerHTML = data.map(renderResult).join('');
   } catch(e) { dd.innerHTML='<div style="padding:.5rem .75rem;color:var(--text-muted);">Search failed</div>'; }
 }
 
 function renderResult(a) {
   var title = a.title || a.title_english || '';
-  var img   = (a.images && a.images.jpg && a.images.jpg.small_image_url) ? a.images.jpg.small_image_url : '';
+  var img   = a.hoshikaPoster || '';
+  var episodes = a.hoshikaEpisodes != null ? a.hoshikaEpisodes : '?';
   _animeCache[a.mal_id] = { id: a.mal_id, title: title, img: img, synopsis: a.synopsis || '' };
   return '<div class="anime-search-result" data-mal-id="' + a.mal_id + '" onclick="selectAnimeById(' + a.mal_id + ')">' +
     '<img src="' + eh(img) + '" alt="" onerror="this.style.display=\\'none\\'">' +
     '<div>' +
       '<div style="font-weight:600;">' + eh(title) + '</div>' +
-      '<div style="font-size:.73rem;color:var(--text-muted);">' + eh(a.type||'') + ' &middot; ' + (a.episodes||'?') + ' eps &middot; ID: ' + a.mal_id + '</div>' +
+      '<div style="font-size:.73rem;color:var(--text-muted);">' + eh(a.type||'') + ' &middot; ' + episodes + ' eps &middot; ID: ' + a.mal_id + '</div>' +
     '</div>' +
   '</div>';
 }
