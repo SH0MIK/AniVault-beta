@@ -354,26 +354,33 @@ async function lazyLoadEpisodes() {
   const loading = document.getElementById('ep-grid-loading');
   if (!grid) return;
   try {
-    // Fetch Hoshika episodes + Hoshika thumbnail cache in parallel
-    const [thumbMap, jikanEps] = await Promise.all([
-      fetchHoshikaThumbnails(animeId),
-      (async () => {
-        let allEps  = [];
-        let page    = 1;
-        let hasNext = true;
-        while (hasNext) {
-          if (page > 1) await new Promise(r => setTimeout(r, 400));
-          const res  = await fetch(\`\${window.__siteUrl || ''}/api/anime_episodes.php?anime=\${animeId}&page=\${page}\`);
-          const data = await res.json();
-          const eps  = data.data || [];
-          allEps = allEps.concat(eps);
-          const pagination = data.pagination || {};
-          hasNext = !!(pagination.has_next_page) && eps.length > 0;
-          page++;
-        }
-        return allEps;
-      })()
-    ]);
+    // Hoshika's episode endpoint already returns each episode's thumbnail.
+    // Use that response directly instead of a second KV-backed lookup: KV
+    // writes can be quota-limited, but must never make available stills vanish.
+    const jikanEps = await (async () => {
+      let allEps  = [];
+      let page    = 1;
+      let hasNext = true;
+      while (hasNext) {
+        if (page > 1) await new Promise(r => setTimeout(r, 400));
+        const res  = await fetch(`\${window.__siteUrl || ''}/api/anime_episodes.php?anime=\${animeId}&page=\${page}`);
+        const data = await res.json();
+        const eps  = data.data || [];
+        allEps = allEps.concat(eps);
+        const pagination = data.pagination || {};
+        hasNext = !!(pagination.has_next_page) && eps.length > 0;
+        page++;
+      }
+      return allEps;
+    })();
+    const thumbMap = {};
+    jikanEps.forEach(ep => {
+      const number = Number(ep.mal_id ?? ep.number);
+      const thumbnail = ep.thumbnail || ep.images?.jpg?.image_url || ep.images?.webp?.image_url || '';
+      if (Number.isInteger(number) && number > 0 && /^https?:\/\//i.test(thumbnail)) {
+        thumbMap[number] = thumbnail;
+      }
+    });
 
     if (loading) loading.style.display = 'none';
     // Hoshika is the sole source for episode numbers. Do not invent episode
