@@ -17,6 +17,7 @@
 // — once the token expires the user just reconnects.
 import type { Env } from '../index';
 import { Db } from './db';
+import { getHoshikaAnimeMetadata } from './hoshika-api';
 
 export const LOCAL_STATUSES = ['watching', 'completed', 'plan_to_watch', 'dropped', 'on_hold'] as const;
 type LocalStatus = (typeof LOCAL_STATUSES)[number];
@@ -28,11 +29,7 @@ const LOCAL_STATUS_TO_ANILIST: Record<LocalStatus, string> = {
   watching: 'CURRENT', plan_to_watch: 'PLANNING', completed: 'COMPLETED', dropped: 'DROPPED', on_hold: 'PAUSED',
 };
 
-async function getLocalAnimeImage(db: Db, animeId: number): Promise<string> {
-  if (!animeId) return '';
-  const row = await db.fetchOne<{ image_url: string }>('SELECT image_url FROM anime_images WHERE anime_id = ?', [animeId]);
-  return row ? (row.image_url as string) : '';
-}
+
 
 // =====================================================================
 // MyAnimeList
@@ -149,8 +146,8 @@ export const MalSync = {
         const exists = await db.fetchOne('SELECT id FROM anime_list WHERE user_id=? AND anime_id=?', [userId, animeId]);
         if (exists) continue;
 
-        const localImage = await getLocalAnimeImage(db, animeId);
-        const image = localImage || item.node?.main_picture?.large || item.node?.main_picture?.medium || '';
+        const hoshika = await getHoshikaAnimeMetadata(animeId, item.node?.title ?? '', env.API_CACHE, false).catch(() => null);
+        const image = hoshika?.poster || '';
         await db.insert(
           `INSERT INTO anime_list (user_id, anime_id, anime_title, anime_image, status, episodes_watched, score, updated_at)
            VALUES (?,?,?,?,?,?,?,datetime('now'))`,
