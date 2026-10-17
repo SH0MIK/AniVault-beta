@@ -184,12 +184,9 @@ const __animeDubConfirmed = ${animeDubConfirmed ? "true" : "false"};
 const SVG_SUB = \`<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M7 10.5h2.5M11.5 10.5h5.5M7 14.5h5.5M15.5 14.5h1.5"/></svg>\`;
 const SVG_DUB = \`<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>\`;
 
-// ── Fetch episode thumbnails (admin overrides + scraper fallback) ─────────
-// An admin-saved override wins where one exists (episode_overrides table,
-// set via the Episode Thumbnails admin panel); episodes without one are
-// filled in server-side with a live lookup against our own scraper API (see
-// api-episode-override.ts's ?all=1 handler). Only falls back to the anime
-// cover if the scraper has nothing for that episode either.
+// ── Fetch episode thumbnails from Hoshika only ────────────────────────────
+// The same-origin endpoint returns Hoshika-backed thumbnail records only.
+// Missing stills remain empty so the card renders a neutral episode-number placeholder.
 async function fetchAniListThumbnails(malId) {
   try {
     const res = await fetch((window.__siteUrl || '') + '/api/episode_override.php?anime_id=' + malId + '&all=1');
@@ -216,10 +213,8 @@ function buildEpCard(ep, animeId, cover, thumbMap, banner) {
   const hasVid  = !!vidInfo;
   const hasDub  = __animeDubConfirmed || !!(vidInfo && vidInfo.dub);
 
-  // Use admin-saved override thumbnail if available; fall back to the anime's
-  // wide banner (landscape, matches the 16:9 card) before the portrait cover,
-  // which only gets used if there's no banner either.
-  const thumb = (thumbMap && thumbMap[parseInt(epNum)]) || banner || cover;
+  // Episode stills must come from Hoshika; no poster/banner fallback.
+  const thumb = (thumbMap && thumbMap[parseInt(epNum)]) || '';
 
   const div = document.createElement('a');
   div.href      = (window.__siteUrl || '') + '/watch?anime=' + animeId + '&ep=' + epNum;
@@ -384,44 +379,17 @@ async function lazyLoadEpisodes() {
     ]);
 
     if (loading) loading.style.display = 'none';
-    // If Jikan has no episode data yet (common for airing anime),
-    // generate numbered stubs from the DB videos we already have
+    // Hoshika is the sole source for episode numbers. Do not invent episode
+    // stubs from database stream rows or pad with another provider's count.
     if (!jikanEps.length) {
-      const totalEps = window.__totalEps || 0;
-      const videoEps = Object.keys(window.__videoEpMap || {}).map(Number).sort((a,b)=>a-b);
-      // Use DB video episodes + fill up to totalEps if known
-      const epNums = new Set(videoEps);
-      if (totalEps > 0) for (let i = 1; i <= totalEps; i++) epNums.add(i);
-      if (!epNums.size) {
-        grid.style.display = 'block';
-        grid.innerHTML = '<p class="text-muted text-center">No episode data available yet.</p>';
-        return;
-      }
-      const stubEps = [...epNums].sort((a,b)=>a-b).map(n => ({
-        mal_id: n, title: null, aired: null, score: null, filler: false, recap: false
-      }));
-      updateEpTabCount(stubEps.length);
-      renderEpisodeGrid(stubEps, animeId, cover, thumbMap, banner);
+      grid.style.display = 'block';
+      grid.innerHTML = '<p class="text-muted text-center">No episode data available from Hoshika yet.</p>';
+      updateEpTabCount(0);
       return;
     }
+    window.__totalEps = jikanEps.length;
     updateEpTabCount(jikanEps.length);
-    // Jikan's per-episode data commonly lags behind the show's real total
-    // (currently-airing shows especially -- it only lists episodes that
-    // have actually aired/been indexed). Pad the grid out with numbered
-    // stubs for anything beyond what Jikan gave us, up to the known
-    // total, so the card count always matches the "(N)" in the tab title
-    // instead of silently showing fewer cards than it claims.
-    const totalEps = window.__totalEps || 0;
-    const jikanNums = new Set(jikanEps.map(ep => Number(ep.mal_id ?? 0)));
-    const fullEps = jikanEps.slice();
-    if (totalEps > jikanEps.length) {
-      for (let n = 1; n <= totalEps; n++) {
-        if (!jikanNums.has(n)) {
-          fullEps.push({ mal_id: n, title: null, aired: null, score: null, filler: false, recap: false });
-        }
-      }
-    }
-    renderEpisodeGrid(fullEps, animeId, cover, thumbMap, banner);
+    renderEpisodeGrid(jikanEps, animeId, cover, thumbMap, banner);
   } catch(e) {
     if (loading) loading.innerHTML = '<p class="text-muted" style="grid-column:1/-1;text-align:center;padding:1rem 0;">Failed to load episodes. <button class="btn btn-ghost btn-sm" onclick="lazyLoadEpisodes()">Retry</button></p>';
   }
