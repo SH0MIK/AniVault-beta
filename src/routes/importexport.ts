@@ -13,6 +13,7 @@ import { AnimeTracker } from '../lib/tracker';
 import { icon } from '../lib/icons';
 import { renderHeader, renderFooter, CurrentUser } from '../render/layout';
 import { getBannerData } from '../lib/settings';
+import { getHoshikaAnimeMetadata } from '../lib/hoshika-api';
 
 export const importExportRoutes = new Hono<{ Bindings: Env }>();
 
@@ -27,11 +28,7 @@ const MAL_TO_STATUS: Record<string, string> = {
   Watching: 'watching', Completed: 'completed', Planning: 'plan_to_watch', 'On-Hold': 'on_hold', Dropped: 'dropped',
 };
 
-async function getLocalAnimeImage(db: Db, animeId: number): Promise<string> {
-  if (!animeId) return '';
-  const row = await db.fetchOne<{ image_url: string }>('SELECT image_url FROM anime_images WHERE anime_id = ?', [animeId]);
-  return row ? row.image_url : '';
-}
+
 
 // ── pages/importexport.php (export=xml / export=json handled first) ───────
 importExportRoutes.get('/importexport', async (c) => {
@@ -371,7 +368,7 @@ importExportRoutes.post('/pages/import_ajax.php', async (c) => {
       const startVal = entry.started && entry.started !== '0000-00-00' ? entry.started : null;
       const finishVal = entry.finished && entry.finished !== '0000-00-00' ? entry.finished : null;
       try {
-        const animeImage = await getLocalAnimeImage(db, entry.animeId);
+        const animeImage = (await getHoshikaAnimeMetadata(entry.animeId, entry.title, c.env.API_CACHE, false).catch(() => null))?.poster || '';
         const existing = await db.fetchOne<{ id: number }>('SELECT id FROM anime_list WHERE user_id=? AND anime_id=?', [userId, entry.animeId]);
         if (existing) {
           if (animeImage) {
@@ -421,7 +418,7 @@ importExportRoutes.post('/pages/import_ajax.php', async (c) => {
       const title = entry.anime_title ?? '';
       if (!animeId || !title) { skipped++; continue; }
       try {
-        const animeImage = await getLocalAnimeImage(db, animeId);
+        const animeImage = (await getHoshikaAnimeMetadata(animeId, title, c.env.API_CACHE, false).catch(() => null))?.poster || '';
         const existing = await db.fetchOne<{ id: number }>('SELECT id FROM anime_list WHERE user_id=? AND anime_id=?', [userId, animeId]);
         if (existing) {
           if (animeImage) {
