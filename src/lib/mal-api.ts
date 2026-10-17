@@ -1132,6 +1132,8 @@ export class MalAPI {
           aired: episode.aired,
           filler: episode.filler,
           recap: episode.recap,
+          score: episode.averageScore,
+          score_count: episode.ratingCount,
           images: { jpg: { image_url: episode.thumbnail || '' } },
           thumbnail: episode.thumbnail || '',
         }));
