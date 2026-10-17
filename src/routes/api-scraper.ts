@@ -16,7 +16,6 @@ import { Auth } from '../lib/auth';
 import { h } from '../lib/helpers';
 import { MalAPI } from '../lib/mal-api';
 import { getHoshikaAnimeMetadata } from '../lib/hoshika-api';
-import { EpisodeAir } from '../lib/episode-air';
 import { AnimeTracker } from '../lib/tracker';
 
 export const scraperRoutes = new Hono<{ Bindings: Env }>();
@@ -527,7 +526,6 @@ scraperRoutes.get('/api/embed.php', async (c) => {
   const mal = new MalAPI(c.env, c.env.API_CACHE, db);
   const animeResult = await mal.getAnime(animeId).catch(() => null);
   const title = animeResult?.data?.title ?? 'Anime';
-  await mal.getAnimeEpisodes(animeId).catch(() => null);
   const episodeResult = await mal.getAnimeEpisodes(animeId).catch(() => ({ data: [] as any[] }));
   const episode = (episodeResult.data ?? []).find((item: any) => Number(item.mal_id) === epNum);
   const epTitle = episode?.title || `Episode ${epNum}`;
@@ -607,16 +605,8 @@ scraperRoutes.get('/api/anime_info.php', async (c) => {
 });
 
 // ── api/ep_count.php ────────────────────────────────────────────────────
-// Does the full scraper-API-then-Jikan lookup and writes through to
-// episode_air_cache (same as EpisodeAir.get) — this is the "slow" work.
-// anime.ts renders instantly off the cache (see EpisodeAir.getCachedAny)
-// and calls this from the client, in the background, only when that cache
-// was missing or stale, so a slow scraper response never blocks the page.
-// In practice anime.ts only ever triggers this for a currently-airing show
-// (see epsNeedsRefresh there) — finished/not-yet-aired shows already have
-// their final count straight from MAL and never need it. The status check
-// below is just a second line of defense (direct hits, stale clients, etc.)
-// so a finished/upcoming show can never end up writing to the cache either.
+// Same-origin lookup for Hoshika's catalog episode count. No scraper, Jikan,
+// MAL count, or airing-cache fallback is used.
 scraperRoutes.get('/api/ep_count.php', async (c) => {
   const animeId = parseInt(c.req.query('anime_id') ?? '0', 10) || 0;
   if (!animeId) return c.json({ error: 'Missing anime_id' }, 400);
