@@ -125,29 +125,15 @@ async function getAnilistIdFromMal(db: Db, malId: number, env: { SCRAPER_API_BAS
   return null;
 }
 
-/** Episode-specific thumbnail for the watch page's og:image, so link previews
- * (Discord, Twitter, etc.) show the actual episode instead of the anime's
- * generic cover. Previously this ran a multi-source auto-fetch chain (Kitsu
- * -> TMDB -> AniList -> Jikan -> AniSearch) directly against those APIs.
- * Priority now: an admin-saved override wins (episode_overrides.image_url,
- * set via the Episode Thumbnails admin panel) -- that lets an admin correct
- * a bad auto-fetched thumbnail. Otherwise, fetch it live from our own
- * scraper API (cached in D1, see getEpisodeThumbnail). Only falls back to
- * the anime's cover art if neither of those has anything. */
+/** Episode-specific Open Graph thumbnail. Hoshika is the sole source;
+ * missing Hoshika stills intentionally return an empty string rather than
+ * falling back to a saved override, another provider, or anime poster. */
 async function getEpisodeOgImage(
   db: Db, env: { SCRAPER_API_BASE?: string },
-  malId: number, epNum: number, fallback: string, animeStatus?: string | null
+  malId: number, epNum: number, _fallback: string, _animeStatus?: string | null
 ): Promise<string> {
-  try {
-    const row = await db.fetchOne<{ image_url: string | null }>(
-      'SELECT image_url FROM episode_overrides WHERE anime_id = ? AND episode_num = ?',
-      [malId, epNum]
-    );
-    if (row?.image_url) return row.image_url;
-  } catch { /* fall through to scraper/fallback */ }
-
-  const scraped = await getEpisodeThumbnail(env, db, malId, epNum, animeStatus);
-  return scraped ?? fallback;
+  const thumb = await getEpisodeThumbnail(env, db, malId, epNum);
+  return thumb ?? '';
 }
 
 // Matches the user-agents link-preview crawlers send (Facebook, Discord,
