@@ -17,7 +17,6 @@ import { h } from '../lib/helpers';
 import { MalAPI } from '../lib/mal-api';
 import { EpisodeAir } from '../lib/episode-air';
 import { AnimeTracker } from '../lib/tracker';
-import { getEpisodeThumbnail } from '../lib/episode-thumb';
 
 export const scraperRoutes = new Hono<{ Bindings: Env }>();
 
@@ -523,33 +522,15 @@ scraperRoutes.get('/api/embed.php', async (c) => {
   const epNum = parseInt(c.req.query('ep') ?? '0', 10) || 0;
   if (!animeId || !epNum) return c.text('Not found', 404);
 
-  const animeRes = await fetchJson(`https://api.jikan.moe/v4/anime/${animeId}`, 5000);
-  const title = animeRes.data?.data?.title ?? 'Anime';
-  const image = animeRes.data?.data?.images?.jpg?.image_url ?? '';
-
-  const epRes = await fetchJson(`https://api.jikan.moe/v4/anime/${animeId}/episodes`, 5000);
-  let epTitle = `Episode ${epNum}`;
-  for (const ep of epRes.data?.data ?? []) {
-    if (Number(ep.mal_id ?? 0) === epNum && ep.title && ep.title !== 'TBA') { epTitle = ep.title; break; }
-  }
-
-  // Priority: an admin-saved override wins (episode_overrides.image_url,
-  // set via the Episode Thumbnails admin panel), then a live lookup against
-  // our own scraper API (cached in D1), then the anime cover as last resort.
-  let ogImage = image;
-  try {
-    const db = new Db(c.env.DB);
-    const row = await db.fetchOne<{ image_url: string | null }>(
-      'SELECT image_url FROM episode_overrides WHERE anime_id = ? AND episode_num = ?',
-      [animeId, epNum]
-    );
-    if (row?.image_url) {
-      ogImage = row.image_url;
-    } else {
-      const scraped = await getEpisodeThumbnail(c.env, db, animeId, epNum, animeRes.data?.data?.status);
-      if (scraped) ogImage = scraped;
-    }
-  } catch { /* fall back to anime cover */ }
+  const db = new Db(c.env.DB);
+  const mal = new MalAPI(c.env, c.env.API_CACHE, db);
+  const animeResult = await mal.getAnime(animeId).catch(() => null);
+  const title = animeResult?.data?.title ?? 'Anime';
+  await mal.getAnimeEpisodes(animeId).catch(() => null);
+  const episodeResult = await mal.getAnimeEpisodes(animeId).catch(() => ({ data: [] as any[] }));
+  const episode = (episodeResult.data ?? []).find((item: any) => Number(item.mal_id) === epNum);
+  const epTitle = episode?.title || `Episode ${epNum}`;
+  const ogImage = typeof episode?.thumbnail === 'string' ? episode.thumbnail : '';
 
   const watchUrl = `${siteUrl}/watch?anime=${animeId}&ep=${epNum}`;
   const html = `<!DOCTYPE html>
