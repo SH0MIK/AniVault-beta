@@ -15,6 +15,7 @@ import { Session } from '../lib/session';
 import { Auth } from '../lib/auth';
 import { h } from '../lib/helpers';
 import { MalAPI } from '../lib/mal-api';
+import { getHoshikaAnimeMetadata } from '../lib/hoshika-api';
 import { EpisodeAir } from '../lib/episode-air';
 import { AnimeTracker } from '../lib/tracker';
 
@@ -641,6 +642,16 @@ scraperRoutes.get('/api/anime_episodes.php', async (c) => {
   const mal = new MalAPI(c.env, c.env.API_CACHE, db);
   const result = await mal.getAnimeEpisodes(animeId, page);
   return c.json(result);
+});
+
+// Hoshika-only poster and episode-count lookup for the video manager's
+// anime picker. MAL IDs remain identifiers for stream records, not art sources.
+scraperRoutes.get('/api/hoshika_anime_meta.php', async (c) => {
+  const malId = parseInt(c.req.query('mal_id') ?? '0', 10) || 0;
+  const title = (c.req.query('title') ?? '').trim();
+  if (!malId || !title) return c.json({ poster: '', episodes: null }, 400);
+  const metadata = await getHoshikaAnimeMetadata(malId, title, c.env.API_CACHE, true).catch(() => null);
+  return c.json({ poster: metadata?.poster || '', episodes: metadata?.episodes ?? null });
 });
 
 // Recommendations keep MAL's relationship metadata but resolve all poster
