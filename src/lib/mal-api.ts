@@ -261,6 +261,18 @@ export class MalAPI {
     return metadata?.poster || '';
   }
 
+  /** Overwrite cached/card data with Hoshika-only artwork and episode counts. */
+  async enforceHoshikaArtwork(items: NormalisedAnime[]): Promise<void> {
+    await Promise.all(items.filter((anime) => anime?.mal_id && anime.title).map(async (anime) => {
+      const metadata = await getHoshikaAnimeMetadata(anime.mal_id, anime.title, this.kv, false).catch(() => null);
+      const poster = metadata?.poster || '';
+      anime.images = { jpg: { image_url: poster, large_image_url: poster } };
+      anime.cover_image = '';
+      anime.logo_image = '';
+      anime.episodes = metadata?.episodes ?? 0;
+    }));
+  }
+
   // Fire-and-forget cache write. KV's daily put() quota (1,000/day on the
   // free tier) is easy to exceed with an hourly scanner + Jikan pagination
   // fallback — when that happens put() throws, and previously that was
