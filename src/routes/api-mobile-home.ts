@@ -83,19 +83,18 @@ mobileHomeRoutes.get('/api/mobile/home-v2', async (c) => {
 
   const hero: any[] = [];
   try {
-    const curatedRows = await db.fetchAll<any>('SELECT anime_id, banner_image_url, logo_image_url FROM home_hero_banners ORDER BY display_order ASC LIMIT 8');
+    const curatedRows = await db.fetchAll<any>('SELECT anime_id FROM home_hero_banners ORDER BY display_order ASC LIMIT 8');
     if (curatedRows.length) {
       const curated = await Promise.all(curatedRows.map((r) => mal.getAnime(r.anime_id, true)));
-      const imageMap = await mal.getLocalAnimeImagesMany(curatedRows.map((r) => r.anime_id));
-      for (let i = 0; i < curatedRows.length; i++) {
-        const a = curated[i]?.data;
+      for (const result of curated) {
+        const a = result?.data;
         if (!a) continue;
         hero.push({
           id: a.mal_id,
           title: a.title_english && a.title_english !== a.title ? a.title_english : a.title,
-          image: imageMap.get(a.mal_id) || a.images?.jpg?.large_image_url || '',
-          banner: curatedRows[i].banner_image_url || a.banner_image || '',
-          logo: curatedRows[i].logo_image_url || a.logo_image || '',
+          image: a.images?.jpg?.large_image_url || '',
+          banner: a.cover_image || '',
+          logo: '',
           synopsis: a.synopsis || '',
           score: a.score ?? null,
           type: a.type ?? '',
