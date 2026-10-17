@@ -267,7 +267,8 @@ export class MalAPI {
       const metadata = await getHoshikaAnimeMetadata(anime.mal_id, anime.title, this.kv, false).catch(() => null);
       const poster = metadata?.poster || '';
       anime.images = { jpg: { image_url: poster, large_image_url: poster } };
-      anime.cover_image = '';
+      anime.cover_image = metadata?.cover || '';
+      anime.banner_image = metadata?.cover || undefined;
       anime.logo_image = '';
       anime.episodes = metadata?.episodes ?? 0;
     }));
@@ -375,7 +376,10 @@ export class MalAPI {
     const cacheKey = this.seasonCacheKey();
     if (this.kv && this.cacheEnabled()) {
       const cached = await this.safeKvGet(cacheKey, 'json') as { data: NormalisedAnime[] } | null;
-      if (cached) return cached;
+      if (cached) {
+        await this.enforceHoshikaArtwork(cached.data ?? []);
+        return cached;
+      }
     }
 
     const data = await this.fetchAniListSeasonLive();
