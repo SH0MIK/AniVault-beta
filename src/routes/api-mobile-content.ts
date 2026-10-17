@@ -46,19 +46,19 @@ mobileContentRoutes.get('/api/mobile/anime/:id/episodes', async (c) => {
 });
 
 mobileContentRoutes.get('/api/mobile/profile', async (c) => {
-  const { db, auth, session } = await buildCtx(c); if (!auth.check()) return c.json({ success: false, message: 'Not logged in.' }, 401); const userId = session.user_id!; const user = await auth.getCurrentUser(); if (!user) return c.json({ success: false, message: 'User not found.' }, 404);
+  const { db, auth, session, mal } = await buildCtx(c); if (!auth.check()) return c.json({ success: false, message: 'Not logged in.' }, 401); const userId = session.user_id!; const user = await auth.getCurrentUser(); if (!user) return c.json({ success: false, message: 'User not found.' }, 404);
   const { Badge } = await import('../lib/badges'); const { AnimeTracker } = await import('../lib/tracker'); const { Follow } = await import('../lib/follow');
-  const [badges, stats, favorites, followerCount, followingCount] = await Promise.all([Badge.getForUser(db, userId), AnimeTracker.getStats(db, userId), AnimeTracker.getFavorites(db, userId), Follow.followerCount(db, userId), Follow.followingCount(db, userId)]);
+  const [badges, stats, favorites, followerCount, followingCount] = await Promise.all([Badge.getForUser(db, userId), AnimeTracker.getStats(db, userId), AnimeTracker.getFavorites(db, userId, mal), Follow.followerCount(db, userId), Follow.followingCount(db, userId)]);
   return c.json({ success: true, user: { id: user.id, username: user.username, email: user.email, avatarUrl: user.avatar_url, bio: user.bio, role: user.role, hasGoogle: !!user.google_id, hasDiscord: !!user.discord_id, hasPassword: !!user.password_hash }, stats, badges: badges.map((b) => ({ id: b.id, name: b.name, description: b.description, iconText: b.icon_text, imageUrl: b.image_url, color: b.color })), favorites: favorites.map((f: any) => ({ animeId: f.anime_id, title: f.anime_title, image: f.anime_image })), followerCount, followingCount });
 });
 
 mobileContentRoutes.get('/api/mobile/user/:username', async (c) => {
-  const { db, auth, session } = await buildCtx(c); const username = c.req.param('username').trim(); if (!username) return c.json({ success: false, message: 'Invalid username.' }, 400);
+  const { db, auth, session, mal } = await buildCtx(c); const username = c.req.param('username').trim(); if (!username) return c.json({ success: false, message: 'Invalid username.' }, 400);
   const profileUser = await db.fetchOne<any>('SELECT id, username, avatar_url, bio, role, created_at, privacy_hide_followers, privacy_hide_following, privacy_hide_favorites FROM users WHERE username = ? AND is_active = 1', [username]);
   if (!profileUser) return c.json({ success: false, message: 'User not found.' }, 404);
   const { Badge } = await import('../lib/badges'); const { AnimeTracker } = await import('../lib/tracker'); const { Follow } = await import('../lib/follow'); const currentUserId = auth.check() ? session.user_id! : null; const isOwn = currentUserId === profileUser.id;
   const [badges, stats, followerCount, followingCount, isFollowing] = await Promise.all([Badge.getForUser(db, profileUser.id), AnimeTracker.getStats(db, profileUser.id), Follow.followerCount(db, profileUser.id), Follow.followingCount(db, profileUser.id), currentUserId && !isOwn ? Follow.isFollowing(db, currentUserId, profileUser.id) : Promise.resolve(false)]);
-  const canViewFavorites = isOwn || !profileUser.privacy_hide_favorites; const favorites = canViewFavorites ? await AnimeTracker.getFavorites(db, profileUser.id) : [];
+  const canViewFavorites = isOwn || !profileUser.privacy_hide_favorites; const favorites = canViewFavorites ? await AnimeTracker.getFavorites(db, profileUser.id, mal) : [];
   return c.json({ success: true, user: { id: profileUser.id, username: profileUser.username, avatarUrl: profileUser.avatar_url, bio: profileUser.bio, role: profileUser.role, joinedAt: profileUser.created_at }, stats, badges: badges.map((b) => ({ id: b.id, name: b.name, description: b.description, iconText: b.icon_text, imageUrl: b.image_url, color: b.color })), favorites: canViewFavorites ? favorites.map((f: any) => ({ animeId: f.anime_id, title: f.anime_title, image: f.anime_image })) : null, followerCount, followingCount, isOwn, isFollowing, canViewFollowers: isOwn || !profileUser.privacy_hide_followers, canViewFollowing: isOwn || !profileUser.privacy_hide_following });
 });
 
