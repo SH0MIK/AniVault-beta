@@ -65,8 +65,8 @@ homeRoutes.get('/', async (c) => {
     upcomingList = homepageSnapshot.upcoming.slice(0, 8);
   } else {
     const [topAnime, upcoming] = await Promise.all([
-      mal.getTopAnime('bypopularity', 1),
-      mal.getSeasonUpcoming(),
+      mal.getTopAnime('bypopularity', 1, 12),
+      mal.getSeasonUpcoming(8),
     ]);
     topList = (topAnime.data ?? []).slice(0, 12);
     upcomingList = (upcoming.data ?? []).slice(0, 8);
