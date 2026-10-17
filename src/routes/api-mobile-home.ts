@@ -97,7 +97,7 @@ mobileHomeRoutes.get('/api/mobile/home-v2', async (c) => {
   try {
     const curatedRows = await db.fetchAll<any>('SELECT anime_id FROM home_hero_banners ORDER BY display_order ASC LIMIT 8');
     if (curatedRows.length) {
-      const curated = await Promise.all(curatedRows.map((r) => mal.getAnime(r.anime_id, false)));
+      const curated = await Promise.all(curatedRows.map((r) => mal.getAnime(r.anime_id, true)));
       for (const result of curated) {
         const a = result?.data;
         if (!a) continue;
