@@ -202,7 +202,7 @@ export async function getHoshikaAnimeEpisodes(
           thumbnail,
           filler: !!item?.filler,
           recap: !!item?.recap,
-          averageScore: Number.isFinite(Number(item?.averageScore)) ? Number(item.averageScore) : null,
+          averageScore: item?.averageScore !== null && item?.averageScore !== undefined && Number.isFinite(Number(item.averageScore)) ? Number(item.averageScore) : null,
           ratingCount: Number.isFinite(Number(item?.ratingCount)) ? Number(item.ratingCount) : 0,
         });
       }
