@@ -320,7 +320,8 @@ listRoutes.get('/history', async (c) => {
   if (history.length > 0) {
     const distinctIds = [...new Set(history.map((r: any) => r.anime_id))];
     await Promise.all(distinctIds.map(async (id) => {
-      await mal.getAnimeEpisodes(id).catch(() => null);
+      // History pages use cached Hoshika stills only; no legacy source or
+      // multi-anime live-fetch burst on a cold page.
       const thumbs = await getAnimeEpisodeThumbnails(c.env, db, id);
       for (const row of history as any[]) {
         if (row.anime_id !== id) continue;
