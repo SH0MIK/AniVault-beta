@@ -3,7 +3,6 @@
 import { h } from './helpers';
 import { icon } from './icons';
 import { NormalisedAnime } from './mal-api';
-import { AiredInfo, EpisodeAir } from './episode-air';
 import { DubStatus } from './dub-status';
 import { Db } from './db';
 
@@ -11,21 +10,17 @@ const STATUS_LABELS: Record<string, string> = { watching: 'Watching', completed:
 const STATUS_CLASSES: Record<string, string> = { watching: 'badge-watching', completed: 'badge-completed', plan_to_watch: 'badge-ptw', dropped: 'badge-dropped', on_hold: 'badge-onhold' };
 export const LANG_CODE: Record<string, string> = { english: 'EN', hindi: 'HI', spanish: 'ES', german: 'DE', french: 'FR', portuguese: 'PT', italian: 'IT', korean: 'KO' };
 
-export interface AnimeCardMeta { airedInfo?: AiredInfo | null; dubbedLangs?: string[]; }
+export interface AnimeCardMeta { airedInfo?: null; dubbedLangs?: string[]; }
 
-/** One bulk lookup covering a whole page of cards — every route with a
- *  grid should call this once and pass the result to renderAnimeCard per
- *  item, rather than querying per-card. Cache-only (see episode-air.ts /
- *  dub-status.ts), so this is always fast regardless of grid size. */
+/** Batch-load non-image card metadata. Episode counts remain the Hoshika
+ * catalog values already present on each anime object; legacy airing-count
+ * cache entries must not override them. */
 export async function buildCardMetaMap(db: Db, items: NormalisedAnime[]): Promise<Map<number, AnimeCardMeta>> {
   const ids = [...new Set(items.map((a) => a.mal_id).filter((id): id is number => !!id))];
   const out = new Map<number, AnimeCardMeta>();
   if (!ids.length) return out;
-  const [airedMap, dubMap] = await Promise.all([
-    EpisodeAir.getForMany(db, ids),
-    DubStatus.getForMany(db, ids),
-  ]);
-  for (const id of ids) out.set(id, { airedInfo: airedMap.get(id) ?? null, dubbedLangs: dubMap.get(id) ?? [] });
+  const dubMap = await DubStatus.getForMany(db, ids);
+  for (const id of ids) out.set(id, { airedInfo: null, dubbedLangs: dubMap.get(id) ?? [] });
   return out;
 }
 
@@ -48,13 +43,8 @@ export function renderAnimeCard(a: NormalisedAnime, siteUrl: string, userStatus:
   const jImage = JSON.stringify(aimg);
   const inUserList = userStatus !== null;
 
-  // MAL's own episode count is only reliable once a show has finished —
-  // prefer the Jikan-derived "aired so far" count when we have one cached.
-  const airedInfo = meta?.airedInfo;
-  let epsLabel = aeps ? `${aeps} eps` : '';
-  if (airedInfo && airedInfo.aired > 0) {
-    epsLabel = airedInfo.total && airedInfo.total !== airedInfo.aired ? `Ep ${airedInfo.aired}/${airedInfo.total}` : `Ep ${airedInfo.aired}`;
-  }
+  // Display only the Hoshika catalog's episode count.
+  const epsLabel = aeps ? `${aeps} eps` : '';
 
   const dubbed = meta?.dubbedLangs ?? [];
   const hasDub = dubbed.length > 0;
