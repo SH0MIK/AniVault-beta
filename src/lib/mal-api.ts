@@ -261,10 +261,10 @@ export class MalAPI {
     return metadata?.poster || '';
   }
 
-  /** Overwrite cached/card data with Hoshika-only artwork and episode counts. */
-  async enforceHoshikaArtwork(items: NormalisedAnime[]): Promise<void> {
+  /** Overwrite card data with Hoshika-only artwork and episode counts. */
+  async enforceHoshikaArtwork(items: NormalisedAnime[], allowKvWrites = true): Promise<void> {
     await Promise.all(items.filter((anime) => anime?.mal_id && anime.title).map(async (anime) => {
-      const metadata = await getHoshikaAnimeMetadata(anime.mal_id, anime.title, this.kv, false).catch(() => null);
+      const metadata = await getHoshikaAnimeMetadata(anime.mal_id, anime.title, this.kv, false, allowKvWrites).catch(() => null);
       const poster = metadata?.poster || '';
       anime.images = { jpg: { image_url: poster, large_image_url: poster } };
       anime.cover_image = metadata?.cover || '';
