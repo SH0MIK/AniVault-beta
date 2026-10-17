@@ -69,13 +69,13 @@ mobileHomeRoutes.get('/api/mobile/home-v2', async (c) => {
       );
       const ids = [...new Set(rows.map((r) => Number(r.anime_id)))];
       const posters = new Map<number, string>();
-      await Promise.all(ids.map(async (id) => {
-        const row = rows.find((r) => Number(r.anime_id) === id);
-        posters.set(id, await mal.getHoshikaPoster(id, row?.anime_title || ''));
-      }));
       const thumbs = new Map<number, Record<number, string>>();
       await Promise.all(ids.map(async (id) => {
-        // Read cached Hoshika stills only; don't trigger a multi-anime fetch burst.
+        const row = rows.find((r) => Number(r.anime_id) === id);
+        // Warm the Hoshika episode cache once per distinct anime so Continue
+        // Watching can show Hoshika stills even on a cold cache.
+        await mal.getAnimeEpisodes(id).catch(() => null);
+        posters.set(id, await mal.getHoshikaPoster(id, row?.anime_title || ''));
         thumbs.set(id, await getAnimeEpisodeThumbnails(c.env, db, id));
       }));
       continueWatching = rows.map((r) => ({
