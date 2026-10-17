@@ -167,7 +167,7 @@ homeRoutes.get('/', async (c) => {
   if (curatedRows.length > 0) {
     const resolved = await Promise.all(curatedRows.map(async (row) => {
       const id = Number(row.anime_id);
-      const result = await mal.getAnime(id, false).catch(() => ({ data: null }));
+      const result = await mal.getAnime(id, true).catch(() => ({ data: null }));
       const anime = result.data;
       if (!anime) return null;
       return {
