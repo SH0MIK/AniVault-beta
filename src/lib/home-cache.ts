@@ -59,9 +59,9 @@ export async function getHomepageSnapshot(db: Db): Promise<HomepageSnapshot | nu
 
 export async function refreshHomepageSnapshot(db: Db, mal: MalAPI): Promise<HomepageSnapshot | null> {
   const [trending, popular, upcoming] = await Promise.all([
-    mal.getSeasonNow(1),
-    mal.getTopAnime('bypopularity', 1),
-    mal.getSeasonUpcoming(),
+    mal.getSeasonNow(1, 12),
+    mal.getTopAnime('bypopularity', 1, 12),
+    mal.getSeasonUpcoming(8),
   ]);
 
   const lists = {
