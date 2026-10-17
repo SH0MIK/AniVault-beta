@@ -97,6 +97,24 @@ function shortIdFrom(item: any): string {
   return typeof id === 'string' || typeof id === 'number' ? String(id) : '';
 }
 
+// Short-lived isolate memo avoids repeating the same catalog lookup on
+// subsequent page requests. KV remains the cross-isolate cache where writes
+// are allowed, but homepage rendering can opt out of writes to protect the
+// account-wide daily KV write budget.
+const HOSHIKA_MEMORY_TTL_MS = 6 * 60 * 60 * 1000;
+const hoshikaMemory = new Map<number, { expiresAt: number; value: HoshikaAnimeMetadata | null }>();
+
+function rememberHoshika(malId: number, value: HoshikaAnimeMetadata | null): void {
+  hoshikaMemory.set(malId, { expiresAt: Date.now() + HOSHIKA_MEMORY_TTL_MS, value });
+  if (hoshikaMemory.size > 500) {
+    const now = Date.now();
+    for (const [id, entry] of hoshikaMemory) {
+      if (entry.expiresAt <= now || hoshikaMemory.size > 400) hoshikaMemory.delete(id);
+      if (hoshikaMemory.size <= 400) break;
+    }
+  }
+}
+
 function normaliseTitle(value: any): string {
   return typeof value === 'string'
     ? value.toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim().replace(/\s+/g, ' ')
@@ -241,8 +259,15 @@ export async function getHoshikaAnimeMetadata(
   title: string,
   kv?: KVNamespace,
   includeDetail = false,
+  allowKvWrite = true,
 ): Promise<HoshikaAnimeMetadata | null> {
   if (!malId || !title) return null;
+
+  const memory = hoshikaMemory.get(malId);
+  if (memory && memory.expiresAt > Date.now() && (!includeDetail || (memory.value !== null && memory.value?.episodes !== null))) {
+    return memory.value;
+  }
+  if (memory) hoshikaMemory.delete(malId);
 
   const cacheKey = `anivault_beta_hoshika_anime_v1_${malId}`;
   let cached: HoshikaAnimeMetadata | null = null;
@@ -250,7 +275,9 @@ export async function getHoshikaAnimeMetadata(
     try {
       cached = await kv.get(cacheKey, 'json') as HoshikaAnimeMetadata | null;
       if (cached && (!includeDetail || cached.episodes !== null)) {
-        return cached.poster || cached.cover || cached.episodes !== null ? cached : null;
+        const usable = cached.poster || cached.cover || cached.episodes !== null ? cached : null;
+        rememberHoshika(malId, usable);
+        return usable;
       }
     } catch { /* Cache failures must not break anime pages. */ }
   }
@@ -270,9 +297,10 @@ export async function getHoshikaAnimeMetadata(
       .filter((entry) => entry.score >= 80)
       .sort((a, b) => b.score - a.score)[0]?.item;
     if (!match) {
-      if (kv) {
+      if (kv && allowKvWrite) {
         try { await kv.put(cacheKey, JSON.stringify({ poster: '', cover: '', episodes: null }), { expirationTtl: 3600 }); } catch {}
       }
+      rememberHoshika(malId, null);
       return null;
     }
 
@@ -298,14 +326,16 @@ export async function getHoshikaAnimeMetadata(
       }
     }
 
-    if (kv) {
+    const usable = result.poster || result.cover || result.episodes !== null ? result : null;
+    rememberHoshika(malId, usable);
+    if (kv && allowKvWrite) {
       try {
         await kv.put(cacheKey, JSON.stringify(result), {
           expirationTtl: result.poster || result.cover || result.episodes !== null ? 86400 : 3600,
         });
       } catch { /* Metadata is still usable if KV is unavailable. */ }
     }
-    return result.poster || result.cover || result.episodes !== null ? result : null;
+    return usable;
   } catch (error) {
     console.warn('[hoshika] Public catalog lookup failed:', String(error));
     return cached;
