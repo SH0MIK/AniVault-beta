@@ -68,20 +68,20 @@ mobileHomeRoutes.get('/api/mobile/home-v2', async (c) => {
         [currentUser.id]
       );
       const ids = [...new Set(rows.map((r) => Number(r.anime_id)))];
-      const details = new Map<number, any>();
-      await Promise.all(ids.map(async (id) => {
-        await mal.getAnimeEpisodes(id).catch(() => null);
-        const result = await mal.getAnime(id, true).catch(() => null);
-        details.set(id, result?.data ?? null);
+      const posters = new Map<number, string>();
+      await Promise.all(rows.map(async (r) => {
+        const id = Number(r.anime_id);
+        if (!posters.has(id)) posters.set(id, await mal.getHoshikaPoster(id, r.anime_title || ''));
       }));
       const thumbs = new Map<number, Record<number, string>>();
       await Promise.all(ids.map(async (id) => {
+        // Read cached Hoshika stills only; don't trigger a multi-anime fetch burst.
         thumbs.set(id, await getAnimeEpisodeThumbnails(c.env, db, id));
       }));
       continueWatching = rows.map((r) => ({
         animeId: r.anime_id,
         title: r.anime_title,
-        image: details.get(Number(r.anime_id))?.images?.jpg?.large_image_url || '',
+        image: posters.get(Number(r.anime_id)) || '',
         episodeNum: r.episode_num,
         epTitle: r.ep_title,
         epThumb: thumbs.get(Number(r.anime_id))?.[Number(r.episode_num)] || '',
