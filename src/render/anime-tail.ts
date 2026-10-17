@@ -66,7 +66,7 @@ export function animeTailScript(animeDubConfirmed: boolean): string {
   // Fetch start_date for a single MAL id via Jikan
   async function fetchDate(id) {
     try {
-      const res  = await fetch(\`https://api.jikan.moe/v4/anime/${id}\`);
+      const res  = await fetch(\`https://api.jikan.moe/v4/anime/\${id}\`);
       const data = await res.json();
       return data?.data?.aired?.from ?? null; // ISO string or null
     } catch { return null; }
@@ -118,18 +118,18 @@ export function animeTailScript(animeDubConfirmed: boolean): string {
       html += \`
         <div style="padding:9px 14px;background:rgba(99,102,241,.15);display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--border);">
           <span style="width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0;"></span>
-          <span style="font-size:0.85rem;font-weight:700;color:var(--text-main);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">${label}</span>
+          <span style="font-size:0.85rem;font-weight:700;color:var(--text-main);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">\${label}</span>
           <span style="font-size:0.7rem;color:var(--accent);font-weight:700;flex-shrink:0;">Current</span>
         </div>\`;
     } else {
       html += \`
-        <a href="${siteUrl}/anime?id=${entry.id}"
+        <a href="\${siteUrl}/anime?id=\${entry.id}"
           style="display:flex;align-items:center;gap:10px;padding:9px 14px;color:var(--text-main);text-decoration:none;font-size:0.85rem;border-bottom:1px solid rgba(255,255,255,0.04);transition:background .12s;"
           onmouseover="this.style.background='rgba(255,255,255,0.06)'"
           onmouseout="this.style.background=''"
           role="option">
           <span style="width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,0.2);flex-shrink:0;"></span>
-          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">${label}</span>
+          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">\${label}</span>
         </a>\`;
     }
   });
@@ -139,14 +139,14 @@ export function animeTailScript(animeDubConfirmed: boolean): string {
     html += \`<div style="padding:5px 14px 3px;font-size:0.68rem;color:var(--text-muted);font-weight:700;text-transform:uppercase;letter-spacing:.07em;border-top:1px solid var(--border);margin-top:2px;">Also in this series</div>\`;
     specialEntries.forEach(e => {
       html += \`
-        <a href="${siteUrl}/anime?id=${e.id}"
+        <a href="\${siteUrl}/anime?id=\${e.id}"
           style="display:flex;align-items:center;gap:10px;padding:8px 14px;color:var(--text-main);text-decoration:none;font-size:0.85rem;border-bottom:1px solid rgba(255,255,255,0.04);transition:background .12s;"
           onmouseover="this.style.background='rgba(255,255,255,0.06)'"
           onmouseout="this.style.background=''"
           role="option">
           <span style="width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,0.15);flex-shrink:0;"></span>
-          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">${e.title.replace(/</g,'&lt;')}</span>
-          <span style="font-size:0.7rem;color:var(--text-muted);flex-shrink:0;">${e.type}</span>
+          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;">\${e.title.replace(/</g,'&lt;')}</span>
+          <span style="font-size:0.7rem;color:var(--text-muted);flex-shrink:0;">\${e.type}</span>
         </a>\`;
     });
   }
@@ -178,7 +178,7 @@ document.addEventListener('click', function(e) {
 
 // __videoEps is now an object {epNum: {sub:true, dub:bool}}
 const __videoEpMap = window.__videoEps || {};
-const __animeDubConfirmed = ${animeDubConfirmed ? "true" : "false"};
+const __animeDubConfirmed = \${animeDubConfirmed ? "true" : "false"};
 
 // SVG icons (inline, sized for the badge)
 const SVG_SUB = \`<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M7 10.5h2.5M11.5 10.5h5.5M7 14.5h5.5M15.5 14.5h1.5"/></svg>\`;
@@ -229,20 +229,20 @@ function buildEpCard(ep, animeId, cover, thumbMap, banner) {
 
   const badgesHtml = hasVid ? \`
     <div class="ep-audio-badges">
-      <span class="ep-audio-badge sub-badge">${SVG_SUB}</span>
-      ${hasDub ? \`<span class="ep-audio-badge dub-badge">${SVG_DUB}</span>\` : ''}
+      <span class="ep-audio-badge sub-badge">\${SVG_SUB}</span>
+      \${hasDub ? \`<span class="ep-audio-badge dub-badge">\${SVG_DUB}</span>\` : ''}
     </div>\` : '';
 
   div.innerHTML = \`
-    <div class="ep-thumb" style="background-image:url('${thumb}');background-size:cover;background-position:center;">
-      ${!thumb ? \`<div class="ep-thumb-placeholder">${epNum}</div>\` : ''}
-      ${filler ? '<span class="ep-badge ep-badge-filler">Filler</span>' : ''}
-      ${recap  ? '<span class="ep-badge ep-badge-recap">Recap</span>'   : ''}
-      ${badgesHtml}
+    <div class="ep-thumb" style="background-image:url('\${thumb}');background-size:cover;background-position:center;">
+      \${!thumb ? \`<div class="ep-thumb-placeholder">\${epNum}</div>\` : ''}
+      \${filler ? '<span class="ep-badge ep-badge-filler">Filler</span>' : ''}
+      \${recap  ? '<span class="ep-badge ep-badge-recap">Recap</span>'   : ''}
+      \${badgesHtml}
     </div>
     <div class="ep-info">
-      <div class="ep-title">${epNum}. ${epTitle.replace(/</g,'&lt;')}</div>
-      <div class="ep-meta">${meta}${score !== null ? ' • ⭐ ' + score : ''}</div>
+      <div class="ep-title">\${epNum}. \${epTitle.replace(/</g,'&lt;')}</div>
+      <div class="ep-meta">\${meta}\${score !== null ? ' • ⭐ ' + score : ''}</div>
     </div>\`;
   return div;
 }
@@ -363,7 +363,7 @@ async function lazyLoadEpisodes() {
       let hasNext = true;
       while (hasNext) {
         if (page > 1) await new Promise(r => setTimeout(r, 400));
-        const res  = await fetch(`${window.__siteUrl || ''}/api/anime_episodes.php?anime=${animeId}&page=${page}`);
+        const res  = await fetch(`\${window.__siteUrl || ''}/api/anime_episodes.php?anime=\${animeId}&page=\${page}`);
         const data = await res.json();
         const eps  = data.data || [];
         allEps = allEps.concat(eps);
@@ -406,7 +406,7 @@ async function lazyLoadCharacters() {
   const loading = document.getElementById('char-grid-loading');
   if (!grid) return;
   try {
-    const res  = await fetch(\`${window.__siteUrl || ''}/api/anime_characters.php?anime=${animeId}\`);
+    const res  = await fetch(\`\${window.__siteUrl || ''}/api/anime_characters.php?anime=\${animeId}\`);
     const data = await res.json();
     const chars = (data.data || []).slice(0, 12);
     if (loading) loading.style.display = 'none';
@@ -428,12 +428,12 @@ async function lazyLoadCharacters() {
       div.onclick = () => { window.location.href = window.__siteUrl + '/character?id=' + charId; };
       div.innerHTML = \`
         <div class="anime-card-poster char-card-poster">
-          ${img ? \`<img src="${img}" alt="${char.name || ''}" loading="lazy">\` : ''}
-          ${isMain ? '<span style="position:absolute;top:6px;left:6px;background:var(--accent);color:#fff;font-size:.65rem;font-weight:700;padding:2px 7px;border-radius:10px;text-transform:uppercase;letter-spacing:.04em;z-index:2;">Main</span>' : ''}
+          \${img ? \`<img src="\${img}" alt="\${char.name || ''}" loading="lazy">\` : ''}
+          \${isMain ? '<span style="position:absolute;top:6px;left:6px;background:var(--accent);color:#fff;font-size:.65rem;font-weight:700;padding:2px 7px;border-radius:10px;text-transform:uppercase;letter-spacing:.04em;z-index:2;">Main</span>' : ''}
         </div>
         <div class="anime-card-info" style="text-align:center;">
-          <div class="anime-card-title">${(char.name||'').replace(/</g,'&lt;')}</div>
-          <div class="anime-card-meta">${role}${va ? '<br><span style="color:var(--text-muted);">' + (va.name||'').replace(/</g,'&lt;') + '</span>' : ''}</div>
+          <div class="anime-card-title">\${(char.name||'').replace(/</g,'&lt;')}</div>
+          <div class="anime-card-meta">\${role}\${va ? '<br><span style="color:var(--text-muted);">' + (va.name||'').replace(/</g,'&lt;') + '</span>' : ''}</div>
         </div>\`;
       grid.appendChild(div);
     });
@@ -459,8 +459,8 @@ async function lazyLoadVideos() {
   if (!wrap || !section) return;
   try {
     const [videosRes, themesRes] = await Promise.all([
-      fetch(\`${window.__siteUrl || ''}/api/anime_videos.php?anime=${animeId}\`),
-      fetch(\`${window.__siteUrl || ''}/api/anime_themes.php?anime=${animeId}\`),
+      fetch(\`\${window.__siteUrl || ''}/api/anime_videos.php?anime=\${animeId}\`),
+      fetch(\`\${window.__siteUrl || ''}/api/anime_themes.php?anime=\${animeId}\`),
     ]);
     const videosData = await videosRes.json();
     const themesData = await themesRes.json();
@@ -483,7 +483,7 @@ async function lazyLoadVideos() {
       const v = videoByKey[prefix + t.number];
       return {
         title: t.title,
-        subtitle: [t.artist, t.episodes ? \`eps ${t.episodes}\` : null].filter(Boolean).join(' · '),
+        subtitle: [t.artist, t.episodes ? \`eps \${t.episodes}\` : null].filter(Boolean).join(' · '),
         embedUrl: v ? v.embedUrl : null,
         youtubeId: v ? v.youtubeId : null,
         hasVideo: !!v,
@@ -543,15 +543,15 @@ function renderVideoList(tab) {
     const card = document.createElement('div');
     card.className = 'anime-card';
     card.style.cssText = 'flex-shrink:0;width:160px;' + (item.hasVideo ? 'cursor:pointer;' : 'opacity:.55;');
-    const thumb = item.youtubeId ? \`https://img.youtube.com/vi/${item.youtubeId}/mqdefault.jpg\` : '';
+    const thumb = item.youtubeId ? \`https://img.youtube.com/vi/\${item.youtubeId}/mqdefault.jpg\` : '';
     card.innerHTML = \`
       <div class="anime-card-poster" style="aspect-ratio:16/9;">
-        ${thumb ? \`<img src="${thumb}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;">\` : '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:var(--bg-elevated);color:var(--text-muted);font-size:1.5rem;">♪</div>'}
+        \${thumb ? \`<img src="\${thumb}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;">\` : '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:var(--bg-elevated);color:var(--text-muted);font-size:1.5rem;">♪</div>'}
       </div>
       <div style="padding:6px 2px;">
-        <div style="font-weight:600;font-size:0.85rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${(item.title||'').replace(/</g,'&lt;')}</div>
-        ${item.subtitle ? \`<div style="color:var(--text-muted);font-size:0.78rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${item.subtitle.replace(/</g,'&lt;')}</div>\` : ''}
-        ${!item.hasVideo && item.spotifyUrl ? \`<a href="${item.spotifyUrl}" target="_blank" rel="noopener" class="btn btn-ghost btn-sm" style="margin-top:4px;padding:2px 8px;font-size:.75rem;" onclick="event.stopPropagation();">Spotify</a>\` : ''}
+        <div style="font-weight:600;font-size:0.85rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">\${(item.title||'').replace(/</g,'&lt;')}</div>
+        \${item.subtitle ? \`<div style="color:var(--text-muted);font-size:0.78rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">\${item.subtitle.replace(/</g,'&lt;')}</div>\` : ''}
+        \${!item.hasVideo && item.spotifyUrl ? \`<a href="\${item.spotifyUrl}" target="_blank" rel="noopener" class="btn btn-ghost btn-sm" style="margin-top:4px;padding:2px 8px;font-size:.75rem;" onclick="event.stopPropagation();">Spotify</a>\` : ''}
       </div>\`;
     if (item.hasVideo) card.onclick = () => selectVideo(tab, i);
     listEl.appendChild(card);
@@ -574,7 +574,7 @@ function selectVideo(tab, index) {
   // the trailer the moment the page/tab loads (before any user click).
   // Force it off here so playback only starts when the user presses play.
   const src = (item.embedUrl || '').replace(/([?&])autoplay=1\\b/i, '$1autoplay=0');
-  playerWrap.innerHTML = \`<iframe src="${src}" title="${(item.title||'Video').replace(/</g,'&lt;')}" style="position:absolute;inset:0;width:100%;height:100%;border:0;" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen loading="lazy"></iframe>\`;
+  playerWrap.innerHTML = \`<iframe src="\${src}" title="\${(item.title||'Video').replace(/</g,'&lt;')}" style="position:absolute;inset:0;width:100%;height:100%;border:0;" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen loading="lazy"></iframe>\`;
   document.querySelectorAll('#video-list-js .anime-card').forEach((el, i) => {
     el.style.outline = i === index ? '2px solid var(--accent, #8b5cf6)' : '';
   });
@@ -588,7 +588,7 @@ async function lazyLoadPictures() {
   const loading = document.getElementById('pictures-grid-loading');
   if (!grid || !section) return;
   try {
-    const res  = await fetch(\`${window.__siteUrl || ''}/api/anime_pictures.php?anime=${animeId}\`);
+    const res  = await fetch(\`\${window.__siteUrl || ''}/api/anime_pictures.php?anime=\${animeId}\`);
     const data = await res.json();
     const pics = (data.data || []).slice(0, 24);
     if (loading) loading.style.display = 'none';
@@ -603,7 +603,7 @@ async function lazyLoadPictures() {
       a.rel = 'noopener';
       a.className = 'anime-card';
       a.style.cssText = 'flex-shrink:0;width:140px;';
-      a.innerHTML = \`<div class="anime-card-poster" style="aspect-ratio:2/3;"><img src="${p.thumbnail || p.image}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;"></div>\`;
+      a.innerHTML = \`<div class="anime-card-poster" style="aspect-ratio:2/3;"><img src="\${p.thumbnail || p.image}" alt="" loading="lazy" style="width:100%;height:100%;object-fit:cover;"></div>\`;
       grid.appendChild(a);
     });
     grid.style.display = '';
@@ -619,7 +619,7 @@ async function lazyLoadRelated() {
   const loading = document.getElementById('related-grid-loading');
   if (!grid) return;
   try {
-    const res  = await fetch(\`${window.__siteUrl || ''}/api/anime_recommendations.php?anime=${animeId}\`);
+    const res  = await fetch(\`\${window.__siteUrl || ''}/api/anime_recommendations.php?anime=\${animeId}\`);
     const data = await res.json();
     const recs = (data.data || []).slice(0, 8);
     if (loading) loading.style.display = 'none';
@@ -639,10 +639,10 @@ async function lazyLoadRelated() {
       div.onclick = () => { window.location.href = window.__siteUrl + '/anime?id=' + aid; };
       div.innerHTML = \`
         <div class="anime-card-poster">
-          ${aimg ? \`<img src="${aimg}" alt="${atitle.replace(/"/g,'&quot;')}" loading="lazy">\` : ''}
+          \${aimg ? \`<img src="\${aimg}" alt="\${atitle.replace(/"/g,'&quot;')}" loading="lazy">\` : ''}
         </div>
         <div class="anime-card-info">
-          <div class="anime-card-title">${atitle.replace(/</g,'&lt;')}</div>
+          <div class="anime-card-title">\${atitle.replace(/</g,'&lt;')}</div>
         </div>\`;
       grid.appendChild(div);
     });
