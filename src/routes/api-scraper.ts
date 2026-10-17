@@ -643,6 +643,17 @@ scraperRoutes.get('/api/anime_episodes.php', async (c) => {
   return c.json(result);
 });
 
+// Recommendations keep MAL's relationship metadata but resolve all poster
+// artwork through Hoshika via MalAPI.normalise().
+scraperRoutes.get('/api/anime_recommendations.php', async (c) => {
+  const animeId = parseInt(c.req.query('anime') ?? '0', 10) || 0;
+  if (!animeId) return c.json({ data: [] }, 400);
+  const db = new Db(c.env.DB);
+  const mal = new MalAPI(c.env, c.env.API_CACHE, db);
+  const result = await mal.getAnime(animeId, true).catch(() => ({ data: null }));
+  return c.json({ data: result.data?.recommendations ?? [] });
+});
+
 // ── api/anime_characters.php ────────────────────────────────────────────────
 // Same reasoning as anime_episodes.php above, for the character grid tab.
 scraperRoutes.get('/api/anime_characters.php', async (c) => {
