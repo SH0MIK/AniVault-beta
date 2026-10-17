@@ -225,7 +225,7 @@ export async function getEpisodeThumbnail(
   // Only a bulk row explicitly written from Hoshika is eligible.
   if (!env.API_CACHE) return null;
   try {
-    const bulk = await env.API_CACHE.get(`hoshika_site_episode_thumbs_v1_${malId}`, 'json') as AnimeThumbCacheValue | null;
+    const bulk = await env.API_CACHE.get(`anivault_beta_hoshika_episode_thumbs_v1_${malId}`, 'json') as AnimeThumbCacheValue | null;
     if (bulk?.source !== 'hoshika') return null;
     return bulk.episodes?.[epNum] ?? null;
   } catch {
@@ -266,7 +266,7 @@ export async function importHoshikaEpisodeThumbnails(
       ? ep.thumbnail : '';
     if (Number.isInteger(n) && n > 0 && thumb) bulk[n] = thumb;
   }
-  const key = `hoshika_site_episode_thumbs_v1_${malId}`;
+  const key = `anivault_beta_hoshika_episode_thumbs_v1_${malId}`;
   const value: AnimeThumbCacheValue = { episodes: bulk, checkedAt: Date.now(), source: 'hoshika' };
   try {
     const existing = await kv.get(key, 'json') as AnimeThumbCacheValue | null;
@@ -324,7 +324,7 @@ export async function getAnimeEpisodeThumbnails(
   if (!malId) return {};
   if (!env.API_CACHE) return {};
   try {
-    const cached = await env.API_CACHE.get(`hoshika_site_episode_thumbs_v1_${malId}`, 'json') as AnimeThumbCacheValue | null;
+    const cached = await env.API_CACHE.get(`anivault_beta_hoshika_episode_thumbs_v1_${malId}`, 'json') as AnimeThumbCacheValue | null;
     return cached?.source === 'hoshika' && cached.episodes && typeof cached.episodes === 'object'
       ? cached.episodes
       : {};
