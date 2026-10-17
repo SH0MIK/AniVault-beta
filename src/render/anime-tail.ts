@@ -184,10 +184,10 @@ const __animeDubConfirmed = ${animeDubConfirmed ? "true" : "false"};
 const SVG_SUB = \`<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M7 10.5h2.5M11.5 10.5h5.5M7 14.5h5.5M15.5 14.5h1.5"/></svg>\`;
 const SVG_DUB = \`<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>\`;
 
-// ── Fetch episode thumbnails from Hoshika only ────────────────────────────
+// ── Fetch Hoshika episode thumbnails ─────────────────────────────────────
 // The same-origin endpoint returns Hoshika-backed thumbnail records only.
 // Missing stills remain empty so the card renders a neutral episode-number placeholder.
-async function fetchAniListThumbnails(malId) {
+async function fetchHoshikaThumbnails(malId) {
   try {
     const res = await fetch((window.__siteUrl || '') + '/api/episode_override.php?anime_id=' + malId + '&all=1');
     if (!res.ok) return {};
@@ -199,7 +199,7 @@ async function fetchAniListThumbnails(malId) {
   } catch(e) { return {}; }
 }
 
-// ── Build an ep-card element from Jikan episode data ─────────────────────────
+// ── Build an episode card from Hoshika episode data ─────────────────────────
 function buildEpCard(ep, animeId, cover, thumbMap, banner) {
   const epNum   = ep.mal_id ?? '?';
   const epTitle = ep.title  ?? 'TBA';
@@ -249,11 +249,8 @@ function buildEpCard(ep, animeId, cover, thumbMap, banner) {
 
 // ── Ep-tab header count ─────────────────────────────────────────────
 // The tab title must always agree with the Info panel's episode count.
-// Jikan/DB-derived lists only contain episodes that have actually
-// aired/been scraped (e.g. 1 for a currently-airing 8-ep show), so we
-// never trust that length on its own -- we take whichever is larger:
-// the show's known total (window.__totalEps, kept in sync by
-// epsLiveScript) or the actual list we just rendered.
+// Hoshika supplies both the catalog total and the episode list. Keep the
+// tab count aligned with those Hoshika values without an alternate-source override.
 function updateEpTabCount(actualCount) {
   const total = window.__totalEps || 0;
   const count = Math.max(total, actualCount);
@@ -357,9 +354,9 @@ async function lazyLoadEpisodes() {
   const loading = document.getElementById('ep-grid-loading');
   if (!grid) return;
   try {
-    // Fetch Jikan episodes + admin-saved thumbnail overrides in parallel
+    // Fetch Hoshika episodes + Hoshika thumbnail cache in parallel
     const [thumbMap, jikanEps] = await Promise.all([
-      fetchAniListThumbnails(animeId),
+      fetchHoshikaThumbnails(animeId),
       (async () => {
         let allEps  = [];
         let page    = 1;
