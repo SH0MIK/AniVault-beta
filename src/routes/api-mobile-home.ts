@@ -69,9 +69,9 @@ mobileHomeRoutes.get('/api/mobile/home-v2', async (c) => {
       );
       const ids = [...new Set(rows.map((r) => Number(r.anime_id)))];
       const posters = new Map<number, string>();
-      await Promise.all(rows.map(async (r) => {
-        const id = Number(r.anime_id);
-        if (!posters.has(id)) posters.set(id, await mal.getHoshikaPoster(id, r.anime_title || ''));
+      await Promise.all(ids.map(async (id) => {
+        const row = rows.find((r) => Number(r.anime_id) === id);
+        posters.set(id, await mal.getHoshikaPoster(id, row?.anime_title || ''));
       }));
       const thumbs = new Map<number, Record<number, string>>();
       await Promise.all(ids.map(async (id) => {
