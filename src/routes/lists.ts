@@ -14,7 +14,7 @@ import { renderAnimeCard, buildCardMetaMap, LANG_CODE } from '../lib/anime-card'
 import { renderHeader, renderFooter, CurrentUser } from '../render/layout';
 import { HISTORY_CSS } from '../render/history-css';
 import { getBannerData } from '../lib/settings';
-import { getEpisodeThumbnail } from '../lib/episode-thumb';
+import { getAnimeEpisodeThumbnails } from '../lib/episode-thumb';
 
 export const listRoutes = new Hono<{ Bindings: Env }>();
 
@@ -312,45 +312,20 @@ listRoutes.get('/history', async (c) => {
   );
   const totalPages = total ? Math.ceil(total / limit) : 1;
 
-  // History thumbnails: an admin-saved override wins where one exists
-  // (episode_overrides.image_url, set via the Episode Thumbnails admin
-  // panel). Batch-lookup for this page, then live-fetch (via our scraper
-  // API, KV-cached) whatever's still missing -- capped at 24/page so this
-  // stays cheap. Cards fall back to a placeholder only if both miss.
+  // Watch-history stills come only from Hoshika. Warm each distinct anime's
+  // Hoshika episode cache, then read the requested episode numbers from it.
   const episodeThumbOverrides: Record<string, string> = {};
   if (history.length > 0) {
-    try {
-      const pairs = history.map(() => '(?, ?)').join(', ');
-      const params = history.flatMap((r: any) => [r.anime_id, r.episode_num]);
-      const rows = await db.fetchAll<{ anime_id: number; episode_num: number; image_url: string | null }>(
-        `SELECT anime_id, episode_num, image_url FROM episode_overrides WHERE (anime_id, episode_num) IN (${pairs})`,
-        params
-      );
-      for (const row of rows) {
-        if (row.image_url) episodeThumbOverrides[`${row.anime_id}:${row.episode_num}`] = row.image_url;
+    const distinctIds = [...new Set(history.map((r: any) => r.anime_id))];
+    await Promise.all(distinctIds.map(async (id) => {
+      await mal.getAnimeEpisodes(id).catch(() => null);
+      const thumbs = await getAnimeEpisodeThumbnails(c.env, db, id);
+      for (const row of history as any[]) {
+        if (row.anime_id !== id) continue;
+        const thumb = thumbs[row.episode_num];
+        if (thumb) episodeThumbOverrides[`${row.anime_id}:${row.episode_num}`] = thumb;
       }
-    } catch { /* best-effort -- cards fall back to scraper/placeholder */ }
-
-    const missing = history.filter((r: any) => !episodeThumbOverrides[`${r.anime_id}:${r.episode_num}`]);
-    if (missing.length > 0) {
-      // Same status-aware caching as home.ts/watch.ts: look up each distinct
-      // show's status (mal.getAnime is itself KV-cached, cheap on a warm
-      // cache) so a finished-airing show lands in the permanent cache tier.
-      const distinctIds = [...new Set(missing.map((r: any) => r.anime_id))];
-      const statusMap = new Map<number, string | undefined>();
-      await Promise.all(distinctIds.map(async (id) => {
-        const res = await mal.getAnime(id, true).catch(() => null);
-        statusMap.set(id, res?.data?.status);
-      }));
-
-      const scraped = await Promise.all(
-        missing.map((r: any) => getEpisodeThumbnail(c.env, db, r.anime_id, r.episode_num, statusMap.get(r.anime_id)))
-      );
-      missing.forEach((r: any, i: number) => {
-        const thumb = scraped[i];
-        if (thumb) episodeThumbOverrides[`${r.anime_id}:${r.episode_num}`] = thumb;
-      });
-    }
+    }));
   }
 
   const { unreadCount, layoutUser } = await commonLayoutData(db, auth);
