@@ -72,8 +72,11 @@ homeRoutes.get('/', async (c) => {
     upcomingList = (upcoming.data ?? []).slice(0, 8);
   }
 
+  // Homepage snapshots may contain artwork cached before the source switch.
+  // Re-resolve every visible poster through Hoshika before rendering.
+  await mal.enforceHoshikaArtwork([...topList, ...upcomingList]);
+
   // Trending/seasonal is intentionally not loaded on the homepage.
-  // Posters have already been resolved from Hoshika by MalAPI.normalise().
 
   // Watch Now — anime that have episodes available in episode_videos
   let watchNowList: any[] = [];
@@ -170,7 +173,7 @@ homeRoutes.get('/', async (c) => {
   if (curatedRows.length > 0) {
     const resolved = await Promise.all(curatedRows.map(async (row) => {
       const id = Number(row.anime_id);
-      const result = await mal.getAnime(id, true).catch(() => ({ data: null }));
+      const result = await mal.getAnime(id, false).catch(() => ({ data: null }));
       const anime = result.data;
       if (!anime) return null;
       return {
