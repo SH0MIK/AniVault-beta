@@ -220,40 +220,17 @@ export async function getEpisodeThumbnail(
   animeStatus?: string | null
 ): Promise<string | null> {
   if (!malId || !epNum) return null;
-  const cacheKey = episodeThumbCacheKey(malId, epNum);
-  const cachedRaw = await getCachedRaw(db, cacheKey);
-  if (cachedRaw) {
-    try {
-      const cached = JSON.parse(cachedRaw) as { thumb?: string | null };
-      return cached.thumb ?? null;
-    } catch { /* fall through and re-fetch on a corrupt cache row */ }
-  }
-
-  // Not cached individually -- check the per-anime bulk row before ever
-  // touching the scraper. A large admin import (see importAnimeEpisodeThumbnails)
-  // or a prior getAnimeEpisodeThumbnails call may already have this
-  // episode's thumbnail sitting in there without an individual row existing
-  // for it yet (writing one row per episode for a 1000+ episode show in a
-  // single request blows Workers' per-invocation subrequest limit -- see
-  // importAnimeEpisodeThumbnails for the full story). Promotion here spreads
-  // those individual writes out one-at-a-time across normal page views instead.
+  // Ignore legacy per-episode rows and admin-imported/scraper artwork.
+  // Only a bulk row explicitly written from Hoshika is eligible.
   const bulkRaw = await getCachedRaw(db, animeEpisodeThumbsCacheKey(malId));
-  if (bulkRaw) {
-    try {
-      const bulk = JSON.parse(bulkRaw) as AnimeThumbCacheValue;
-      const thumb = bulk.episodes?.[epNum];
-      if (thumb) {
-        await putCachedRaw(db, cacheKey, JSON.stringify({ success: true, thumb }), null);
-        return thumb;
-      }
-    } catch { /* corrupt bulk row -- fall through to the scraper */ }
+  if (!bulkRaw) return null;
+  try {
+    const bulk = JSON.parse(bulkRaw) as AnimeThumbCacheValue;
+    if (bulk.source !== 'hoshika') return null;
+    return bulk.episodes?.[epNum] ?? null;
+  } catch {
+    return null;
   }
-
-  const { thumbs } = await findEpisodeThumbnails(env, epNum, malId);
-  const thumb = thumbs[0] ?? null;
-  const ttl = thumb ? null : (isPermanentStatus(animeStatus) ? null : LIVE_CACHE_TTL_SECONDS);
-  await putCachedRaw(db, cacheKey, JSON.stringify({ success: true, thumb }), ttl);
-  return thumb;
 }
 
 /** Cache key for the whole-anime bulk lookup below. Exported so episode-air.ts
@@ -271,6 +248,29 @@ export function animeEpisodeThumbsCacheKey(malId: number): string {
 interface AnimeThumbCacheValue {
   episodes: Record<number, string>;
   checkedAt: number;
+  source?: string;
+}
+
+/** Store only Hoshika-provided episode stills in the shared cache. */
+export async function importHoshikaEpisodeThumbnails(
+  db: Db,
+  malId: number,
+  episodes: Array<{ episode: number; thumbnail?: string | null }>,
+): Promise<void> {
+  if (!malId) return;
+  const bulk: Record<number, string> = {};
+  for (const ep of episodes) {
+    const n = Number(ep.episode);
+    const thumb = typeof ep.thumbnail === 'string' && /^https?:\\/\\//i.test(ep.thumbnail)
+      ? ep.thumbnail : '';
+    if (Number.isInteger(n) && n > 0 && thumb) bulk[n] = thumb;
+  }
+  const value: AnimeThumbCacheValue = {
+    episodes: bulk,
+    checkedAt: Date.now(),
+    source: 'hoshika',
+  };
+  await putCachedRaw(db, animeEpisodeThumbsCacheKey(malId), JSON.stringify(value), null);
 }
 
 // Upper bound on how many NEW episode numbers get probed in a single check,
@@ -315,68 +315,16 @@ export async function getAnimeEpisodeThumbnails(
   totalEpisodesKnown?: number | null
 ): Promise<Record<number, string>> {
   if (!malId) return {};
-  const cacheKey = animeEpisodeThumbsCacheKey(malId);
-  const cachedRaw = await getCachedRaw(db, cacheKey);
-  const permanent = isPermanentStatus(animeStatus);
-  const now = Date.now();
-
-  let cached: AnimeThumbCacheValue | null = null;
-  if (cachedRaw) {
-    try { cached = JSON.parse(cachedRaw) as AnimeThumbCacheValue; } catch { cached = null; }
+  const raw = await getCachedRaw(db, animeEpisodeThumbsCacheKey(malId));
+  if (!raw) return {};
+  try {
+    const cached = JSON.parse(raw) as AnimeThumbCacheValue;
+    return cached.source === 'hoshika' && cached.episodes && typeof cached.episodes === 'object'
+      ? cached.episodes
+      : {};
+  } catch {
+    return {};
   }
-
-  if (cached) {
-    if (permanent) return cached.episodes; // finished -- nothing new will ever air, never check again
-
-    const due = now - cached.checkedAt >= LIVE_CACHE_TTL_SECONDS * 1000;
-    if (!due) return cached.episodes; // still within the window -- no scraper call
-
-    // Past the window: probe forward from the highest known episode only.
-    // Already-cached episodes below this are never touched or re-requested.
-    const known = Object.keys(cached.episodes).map(Number);
-    const highest = known.length > 0 ? Math.max(...known) : 0;
-    const ceiling = totalEpisodesKnown && totalEpisodesKnown > 0
-      ? Math.min(totalEpisodesKnown, highest + MAX_NEW_EPISODES_PER_CHECK)
-      : highest + MAX_NEW_EPISODES_PER_CHECK;
-
-    for (let ep = highest + 1; ep <= ceiling; ep++) {
-      const { thumbs } = await findEpisodeThumbnails(env, ep, malId);
-      const thumb = thumbs[0] ?? null;
-      if (!thumb) break; // that episode isn't out yet (or nothing has a still for it yet) -- stop, try again next check
-      cached.episodes[ep] = thumb;
-      await putCachedRaw(db, episodeThumbCacheKey(malId, ep), JSON.stringify({ success: true, thumb }), null); // permanent
-    }
-
-    cached.checkedAt = now;
-    await putCachedRaw(db, cacheKey, JSON.stringify(cached), null); // row itself is always permanent -- freshness lives in checkedAt
-    return cached.episodes;
-  }
-
-  // No cache yet at all -- first-ever lookup for this anime, one full bulk fetch to seed everything.
-  const result: Record<number, string> = {};
-  const base = getScraperBase(env);
-  if (base) {
-    const body = await httpGetText(`${base}/api/episode?malId=${malId}`);
-    if (body) {
-      try {
-        const json: any = JSON.parse(body);
-        for (const ep of json.episodes ?? []) {
-          const n = Number(ep?.episode ?? 0);
-          if (n && ep?.thumbnail) result[n] = ep.thumbnail;
-        }
-      } catch { /* return whatever we parsed before the error, if anything */ }
-    }
-  }
-
-  await putCachedRaw(db, cacheKey, JSON.stringify({ episodes: result, checkedAt: now } as AnimeThumbCacheValue), null);
-  // Individual per-episode rows are NOT seeded here -- for a long-running
-  // show (Naruto Shippuden, One Piece) that would mean hundreds/thousands
-  // of D1 writes in this one request, which blows Workers' per-invocation
-  // subrequest limit outright (see importAnimeEpisodeThumbnails for the
-  // full story -- this hit that exact wall). getEpisodeThumbnail promotes
-  // an episode from this bulk row to its own permanent row lazily, one at a
-  // time, the first time that specific episode is actually looked up.
-  return result;
 }
 
 // ── Admin bulk import ────────────────────────────────────────────────────
