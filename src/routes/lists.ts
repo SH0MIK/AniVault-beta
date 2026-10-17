@@ -320,12 +320,13 @@ listRoutes.get('/history', async (c) => {
   if (history.length > 0) {
     const distinctIds = [...new Set(history.map((r: any) => r.anime_id))];
     await Promise.all(distinctIds.map(async (id) => {
-      // History pages use cached Hoshika stills only; no legacy source or
-      // multi-anime live-fetch burst on a cold page.
-      const thumbs = await getAnimeEpisodeThumbnails(c.env, db, id);
+      // Populate the beta-specific Hoshika episode cache before reading it.
+      // Never use stored history thumbnails or another provider as fallback.
+      await mal.getAnimeEpisodes(Number(id)).catch(() => null);
+      const thumbs = await getAnimeEpisodeThumbnails(c.env, db, Number(id));
       for (const row of history as any[]) {
-        if (row.anime_id !== id) continue;
-        const thumb = thumbs[row.episode_num];
+        if (Number(row.anime_id) !== Number(id)) continue;
+        const thumb = thumbs[Number(row.episode_num)];
         if (thumb) episodeThumbOverrides[`${row.anime_id}:${row.episode_num}`] = thumb;
       }
     }));
@@ -354,9 +355,8 @@ listRoutes.get('/history', async (c) => {
 </div>
 
 <script>
-// History thumbnails are server-rendered straight from an admin-saved
-// override (episode_overrides.image_url) -- no client-side auto-fetching
-// from TMDB/AniList/Jikan happens here anymore.
+// History thumbnails come only from Hoshika's episode stills.
+// Missing Hoshika stills stay blank rather than falling back to saved images.
 async function removeEntry(animeId, btn) {
   var wrap = btn.closest('.hist-card-wrap');
   if (!wrap) return;
@@ -401,10 +401,9 @@ export function renderHistoryCard(hRow: any, siteUrl: string, episodeThumbOverri
   const epNum = hRow.episode_num;
   const animeTitle = h(hRow.anime_title || `Anime #${hRow.anime_id}`);
   const epTitle = hRow.ep_title ? h(hRow.ep_title) : `Episode ${epNum}`;
-  // Only an admin-saved override shows here now -- the legacy ep_thumb
-  // column (populated by old client-side auto-fetch code) is ignored.
+  // Episode artwork is Hoshika-only. Do not use the stored anime poster
+  // or legacy ep_thumb column when Hoshika has no still for this episode.
   const thumb = episodeThumbOverrides[`${hRow.anime_id}:${epNum}`] || '';
-  const cover = hRow.anime_image ?? '';
   const date = hRow.watched_at ? new Date(hRow.watched_at.replace(' ', 'T') + 'Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }) : '';
 
   const watchTime = hRow.watch_time ?? 0;
@@ -419,7 +418,7 @@ export function renderHistoryCard(hRow: any, siteUrl: string, episodeThumbOverri
 <div class="hist-card-wrap" data-anime-id="${hRow.anime_id}">
   <a href="${h(resumeUrl)}" class="hist-card">
     <div class="hist-thumb">
-      ${thumb || cover ? `<img src="${h(thumb || cover)}" data-anime-id="${hRow.anime_id}" data-ep="${epNum}" class="hist-ep-img" loading="lazy" alt="${epTitle}">`
+      ${thumb ? `<img src="${h(thumb)}" data-anime-id="${hRow.anime_id}" data-ep="${epNum}" class="hist-ep-img" loading="lazy" alt="${epTitle}">`
         : `<div class="hist-thumb-placeholder"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="5 3 19 12 5 21 5 3"/></svg></div>`}
       <div class="hist-play-overlay"><svg width="40" height="40" viewBox="0 0 24 24" fill="white"><polygon points="5 3 19 12 5 21 5 3"/></svg></div>
       <span class="hist-ep-badge">Ep ${epNum}</span>
