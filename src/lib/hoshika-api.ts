@@ -158,7 +158,7 @@ export async function getHoshikaAnimeEpisodes(
     const shortId = shortIdFrom(match);
     if (!match || !shortId) return null;
 
-    const cacheKey = `hoshika_public_episodes_v1_${shortId}`;
+    const cacheKey = `anivault_beta_hoshika_episodes_v1_${shortId}`;
     if (kv) {
       try {
         const cached = await kv.get(cacheKey, 'json') as HoshikaEpisode[] | null;
@@ -236,7 +236,7 @@ export async function getHoshikaAnimeMetadata(
 ): Promise<HoshikaAnimeMetadata | null> {
   if (!malId || !title) return null;
 
-  const cacheKey = `hoshika_public_anime_v2_${malId}`;
+  const cacheKey = `anivault_beta_hoshika_anime_v1_${malId}`;
   let cached: HoshikaAnimeMetadata | null = null;
   if (kv) {
     try {
