@@ -930,8 +930,9 @@ export class MalAPI {
     // Grid/list contexts pass isList=true so a cold cache just falls back
     // to saved/placeholder art instead of stacking a live scraper request
     // per row on top of everything else the page needs.
+    const hoshikaTitle = node.alternative_titles?.en || node.title || '';
     const hoshika = animeId
-      ? await getHoshikaAnimeMetadata(animeId, node.title ?? '', this.kv, !isList).catch(() => null)
+      ? await getHoshikaAnimeMetadata(animeId, hoshikaTitle, this.kv, !isList).catch(() => null)
       : null;
     const mediumImage = hoshika?.poster || '';
     const largeImage = mediumImage;
@@ -1058,7 +1059,8 @@ export class MalAPI {
     if (!Number.isFinite(id) || id <= 0) return { data: null };
     const raw = await this.get(`/anime/${id}`, { fields: DETAIL_FIELDS });
     if (!raw || raw.error) return { data: null };
-    const hoshika = await getHoshikaAnimeMetadata(id, raw.title || '', this.kv, true).catch(() => null);
+    const hoshikaTitle = raw.alternative_titles?.en || raw.title || '';
+    const hoshika = await getHoshikaAnimeMetadata(id, hoshikaTitle, this.kv, true).catch(() => null);
     const poster = hoshika?.poster || '';
     return {
       data: {
