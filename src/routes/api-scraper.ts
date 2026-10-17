@@ -524,7 +524,7 @@ scraperRoutes.get('/api/embed.php', async (c) => {
 
   const db = new Db(c.env.DB);
   const mal = new MalAPI(c.env, c.env.API_CACHE, db);
-  const animeResult = await mal.getAnime(animeId).catch(() => null);
+  const animeResult = await mal.getAnimeAdminSummary(animeId).catch(() => null);
   const title = animeResult?.data?.title ?? 'Anime';
   const episodeResult = await mal.getAnimeEpisodes(animeId).catch(() => ({ data: [] as any[] }));
   const episode = (episodeResult.data ?? []).find((item: any) => Number(item.mal_id) === epNum);
