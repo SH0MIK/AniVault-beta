@@ -25,7 +25,6 @@ import { playerScript } from '../render/player-script';
 import { playerBody } from '../render/player-body';
 import { getBannerData, Settings } from '../lib/settings';
 import { AnimeTracker } from '../lib/tracker';
-import { EpisodeAir, AiredInfo } from '../lib/episode-air';
 import { DubStatus, DUB_LANGUAGES } from '../lib/dub-status';
 import { getEpisodeThumbnail } from '../lib/episode-thumb';
 import { SUB_PROVIDERS, DUB_PROVIDERS, HINDI_PROVIDERS, fixedServerBtn } from '../lib/stream-sources';
@@ -210,28 +209,8 @@ watchRoutes.get('/watch', async (c) => {
   const title = getAnimeTitle(anime);
   const image = anime.images?.jpg?.large_image_url ?? '';
   const coverSm = anime.images?.jpg?.image_url ?? image;
-  // Same correction as the anime detail page — MAL's own episode count
-  // lags for airing shows, and this total also drives which episode
-  // numbers get nav chips below (missing/wrong = viewers can't reach an
-  // episode that's actually already out). The nav grid has to render with
-  // *some* number right now, so unlike the detail page this can't defer to
-  // a client-side skeleton — instead it reads the cache non-blocking (any
-  // age) and, if that cache is missing/stale, kicks off a background
-  // refresh via waitUntil so the scraper/Jikan lookup never holds up this
-  // page load; the next visit (or the detail page) picks up the fresh value.
-  // Finished and not-yet-aired shows skip all of that and use anime.episodes
-  // straight from MAL — that field is already accurate once a show isn't
-  // actively airing, so there's nothing for the cache to correct.
-  const isAiring = anime.status === 'Currently Airing';
-  let airedInfo: AiredInfo | null = null;
-  if (isAiring) {
-    const cached = await EpisodeAir.getCachedAny(db, animeId);
-    airedInfo = cached.info;
-    if (!cached.isFresh) {
-      c.executionCtx?.waitUntil?.(EpisodeAir.get(db, c.env, mal, animeId).catch(() => {}));
-    }
-  }
-  const totalEps = isAiring ? (airedInfo?.total ?? anime.episodes ?? 0) : (anime.episodes ?? 0);
+  // Hoshika is the only source for episode counts and episode navigation.
+  const totalEps = anime.episodes ?? 0;
   const dubbedLangs = await DubStatus.getFor(db, animeId);
 
   let epDurationSec = parseDurationSeconds(anime.duration);
