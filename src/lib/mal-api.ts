@@ -254,6 +254,13 @@ export class MalAPI {
 
   constructor(private env: MalEnv, private kv: KVNamespace | undefined, private db: Db) {}
 
+  /** Resolve a poster directly from Hoshika without any other-provider fallback. */
+  async getHoshikaPoster(animeId: number, title: string): Promise<string> {
+    if (!animeId || !title) return '';
+    const metadata = await getHoshikaAnimeMetadata(animeId, title, this.kv, false).catch(() => null);
+    return metadata?.poster || '';
+  }
+
   // Fire-and-forget cache write. KV's daily put() quota (1,000/day on the
   // free tier) is easy to exceed with an hourly scanner + Jikan pagination
   // fallback — when that happens put() throws, and previously that was
