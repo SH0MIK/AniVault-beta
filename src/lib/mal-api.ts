@@ -1185,7 +1185,7 @@ export class MalAPI {
         ? await getHoshikaAnimeEpisodes(anime.data.title, this.kv)
         : null;
       if (hoshikaEpisodes) {
-        await importHoshikaEpisodeThumbnails(this.db, id, hoshikaEpisodes.map((episode) => ({
+        await importHoshikaEpisodeThumbnails(this.kv, id, hoshikaEpisodes.map((episode) => ({
           episode: episode.number,
           thumbnail: episode.thumbnail || null,
         })));
