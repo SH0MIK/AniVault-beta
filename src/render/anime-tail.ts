@@ -363,7 +363,7 @@ async function lazyLoadEpisodes() {
       let hasNext = true;
       while (hasNext) {
         if (page > 1) await new Promise(r => setTimeout(r, 400));
-        const res  = await fetch(`\${window.__siteUrl || ''}/api/anime_episodes.php?anime=\${animeId}&page=\${page}`);
+        const res  = await fetch(\`\${window.__siteUrl || ''}/api/anime_episodes.php?anime=\${animeId}&page=\${page}\`);
         const data = await res.json();
         const eps  = data.data || [];
         allEps = allEps.concat(eps);
