@@ -128,6 +128,8 @@ export interface HoshikaEpisode {
   thumbnail: string;
   filler: boolean;
   recap: boolean;
+  averageScore: number | null;
+  ratingCount: number;
 }
 
 /**
@@ -168,8 +170,10 @@ export async function getHoshikaAnimeEpisodes(
 
     const episodes: HoshikaEpisode[] = [];
     let after: string | null = null;
-    // Bound pagination so malformed cursors cannot cause an unbounded Worker request.
-    for (let page = 0; page < 10; page++) {
+    let reportedTotal: number | null = null;
+    // Hoshika paginates by cursor. Allow long-running series while keeping a
+    // hard upper bound on Worker subrequests if a cursor is malformed.
+    for (let page = 0; page < 20; page++) {
       const url = new URL(`https://hoshika.app/api/v1/anime/${encodeURIComponent(shortId)}/episodes`);
       url.searchParams.set('locale', 'en');
       url.searchParams.set('limit', '100');
@@ -182,6 +186,8 @@ export async function getHoshikaAnimeEpisodes(
       if (payload?.ok === false || !Array.isArray(payload?.items)) {
         return episodes.length ? episodes : null;
       }
+      const total = Number(payload.total);
+      if (Number.isFinite(total) && total >= 0) reportedTotal = total;
 
       for (const item of payload.items) {
         const number = Number(item?.number);
@@ -196,11 +202,13 @@ export async function getHoshikaAnimeEpisodes(
           thumbnail,
           filler: !!item?.filler,
           recap: !!item?.recap,
+          averageScore: item?.averageScore !== null && item?.averageScore !== undefined && Number.isFinite(Number(item.averageScore)) ? Number(item.averageScore) : null,
+          ratingCount: Number.isFinite(Number(item?.ratingCount)) ? Number(item.ratingCount) : 0,
         });
       }
 
       after = typeof payload.nextAfter === 'string' && payload.nextAfter ? payload.nextAfter : null;
-      if (!after || payload.items.length === 0) break;
+      if (!after || payload.items.length === 0 || (reportedTotal !== null && episodes.length >= reportedTotal)) break;
     }
 
     episodes.sort((a, b) => a.number - b.number);
@@ -241,7 +249,7 @@ export async function getHoshikaAnimeMetadata(
   if (kv) {
     try {
       cached = await kv.get(cacheKey, 'json') as HoshikaAnimeMetadata | null;
-      if (cached && (!includeDetail || (cached.poster && cached.cover && cached.episodes !== null))) {
+      if (cached && (!includeDetail || cached.episodes !== null)) {
         return cached.poster || cached.cover || cached.episodes !== null ? cached : null;
       }
     } catch { /* Cache failures must not break anime pages. */ }

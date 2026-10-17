@@ -7,7 +7,6 @@ import { MalAPI } from '../lib/mal-api';
 import { buildCardMetaMap } from '../lib/anime-card';
 import { getUserAnimeStatuses } from '../lib/user-list';
 import { DubStatus } from '../lib/dub-status';
-import { EpisodeAir } from '../lib/episode-air';
 import { getAnimeEpisodeThumbnails } from '../lib/episode-thumb';
 
 export const mobileContentRoutes = new Hono<{ Bindings: Env }>();
@@ -33,8 +32,12 @@ mobileContentRoutes.get('/api/mobile/browse', async (c) => {
 mobileContentRoutes.get('/api/mobile/anime/:id', async (c) => {
   const { db, auth, mal } = await buildCtx(c); const id = parseInt(c.req.param('id'), 10) || 0; if (!id) return c.json({ success: false, message: 'Invalid anime id.' }, 400);
   const result = await mal.getAnime(id); const anime = result.data; if (!anime) return c.json({ success: false, message: 'Anime not found.' }, 404);
-  const isAiring = anime.status === 'Currently Airing'; let airedInfo = null; if (isAiring) ({ info: airedInfo } = await EpisodeAir.getCachedAny(db, id));
-  const totalEps = isAiring ? (airedInfo?.total ?? anime.episodes ?? 0) : (anime.episodes ?? 0); const airedSoFar = isAiring ? (airedInfo?.aired ?? null) : null; const dubbedLangs = (await DubStatus.getForMany(db, [id])).get(id) ?? [];
+  // Episode totals come from Hoshika metadata only; do not override them
+  // with the legacy MAL/Jikan airing scanner cache.
+  const isAiring = anime.status === 'Currently Airing';
+  const totalEps = anime.episodes ?? 0;
+  const airedSoFar = null;
+  const dubbedLangs = (await DubStatus.getForMany(db, [id])).get(id) ?? [];
   const currentUser = auth.check() ? await auth.getCurrentUser() : null; let userEntry = null; let isFavorite = false;
   if (currentUser) { const { AnimeTracker } = await import('../lib/tracker'); userEntry = await AnimeTracker.getUserEntry(db, currentUser.id, id); isFavorite = await AnimeTracker.isFavorite(db, currentUser.id, id); }
   const seriesEntries = (anime.related_anime ?? []).filter((rel: any) => rel).map((rel: any) => ({ id: rel?.entry?.mal_id ?? 0, title: rel?.entry?.title ?? '', type: rel?.relation_type_formatted ?? '' }));
