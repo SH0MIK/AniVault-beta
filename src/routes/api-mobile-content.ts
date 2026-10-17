@@ -8,6 +8,7 @@ import { buildCardMetaMap } from '../lib/anime-card';
 import { getUserAnimeStatuses } from '../lib/user-list';
 import { DubStatus } from '../lib/dub-status';
 import { EpisodeAir } from '../lib/episode-air';
+import { getAnimeEpisodeThumbnails } from '../lib/episode-thumb';
 
 export const mobileContentRoutes = new Hono<{ Bindings: Env }>();
 
@@ -78,9 +79,44 @@ mobileContentRoutes.get('/api/mobile/watch-now', async (c) => {
 });
 
 mobileContentRoutes.get('/api/mobile/history', async (c) => {
-  const { db, auth, session } = await buildCtx(c); if (!auth.check()) return c.json({ success: false, message: 'Not logged in.' }, 401); const limit = 24; const page = Math.max(1, parseInt(c.req.query('page') ?? '1', 10) || 1); const offset = (page - 1) * limit; const userId = session.user_id!;
-  const total = await db.count('SELECT COUNT(*) as cnt FROM watch_history WHERE user_id = ?', [userId]); const rows = await db.fetchAll<any>('SELECT anime_id, anime_title, anime_image, episode_num, ep_title, ep_thumb, watched_at, watch_time, episode_duration FROM watch_history WHERE user_id = ? ORDER BY watched_at DESC LIMIT ? OFFSET ?', [userId, limit, offset]);
-  return c.json({ success: true, data: rows.map((r) => ({ animeId: r.anime_id, title: r.anime_title, image: r.anime_image, episodeNum: r.episode_num, epTitle: r.ep_title, epThumb: r.ep_thumb, watchedAt: r.watched_at, watchTime: r.watch_time, episodeDuration: r.episode_duration })), page, totalPages: total ? Math.ceil(total / limit) : 1 });
+  const { db, auth, session, mal } = await buildCtx(c);
+  if (!auth.check()) return c.json({ success: false, message: 'Not logged in.' }, 401);
+  const limit = 24;
+  const page = Math.max(1, parseInt(c.req.query('page') ?? '1', 10) || 1);
+  const offset = (page - 1) * limit;
+  const userId = session.user_id!;
+  const total = await db.count('SELECT COUNT(*) as cnt FROM watch_history WHERE user_id = ?', [userId]);
+  const rows = await db.fetchAll<any>(
+    'SELECT anime_id, anime_title, episode_num, ep_title, watched_at, watch_time, episode_duration FROM watch_history WHERE user_id = ? ORDER BY watched_at DESC LIMIT ? OFFSET ?',
+    [userId, limit, offset]
+  );
+  const ids = [...new Set(rows.map((r) => Number(r.anime_id)))];
+  const details = new Map<number, any>();
+  await Promise.all(ids.map(async (id) => {
+    await mal.getAnimeEpisodes(id).catch(() => null);
+    const result = await mal.getAnime(id, true).catch(() => null);
+    details.set(id, result?.data ?? null);
+  }));
+  const thumbs = new Map<number, Record<number, string>>();
+  await Promise.all(ids.map(async (id) => {
+    thumbs.set(id, await getAnimeEpisodeThumbnails(c.env, db, id));
+  }));
+  return c.json({
+    success: true,
+    data: rows.map((r) => ({
+      animeId: r.anime_id,
+      title: r.anime_title,
+      image: details.get(Number(r.anime_id))?.images?.jpg?.large_image_url || '',
+      episodeNum: r.episode_num,
+      epTitle: r.ep_title,
+      epThumb: thumbs.get(Number(r.anime_id))?.[Number(r.episode_num)] || '',
+      watchedAt: r.watched_at,
+      watchTime: r.watch_time,
+      episodeDuration: r.episode_duration,
+    })),
+    page,
+    totalPages: total ? Math.ceil(total / limit) : 1,
+  });
 });
 
 mobileContentRoutes.get('/api/mobile/announcements', async (c) => {
