@@ -163,6 +163,7 @@ watchRoutes.get('/watch', async (c) => {
     const result = await mal.getAnime(animeId);
     const anime = result.data;
     if (!anime) return c.html('', 404);
+    await mal.getAnimeEpisodes(animeId).catch(() => null);
 
     const title = getAnimeTitle(anime);
     const cover = anime.images?.jpg?.large_image_url ?? '';
