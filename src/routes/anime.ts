@@ -79,7 +79,6 @@ animeRoutes.get('/anime', async (c) => {
   const totalEps = anime.episodes ?? 0;
   const airedSoFar: number | null = null;
   const epsUnknown = totalEps === 0;
-  const epsNeedsRefresh = epsUnknown;
   const dubbedLangs = await DubStatus.getFor(db, id);
 
   // Logo + cover both come pre-resolved on `anime` itself -- getAnime()
@@ -141,7 +140,7 @@ animeRoutes.get('/anime', async (c) => {
       <div class="ih-meta-row">
         ${anime.score ? `<span class="ih-meta-item ih-meta-score">${icon('star', 'icon-inline')} ${anime.score.toFixed(1)}</span>` : ''}
         <span class="ih-meta-item">${icon('tv', 'icon-inline')} ${h(titleCase(anime.type || 'TV'))}</span>
-        <span class="ih-meta-item">${icon('list', 'icon-inline')} <span id="ih-eps-text"${epsUnknown ? ' class="eps-skel"' : ''}>${epsUnknown ? '' : (airedSoFar !== null && airedSoFar > 0 && airedSoFar !== totalEps ? `Ep ${airedSoFar}/${totalEps || '?'} aired` : `${totalEps} eps`)}</span></span>
+        <span class="ih-meta-item">${icon('list', 'icon-inline')} <span id="ih-eps-text">${totalEps > 0 ? `${totalEps} eps` : 'Episode count unavailable'}</span></span>
         ${anime.duration_mins ? `<span class="ih-meta-item">${icon('clock', 'icon-inline')} ${anime.duration_mins}m</span>` : ''}
         ${seasonYearLabel(anime.start_date) ? `<span class="ih-meta-item">${icon('calendar', 'icon-inline')} ${h(seasonYearLabel(anime.start_date)!)}</span>` : ''}
         <span class="ih-meta-item${anime.status === 'Currently Airing' ? ' ih-meta-airing' : ''}">${icon(anime.status === 'Currently Airing' ? 'airing' : anime.status === 'Finished Airing' ? 'finished' : anime.status === 'Not yet aired' ? 'upcoming' : 'info', 'icon-inline')} ${h(anime.status || '—')}</span>
@@ -207,7 +206,7 @@ animeRoutes.get('/anime', async (c) => {
         <h2 class="info-section-title">Information</h2>
         <div class="info-stats">
           ${infoStatRow('Type', anime.type || '—')}
-          ${infoStatRow('Episodes', `<span id="info-eps-value"${epsUnknown ? ' class="eps-skel"' : ''}>${epsUnknown ? '' : (airedSoFar !== null && airedSoFar > 0 && airedSoFar !== totalEps ? `${airedSoFar} aired${totalEps ? ' / ' + totalEps + ' total' : ''}` : String(totalEps))}</span>`, true)}
+          ${infoStatRow('Episodes', `<span id="info-eps-value">${totalEps > 0 ? String(totalEps) : 'Unknown'}</span>`, true)}
           ${infoStatRow('Status', anime.status || '—')}
           ${infoStatRow('Aired', anime.aired?.string || '—')}
           ${infoStatRow('Duration', anime.duration || '—')}
@@ -226,7 +225,7 @@ animeRoutes.get('/anime', async (c) => {
   </div>` : ''}
 
   <div class="info-section" id="episodes-section">
-    <h2 class="info-section-title" id="ep-tab-btn">Episodes <span id="ep-tab-count"${epsUnknown ? ' class="eps-skel"' : ''}>${epsUnknown ? '' : `(${totalEps})`}</span></h2>
+    <h2 class="info-section-title" id="ep-tab-btn">Episodes <span id="ep-tab-count">${totalEps > 0 ? `(${totalEps})` : ''}</span></h2>
     <div id="ep-range-wrap" style="display:none;margin-bottom:.9rem;"></div>
     <div class="ep-grid" id="ep-grid-loading" aria-hidden="true">${Array.from({ length: 6 }).map(() => `
       <div class="ep-card-skel">
@@ -339,7 +338,7 @@ ${rowNavScript()}
 <script>window.__animeBanner = ${JSON.stringify(backdrop)};</script>
 <script>window.__tmdbKey    = ${JSON.stringify(c.env.TMDB_API_KEY ?? '')};</script>
 <script>window.__videoEps  = ${JSON.stringify(videoEpSet)};</script>
-${epsNeedsRefresh ? epsLiveScript(id) : ''}
+
 ${animeTailScript(animeDubConfirmed)}`;
 
   html += renderFooter({ siteUrl, currentUser: layoutUser });
@@ -351,102 +350,8 @@ function infoStatRow(label: string, value: string | number, rawHtml = false): st
   return `<div class="info-stat-row"><span class="label">${h(label)}</span><span class="value">${rawHtml ? value : h(String(value))}</span></div>`;
 }
 
-// Fetches /api/ep_count.php (the slow scraper/Jikan lookup) in the
-// background and fills in every spot on the page that shows an episode
-// count -- meta badge, info panel, the user's watched/total badge +
-// progress bar, and the "Add to list" episode total -- once it resolves.
-// Only emitted when the server-rendered page didn't already have a fresh
-// cached number (see epsNeedsRefresh in the route handler above).
-function epsLiveScript(animeId: number): string {
-  return `<script>
-(function(){
-  // ep_count.php can legitimately take several seconds on a cold cache
-  // (scraper timeout + Jikan pagination fallback), so a dropped connection,
-  // a backgrounded tab, or a Worker hiccup is enough for this one-shot
-  // fetch to fail silently -- and until this fix, a failure here just left
-  // the skeleton spinning forever with nothing else ever touching it
-  // (only a full page reload, which re-reads the cache this same lookup
-  // writes through to, would pick it up). This adds a timeout, one retry,
-  // and -- if both attempts fail -- an explicit fallback so the UI always
-  // resolves out of the skeleton state instead of hanging indefinitely.
-  function fetchWithTimeout(ms) {
-    var ctrl = new AbortController();
-    var t = setTimeout(function(){ ctrl.abort(); }, ms);
-    return fetch(window.__siteUrl + '/api/ep_count.php?anime_id=${animeId}', { signal: ctrl.signal })
-      .then(function(r){ clearTimeout(t); return r.ok ? r.json() : null; })
-      .catch(function(){ clearTimeout(t); return null; });
-  }
-
-  function apply(d) {
-    if (!d || !d.total) return false;
-    var total = d.total, aired = d.aired;
-    window.__totalEps = total;
-    var label = (aired !== null && aired > 0 && aired !== total) ? ('Ep ' + aired + '/' + total + ' aired') : (total + ' eps');
-    var infoLabel = (aired !== null && aired > 0 && aired !== total) ? (aired + ' aired / ' + total + ' total') : String(total);
-
-    var badge = document.getElementById('ih-eps-text');
-    if (badge) { badge.classList.remove('eps-skel'); badge.textContent = label; }
-
-    var infoVal = document.getElementById('info-eps-value');
-    if (infoVal) { infoVal.classList.remove('eps-skel'); infoVal.textContent = infoLabel; }
-
-    var tabCount = document.getElementById('ep-tab-count');
-    if (tabCount) { tabCount.classList.remove('eps-skel'); tabCount.textContent = '(' + total + ')'; }
-
-    var listBtn = document.getElementById('ih-add-list-btn');
-    if (listBtn) listBtn.setAttribute('onclick', "addToList(${animeId}, " + JSON.stringify(window.__animeTitle) + ", " + JSON.stringify(window.__animeCover) + ", " + total + ")");
-
-    var statusWrap = document.getElementById('anime-user-status');
-    if (statusWrap) {
-      statusWrap.setAttribute('data-total-eps', String(total));
-      var watched = parseInt(statusWrap.getAttribute('data-eps-watched') || '0', 10);
-      var epsBadge = document.getElementById('anime-eps-badge');
-      if (epsBadge && watched) epsBadge.textContent = watched + '/' + total + ' eps';
-      var progWrap = document.getElementById('anime-progress-wrap');
-      var progFill = document.getElementById('anime-progress-fill');
-      if (progWrap && progFill && watched) {
-        progWrap.style.display = '';
-        progFill.style.width = Math.min(100, Math.round((watched / total) * 100)) + '%';
-      }
-    }
-    return true;
-  }
-
-  function fail() {
-    // Both attempts failed (or returned nothing usable) -- stop pretending
-    // it's still loading. Clear the skeleton so it isn't stuck forever;
-    // a later grid view / refresh will pick up a real number once the
-    // scraper resolves it on the backend.
-    var badge = document.getElementById('ih-eps-text');
-    if (badge) { badge.classList.remove('eps-skel'); badge.textContent = '? eps'; }
-    var infoVal = document.getElementById('info-eps-value');
-    if (infoVal) { infoVal.classList.remove('eps-skel'); infoVal.textContent = 'Unknown'; }
-    var tabCount = document.getElementById('ep-tab-count');
-    if (tabCount) { tabCount.classList.remove('eps-skel'); tabCount.textContent = ''; }
-  }
-
-  // Must stay comfortably above the server's own worst case: ep_count.php
-  // allows up to 5s for the scraper lookup, then up to another 5s for the
-  // Jikan pagination fallback (~10s total on a cold, currently-airing
-  // title). A shorter client timeout just aborts a request that was about
-  // to succeed -- which still leaves it looking "stuck" until reload,
-  // since the abort doesn't stop the server from finishing the lookup and
-  // writing it to cache anyway. 14s covers the 10s server budget with room
-  // for network overhead.
-  fetchWithTimeout(14000).then(function(d){
-    if (apply(d)) return;
-    // One retry after a short delay before giving up -- this is now only
-    // for a genuine failure (network drop, 5xx, etc.), not an impatient abort.
-    setTimeout(function(){
-      fetchWithTimeout(14000).then(function(d2){
-        if (!apply(d2)) fail();
-      });
-    }, 1500);
-  });
-})();
-</script>`;
-}
-
+// Episode totals are rendered from Hoshika metadata only; no legacy
+// scraper/Jikan episode-count fetch is injected into the page.
 // "2004-10-05" -> "Fall 2004" (Jan-Mar Winter, Apr-Jun Spring, Jul-Sep
 // Summer, Oct-Dec Fall — same quarter boundaries AniList uses), so the meta
 // row shows one compact season badge instead of a full aired date range.
