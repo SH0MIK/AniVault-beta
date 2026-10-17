@@ -9,6 +9,7 @@ import { Db } from '../lib/db';
 import { Session } from '../lib/session';
 import { Auth } from '../lib/auth';
 import { AnimeTracker } from '../lib/tracker';
+import { MalAPI } from '../lib/mal-api';
 import { Badge } from '../lib/badges';
 import { Notification } from '../lib/notification';
 import { h } from '../lib/helpers';
@@ -221,7 +222,8 @@ async function renderProfilePage(c: any, db: Db, session: Session, lifetime: num
   const ENABLE_ANILIST_SYNC = false;
   const userBadges = await Badge.getForUser(db, user.id);
   const stats = await AnimeTracker.getStats(db, user.id);
-  const favs = await AnimeTracker.getFavorites(db, user.id);
+  const mal = new MalAPI(c.env, c.env.API_CACHE, db);
+  const favs = await AnimeTracker.getFavorites(db, user.id, mal);
 
   const hasGoogle = !!user.google_id;
   const hasDiscord = !!user.discord_id;
