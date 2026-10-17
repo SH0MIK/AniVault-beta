@@ -615,7 +615,7 @@ async function lazyLoadRelated() {
   const loading = document.getElementById('related-grid-loading');
   if (!grid) return;
   try {
-    const res  = await fetch(\`https://api.jikan.moe/v4/anime/\${animeId}/recommendations\`);
+    const res  = await fetch(\`\${window.__siteUrl || ''}/api/anime_recommendations.php?anime=\${animeId}\`);
     const data = await res.json();
     const recs = (data.data || []).slice(0, 8);
     if (loading) loading.style.display = 'none';
