@@ -770,9 +770,11 @@ export class MalAPI {
     })));
     for (const { id, art, anime } of resolved) {
       this.artCache.set(id, art);
-      if (art.poster) anime.images = { jpg: { image_url: art.poster, large_image_url: art.poster } };
-      if (art.cover) anime.cover_image = art.cover;
-      if (art.logo) anime.logo_image = art.logo;
+      // Clear any upstream or legacy artwork even when Hoshika has no image.
+      anime.images = { jpg: { image_url: art.poster, large_image_url: art.poster } };
+      anime.cover_image = art.cover;
+      anime.banner_image = art.cover || undefined;
+      anime.logo_image = '';
     }
   }
   // Legacy compatibility: callers that still use this method get the same
