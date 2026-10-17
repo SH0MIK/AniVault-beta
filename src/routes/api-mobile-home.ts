@@ -37,8 +37,8 @@ mobileHomeRoutes.get('/api/mobile/home-v2', async (c) => {
   const { db, auth, mal } = await buildCtx(c);
   const [seasonal, topAnime, upcoming] = await Promise.all([
     mal.getAniListSeasonNow(),
-    mal.getTopAnime('bypopularity', 1),
-    mal.getSeasonUpcoming(),
+    mal.getTopAnime('bypopularity', 1, 12),
+    mal.getSeasonUpcoming(8),
   ]);
 
   let watchNowList: any[] = [];
