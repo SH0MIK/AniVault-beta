@@ -28,10 +28,10 @@ episodeOverrideRoutes.on(['GET', 'POST'], '/api/episode_override.php', async (c)
   if (c.req.method === 'GET') {
     if (animeId && c.req.query('all') !== undefined) {
       const mal = new MalAPI(c.env, c.env.API_CACHE, db);
-      const animeData = await mal.getAnime(animeId);
+      const animeData = await mal.getAnimeAdminSummary(animeId);
       await mal.getAnimeEpisodes(animeId).catch(() => null);
       const totalEps = animeData.data?.episodes ?? 0;
-      const hoshikaThumbs = await getAnimeEpisodeThumbnails(c.env, db, animeId, animeData.data?.status, totalEps);
+      const hoshikaThumbs = await getAnimeEpisodeThumbnails(c.env, db, animeId, undefined, totalEps);
       const overrides = Object.entries(hoshikaThumbs).map(([episode, image_url]) => ({
         anime_id: animeId, episode_num: Number(episode), image_url,
       }));
