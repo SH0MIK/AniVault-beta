@@ -72,9 +72,11 @@ homeRoutes.get('/', async (c) => {
     upcomingList = (upcoming.data ?? []).slice(0, 8);
   }
 
-  // Homepage snapshots may contain artwork cached before the source switch.
-  // Re-resolve every visible poster through Hoshika before rendering.
-  await mal.enforceHoshikaArtwork([...topList, ...upcomingList]);
+  // Resolve Hoshika art without writing one KV entry per card. The homepage
+  // can display 20 cards at once; writes here quickly exhaust the shared daily
+  // KV quota, which is also used by production. Hoshika metadata is memoized
+  // in the Worker isolate, and only Hoshika URLs are rendered.
+  await mal.enforceHoshikaArtwork([...topList, ...upcomingList], false);
 
   // Trending/seasonal is intentionally not loaded on the homepage.
 
@@ -165,17 +167,13 @@ homeRoutes.get('/', async (c) => {
   let heroCovers: string[] = [];
 
   if (curatedRows.length > 0) {
-    const resolved = await Promise.all(curatedRows.map(async (row) => {
-      const id = Number(row.anime_id);
-      const result = await mal.getAnime(id, true).catch(() => ({ data: null }));
-      const anime = result.data;
-      if (!anime) return null;
-      return {
-        ...anime,
-        title: anime.title || row.anime_title || `Anime #${id}`,
-      } as NormalisedAnime;
-    }));
-    heroPool = resolved.filter((anime): anime is NormalisedAnime => !!anime);
+    // Reuse the Hoshika-resolved homepage list instead of issuing another
+    // MAL + Hoshika lookup for every curated hero entry on each page request.
+    const byId = new Map(topList.map((anime) => [anime.mal_id, anime]));
+    heroPool = curatedRows
+      .map((row) => byId.get(Number(row.anime_id)))
+      .filter((anime): anime is NormalisedAnime => !!anime)
+      .slice(0, 6);
     heroBanners = heroPool.map((anime) => anime.cover_image || '');
     heroLogos = heroPool.map(() => '');
     heroCovers = heroPool.map((anime) => anime.images?.jpg?.large_image_url || '');
