@@ -385,12 +385,8 @@ export class MalAPI {
     const data = await this.fetchAniListSeasonLive();
     if (!data || data.length === 0) return this.getSeasonNowFallback();
 
-    // Trending is rendered on every homepage request, so the cached payload
-    // should already contain the same TMDB poster art used by normal MAL
-    // cards. Resolve the first 12 cards once while refreshing the cache;
-    // normal page requests then only read this KV payload and never call
-    // AniList/TMDB/scraper for the Trending row.
-    await this.enrichTrendingArt(data);
+    // Posters have already been resolved from Hoshika by the live fetch;
+    // keep this path lightweight and avoid a second detail request per card.
 
     const result = { data };
     if (this.kv && this.cacheEnabled()) {
@@ -472,7 +468,7 @@ export class MalAPI {
 
     return await Promise.all(media
       .filter((m) => m.idMal)
-      .slice(0, 24)
+      .slice(0, 12)
       .map(async (m) => {
         const title = m.title?.romaji || m.title?.english || 'Unknown';
         const hoshika = await getHoshikaAnimeMetadata(Number(m.idMal), title, this.kv, false).catch(() => null);
@@ -1279,32 +1275,35 @@ export class MalAPI {
     return { data: result.data?.recommendations ?? [] };
   }
 
-  async getSeasonNow(page = 1): Promise<{ data: NormalisedAnime[]; pagination: any }> {
+  async getSeasonNow(page = 1, limit = 20): Promise<{ data: NormalisedAnime[]; pagination: any }> {
     const year = new Date().getUTCFullYear();
     const season = this.currentSeason();
-    const offset = (page - 1) * 20;
-    const raw = await this.get(`/anime/season/${year}/${season}`, { limit: 20, offset, fields: LIST_FIELDS, sort: 'anime_score', nsfw: 'false' });
+    const safeLimit = Math.max(1, Math.min(20, Math.floor(limit) || 20));
+    const offset = (page - 1) * safeLimit;
+    const raw = await this.get(`/anime/season/${year}/${season}`, { limit: safeLimit, offset, fields: LIST_FIELDS, sort: 'anime_score', nsfw: 'false' });
     await this.prefetchAnimeArt((raw.data ?? []).map((n: any) => Number(n.node?.id ?? 0)), false);
     const data = await Promise.all((raw.data ?? []).map((n: any) => this.normalise(n.node, true)));
     return { data, pagination: { last_visible_page: raw.paging?.next ? page + 1 : page } };
   }
 
-  async getSeasonUpcoming(): Promise<{ data: NormalisedAnime[] }> {
+  async getSeasonUpcoming(limit = 20): Promise<{ data: NormalisedAnime[] }> {
     const [year, season] = this.nextSeason();
-    const raw = await this.get(`/anime/season/${year}/${season}`, { limit: 20, fields: LIST_FIELDS, nsfw: 'false' });
+    const safeLimit = Math.max(1, Math.min(20, Math.floor(limit) || 20));
+    const raw = await this.get(`/anime/season/${year}/${season}`, { limit: safeLimit, fields: LIST_FIELDS, nsfw: 'false' });
     await this.prefetchAnimeArt((raw.data ?? []).map((n: any) => Number(n.node?.id ?? 0)), false);
     const data = await Promise.all((raw.data ?? []).map((n: any) => this.normalise(n.node, true)));
     return { data };
   }
 
-  async getTopAnime(filter = 'bypopularity', page = 1): Promise<{ data: NormalisedAnime[]; pagination: any }> {
+  async getTopAnime(filter = 'bypopularity', page = 1, limit = 25): Promise<{ data: NormalisedAnime[]; pagination: any }> {
     const rankingMap: Record<string, string> = { bypopularity: 'bypopularity', favorite: 'favorite', airing: 'airing', upcoming: 'upcoming', byrank: 'all' };
     const rankingType = rankingMap[filter] ?? 'bypopularity';
-    const offset = (page - 1) * 25;
-    const raw = await this.get('/anime/ranking', { ranking_type: rankingType, limit: 25, offset, fields: LIST_FIELDS, nsfw: 'false' });
+    const safeLimit = Math.max(1, Math.min(25, Math.floor(limit) || 25));
+    const offset = (page - 1) * safeLimit;
+    const raw = await this.get('/anime/ranking', { ranking_type: rankingType, limit: safeLimit, offset, fields: LIST_FIELDS, nsfw: 'false' });
     await this.prefetchAnimeArt((raw.data ?? []).map((n: any) => Number(n.node?.id ?? 0)), false);
     const data = await Promise.all((raw.data ?? []).map((n: any) => this.normalise(n.node, true)));
-    return { data, pagination: { last_visible_page: raw.paging?.next ? page + 5 : page } };
+    return { data, pagination: { last_visible_page: raw.paging?.next ? page + Math.ceil(25 / safeLimit) : page } };
   }
 
   getAnimeGenres(): { data: { mal_id: number; name: string }[] } {
