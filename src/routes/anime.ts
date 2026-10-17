@@ -77,8 +77,6 @@ animeRoutes.get('/anime', async (c) => {
   // Hoshika is the only source for episode counts. Do not use the old
   // scraper/Jikan airing-count cache to override its catalog data.
   const totalEps = anime.episodes ?? 0;
-  const airedSoFar: number | null = null;
-  const epsUnknown = totalEps === 0;
   const dubbedLangs = await DubStatus.getFor(db, id);
 
   // Logo + cover both come pre-resolved on `anime` itself -- getAnime()
