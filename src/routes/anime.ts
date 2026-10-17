@@ -79,12 +79,9 @@ animeRoutes.get('/anime', async (c) => {
   const totalEps = anime.episodes ?? 0;
   const dubbedLangs = await DubStatus.getFor(db, id);
 
-  // Logo + cover both come pre-resolved on `anime` itself -- getAnime()
-  // already ran them through getAnimeArt() (scraper poster/cover/logo,
-  // blended with your admin-saved overrides per the Image Source Priority
-  // setting on admin/anime_images.php). Plus a simple sub/dub yes-no
-  // readout for the meta row -- replaces the old "Watch on" list of every
-  // streaming provider with just the two badges that actually matter.
+  // Poster and cover are resolved from Hoshika only. Hoshika does not
+  // provide a separate transparent logo field, so the title remains text.
+  // The meta row shows the sub/dub availability relevant to AniVault.
   const titleLogo = anime.logo_image ?? '';
   const hasSub = videoEpRows.length > 0;
   const hasDub = animeDubConfirmed || dubbedLangs.length > 0 || Object.values(videoEpSet).some((v) => v.dub);
@@ -334,7 +331,6 @@ ${rowNavScript()}
 <script>window.__totalEps  = ${JSON.stringify(totalEps)};</script>
 <script>window.__animeCover = ${JSON.stringify(image)};</script>
 <script>window.__animeBanner = ${JSON.stringify(backdrop)};</script>
-<script>window.__tmdbKey    = ${JSON.stringify(c.env.TMDB_API_KEY ?? '')};</script>
 <script>window.__videoEps  = ${JSON.stringify(videoEpSet)};</script>
 
 ${animeTailScript(animeDubConfirmed)}`;
