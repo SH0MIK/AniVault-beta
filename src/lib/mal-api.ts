@@ -1064,7 +1064,7 @@ export class MalAPI {
     const poster = hoshika?.poster || '';
     return {
       data: {
-        title: raw.title || '',
+        title: hoshikaTitle,
         images: {
           jpg: {
             image_url: poster,
