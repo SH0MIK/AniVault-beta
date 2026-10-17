@@ -750,24 +750,15 @@ export class MalAPI {
     return art;
   }
 
-  // Homepage/list cards intentionally need fresh scraper art even when the
-  // durable scraper_art_cache still contains artwork from the old saved-art
-  // priority path. Bypass those caches, ask the active scraper directly, and
-  // refresh the shared scraper-art cache with the live result. This does NOT
-  // touch anime_images/anime_banners/anime_logos, so self-uploaded artwork is
-  // left completely untouched for detail/hero contexts.
-  async getTmdbArtForCard(anime: NormalisedAnime, isList = false): Promise<{ poster: string; cover: string; logo: string }> {
+  // Legacy method name retained for callers, but Beta artwork now comes
+  // exclusively from Hoshika. The TMDB API key and scraper are not consulted.
+  async getTmdbArtForCard(anime: NormalisedAnime, _isList = false): Promise<{ poster: string; cover: string; logo: string }> {
     const empty = { poster: '', cover: '', logo: '' };
-    if (!anime?.mal_id || !this.env.TMDB_API_KEY) return empty;
-
-    const rawTitles = [...new Set([anime.title_english, anime.title, anime.title_japanese].filter(Boolean))];
-    // TMDB indexes Kyoukai no Kanata under its English title as well; include
-    // both spellings so title variants from MAL cannot prevent a direct match.
-    const titleKey = rawTitles.join(' ').toLowerCase();
-    if (titleKey.includes('kyoukai no kanata') || titleKey.includes('beyond the boundary')) {
-      rawTitles.unshift('Beyond the Boundary', 'Kyoukai no Kanata');
-    }
-    return fetchTmdbArtDirect(this.env.TMDB_API_KEY, [...new Set(rawTitles)], isList);
+    if (!anime?.mal_id) return empty;
+    const title = anime.title_english || anime.title || anime.title_japanese || '';
+    if (!title) return empty;
+    const metadata = await getHoshikaAnimeMetadata(anime.mal_id, title, this.kv, false).catch(() => null);
+    return { poster: metadata?.poster || '', cover: metadata?.cover || '', logo: '' };
   }
   async prefetchTmdbArtForCards(anime: NormalisedAnime[]): Promise<void> {
     const items = anime.filter((a) => a?.mal_id);
@@ -896,41 +887,20 @@ export class MalAPI {
     return { deleted: keys.length, done, cursor: done ? undefined : listed.cursor };
   }
 
-  // The single choke point every poster/cover/logo on the site should go
-  // through. Merges the scraper's live art with your admin-saved overrides
-  // (anime_images for poster, anime_banners/home_hero_banners for cover,
-  // anime_logos/home_hero_banners for logo), ordered by whichever source
-  // getImagePriority() says should be tried first -- the other one is still
-  // used as a fallback if the preferred source came back empty for that
-  // piece. Silently returns empty strings on failure since art is always a
-  // visual enhancement, never something that should break a page.
-  async getAnimeArt(animeId: number, liveFetch = true): Promise<{ poster: string; cover: string; logo: string }> {
+  // Single artwork source for Beta: Hoshika only. Admin-saved images,
+  // scraper art, TMDB, and legacy D1 art caches are intentionally ignored.
+  // Empty Hoshika fields stay empty so callers can render a neutral placeholder
+  // instead of silently mixing artwork providers.
+  async getAnimeArt(animeId: number, _liveFetch = true): Promise<{ poster: string; cover: string; logo: string }> {
     const empty = { poster: '', cover: '', logo: '' };
     if (!animeId) return empty;
-
-    // Warmed by prefetchAnimeArt() for list/grid contexts -- covers the
-    // common case where normalise() is called once per row in a
-    // Promise.all(map(...)) and would otherwise each independently query
-    // anime_images/anime_banners/anime_logos/home_hero_banners/settings.
     const cached = this.artCache.get(animeId);
     if (cached) return cached;
-
-    const [priority, scraperArt, savedPoster, savedBanner, savedLogo] = await Promise.all([
-      this.getImagePriority(),
-      this.getScraperArt(animeId, liveFetch),
-      this.getLocalAnimeImage(animeId),
-      this.getLocalAnimeBannerInfo(animeId),
-      this.getLocalAnimeLogo(animeId),
-    ]);
-    const savedCover = savedBanner?.image_url || '';
-
-    const pick = (api: string, saved: string) => (priority === 'api' ? (api || saved) : (saved || api));
-
-    const result = {
-      poster: pick(scraperArt.poster, savedPoster),
-      cover: pick(scraperArt.cover, savedCover),
-      logo: pick(scraperArt.logo, savedLogo),
-    };
+    const summary = await this.getAnimeAdminSummary(animeId).catch(() => ({ data: null }));
+    const title = summary.data?.title || '';
+    if (!title) return empty;
+    const metadata = await getHoshikaAnimeMetadata(animeId, title, this.kv, true).catch(() => null);
+    const result = { poster: metadata?.poster || '', cover: metadata?.cover || '', logo: '' };
     this.artCache.set(animeId, result);
     return result;
   }
