@@ -64,7 +64,7 @@ mobileContentRoutes.get('/api/mobile/user/:username', async (c) => {
 });
 
 mobileContentRoutes.get('/api/mobile/home', async (c) => {
-  const { db, auth, mal } = await buildCtx(c); const [seasonal, topAnime, upcoming] = await Promise.all([mal.getAniListSeasonNow(), mal.getTopAnime('bypopularity', 1), mal.getSeasonUpcoming()]);
+  const { db, auth, mal } = await buildCtx(c); const [seasonal, topAnime, upcoming] = await Promise.all([mal.getAniListSeasonNow(), mal.getTopAnime('bypopularity', 1, 12), mal.getSeasonUpcoming(8)]);
   const toCard = (a: any) => ({ id: a.mal_id, title: a.title_english && a.title_english !== a.title ? a.title_english : a.title, image: a.images?.jpg?.large_image_url ?? a.images?.jpg?.image_url ?? '', score: a.score ?? null, type: a.type ?? '', episodes: a.episodes ?? 0 });
   let watchNowList: any[] = []; try { const rows = await db.fetchAll<{ anime_id: number }>('SELECT DISTINCT anime_id FROM episode_videos WHERE is_active = 1 ORDER BY updated_at DESC LIMIT 12'); const results = await Promise.all(rows.map((r) => mal.getAnime(r.anime_id, true))); watchNowList = results.map((r) => r.data).filter(Boolean).map(toCard); } catch { watchNowList = []; }
   const currentUser = auth.check() ? await auth.getCurrentUser() : null; let continueWatching: any[] = [];
