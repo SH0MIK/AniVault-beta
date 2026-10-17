@@ -1001,23 +1001,24 @@ export class MalAPI {
     const genres = (node.genres ?? []).filter(Boolean).map((g: any) => ({ mal_id: g?.id ?? 0, name: g?.name ?? '' }));
     const studios = (node.studios ?? []).filter(Boolean).map((s: any) => ({ mal_id: s?.id ?? 0, name: s?.name ?? '' }));
 
-    const related = await Promise.all((node.related_anime ?? []).filter(Boolean).map(async (r: any) => {
+    // Series relations are used for navigation labels, not artwork. Keep
+    // their poster field empty rather than leaking a MAL/saved image.
+    const related = (node.related_anime ?? []).filter(Boolean).map((r: any) => {
       const entry = r?.node ?? {};
-      const entryId = Number(entry?.id ?? 0);
-      const entryHoshika = entryId && entry?.title
-        ? await getHoshikaAnimeMetadata(entryId, entry.title, this.kv, false).catch(() => null)
-        : null;
       return {
         entry: {
-          mal_id: entryId,
+          mal_id: Number(entry?.id ?? 0),
           title: entry?.title ?? '',
-          images: { jpg: { image_url: entryHoshika?.poster || '' } },
+          images: { jpg: { image_url: '' } },
         },
         relation_type_formatted: r?.relation_type_formatted ?? '',
       };
-    }));
+    });
 
-    const recommendations = await Promise.all((node.recommendations ?? []).filter(Boolean).map(async (r: any) => {
+    // Recommendation cards show at most eight items, so only resolve those
+    // posters from Hoshika. This keeps the Worker comfortably under its
+    // per-request subrequest budget on detail pages.
+    const recommendations = await Promise.all((node.recommendations ?? []).filter(Boolean).slice(0, 8).map(async (r: any) => {
       const entry = r?.node ?? {};
       const entryId = Number(entry?.id ?? 0);
       const entryHoshika = entryId && entry?.title
