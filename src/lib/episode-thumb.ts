@@ -262,7 +262,7 @@ export async function importHoshikaEpisodeThumbnails(
   const bulk: Record<number, string> = {};
   for (const ep of episodes) {
     const n = Number(ep.episode);
-    const thumb = typeof ep.thumbnail === 'string' && /^https?:\\/\\//i.test(ep.thumbnail)
+    const thumb = typeof ep.thumbnail === 'string' && /^https?:\/\//i.test(ep.thumbnail)
       ? ep.thumbnail : '';
     if (Number.isInteger(n) && n > 0 && thumb) bulk[n] = thumb;
   }
