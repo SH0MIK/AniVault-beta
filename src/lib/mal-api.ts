@@ -1146,7 +1146,7 @@ export class MalAPI {
     // Hoshika is the only source for episode numbers and thumbnails. Never
     // fall back to scraper/Jikan/MAL caches if Hoshika has no episode data.
     try {
-      const anime = await this.getAnime(id);
+      const anime = await this.getAnimeAdminSummary(id);
       const hoshikaEpisodes = anime.data?.title
         ? await getHoshikaAnimeEpisodes(anime.data.title, this.kv)
         : null;
