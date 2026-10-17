@@ -1654,8 +1654,8 @@ document.addEventListener('click', async function(e) {
     const overrideSynop = override?.synopsis || '';
     const synopsis      = overrideSynop || jikanSynop;
 
-    // Thumbnail: admin override > scraper-cached (via episode_override.php) > cached > anime cover fallback
-    const thumb = override?.image_url || overrideRes?.thumbnail || _epCache[cacheKey]?.thumb || '';
+    // Hoshika is the only source for episode thumbnails; ignore legacy local cache entries.
+    const thumb = overrideRes?.thumbnail || '';
 
     // Watch links: override takes priority, then Jikan streaming
     const overrideLinks = override ? (JSON.parse(override.watch_links || '[]') || []) : [];
