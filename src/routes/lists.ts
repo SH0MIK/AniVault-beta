@@ -74,7 +74,8 @@ listRoutes.on(['GET', 'POST'], '/mylist', async (c) => {
 
   const status = c.req.query('status') ?? '';
   const page = Math.max(1, parseInt(c.req.query('page') ?? '1', 10) || 1);
-  const data = await AnimeTracker.getUserList(db, userId, status, page);
+  const mal = new MalAPI(c.env, c.env.API_CACHE, db);
+  const data = await AnimeTracker.getUserList(db, userId, status, page, mal);
   const stats = await AnimeTracker.getStats(db, userId);
   const showSuccess = c.req.query('deleted') !== undefined;
   const cardMeta = await buildCardMetaMap(db, data.items.map((it: any) => ({ mal_id: it.anime_id } as any)));
@@ -263,7 +264,8 @@ listRoutes.get('/favorites', async (c) => {
   if (!ctx) return c.redirect(siteUrl + '/');
   const { db, session, lifetime, auth, userId } = ctx;
 
-  const favs = await AnimeTracker.getFavorites(db, userId);
+  const mal = new MalAPI(c.env, c.env.API_CACHE, db);
+  const favs = await AnimeTracker.getFavorites(db, userId, mal);
   const { unreadCount, layoutUser } = await commonLayoutData(db, auth);
   const cardMeta = await buildCardMetaMap(db, favs.map((f) => ({ mal_id: f.anime_id } as any)));
 
