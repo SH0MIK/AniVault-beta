@@ -454,43 +454,45 @@ export class MalAPI {
     const media: any[] = fromScraper.media;
     console.log(`[anilist] fetched ${media.length} media for ${fromScraper.season} ${fromScraper.seasonYear} (via scraper)`);
 
-    return media
+    return await Promise.all(media
       .filter((m) => m.idMal)
-      .map((m) => ({
-        mal_id: m.idMal,
-        title: m.title?.romaji || m.title?.english || 'Unknown',
-        title_english: m.title?.english || '',
-        title_japanese: '',
-        images: {
-          jpg: {
-            image_url: m.coverImage?.large || '',
-            large_image_url: m.coverImage?.extraLarge || m.coverImage?.large || '',
-          },
-        },
-        synopsis: stripAniListHtml(m.description || ''),
-        background: '',
-        score: typeof m.averageScore === 'number' ? m.averageScore / 10 : null,
-        scored_by: null,
-        rank: null,
-        popularity: null,
-        episodes: m.episodes || 0,
-        status: m.status || '',
-        type: m.format || 'TV',
-        rating: '',
-        source: '',
-        duration: null,
-        aired: { string: null },
-        start_date: null,
-        genres: (m.genres || []).map((g: string, i: number) => ({ mal_id: i, name: g })),
-        studios: [],
-        related_anime: [],
-        recommendations: [],
-        trailer: [],
-        themes: [],
-        members: 0,
-        broadcast: { day: null, time: null },
-        duration_mins: null,
-        banner_image: m.bannerImage || undefined,
+      .slice(0, 24)
+      .map(async (m) => {
+        const title = m.title?.romaji || m.title?.english || 'Unknown';
+        const hoshika = await getHoshikaAnimeMetadata(Number(m.idMal), title, this.kv, false).catch(() => null);
+        const poster = hoshika?.poster || '';
+        return {
+          mal_id: m.idMal,
+          title,
+          title_english: m.title?.english || '',
+          title_japanese: '',
+          images: { jpg: { image_url: poster, large_image_url: poster } },
+          cover_image: '',
+          logo_image: '',
+          synopsis: stripAniListHtml(m.description || ''),
+          background: '',
+          score: typeof m.averageScore === 'number' ? m.averageScore / 10 : null,
+          scored_by: null,
+          rank: null,
+          popularity: null,
+          episodes: hoshika?.episodes ?? 0,
+          status: m.status || '',
+          type: m.format || 'TV',
+          rating: '',
+          source: '',
+          duration: null,
+          aired: { string: null },
+          start_date: null,
+          genres: (m.genres || []).map((g: string, i: number) => ({ mal_id: i, name: g })),
+          studios: [],
+          related_anime: [],
+          recommendations: [],
+          trailer: [],
+          themes: [],
+          members: 0,
+          broadcast: { day: null, time: null },
+          duration_mins: null,
+        } as NormalisedAnime;
       }));
   }
 
@@ -979,7 +981,7 @@ export class MalAPI {
     // to saved/placeholder art instead of stacking a live scraper request
     // per row on top of everything else the page needs.
     const hoshika = animeId
-      ? await getHoshikaAnimeMetadata(animeId, node.title ?? '', this.kv, true).catch(() => null)
+      ? await getHoshikaAnimeMetadata(animeId, node.title ?? '', this.kv, !isList).catch(() => null)
       : null;
     const mediumImage = hoshika?.poster || '';
     const largeImage = mediumImage;
@@ -1128,18 +1130,6 @@ export class MalAPI {
     if (raw.error) return { data: null };
 
     const anime = await this.normalise(raw, isList);
-
-    // Re-apply Hoshika as the sole source for poster, cover/banner, and
-    // episode count. Missing Hoshika fields remain empty instead of falling
-    // back to saved artwork, MAL pictures, TMDB, or scraper art.
-    if (id) {
-      const hoshika = await getHoshikaAnimeMetadata(id, anime.title, this.kv, true).catch(() => null);
-      const poster = hoshika?.poster || '';
-      anime.images = { jpg: { image_url: poster, large_image_url: poster } };
-      anime.cover_image = hoshika?.cover || '';
-      anime.logo_image = '';
-      anime.episodes = hoshika?.episodes ?? 0;
-    }
 
     return { data: anime };
   }
