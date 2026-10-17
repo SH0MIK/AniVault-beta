@@ -5,7 +5,6 @@
 // (CACHE_DIR/mal_*.json) is replaced with Workers KV.
 import { Db } from './db';
 import { Settings } from './settings';
-import { getAnimeEpisodeInfo } from './episode-info';
 import { getHoshikaAnimeMetadata, getHoshikaAnimeEpisodes } from './hoshika-api';
 import { importAnimeEpisodeThumbnails } from './episode-thumb';
 
@@ -1198,18 +1197,6 @@ export class MalAPI {
       console.warn('[mal-api] Hoshika episode lookup failed:', String(error));
     }
     return { data: [], pagination: { last_visible_page: 1, has_next_page: false } };
-
-    const episodes = await getAnimeEpisodeInfo(this.env, this.db, id);
-    if (episodes.length > 0) {
-      return page > 1
-        ? { data: [], pagination: { last_visible_page: 1, has_next_page: false } }
-        : { data: episodes, pagination: { last_visible_page: 1, has_next_page: false } };
-    }
-
-    // Keep the existing scraper/Jikan fallback if Hoshika has no matching list.
-    const fromScraper = await this.scraperGet(`/api/mal/anime/${id}/episodes?page=${page}`);
-    if (fromScraper) return mapScraperEpisodes(fromScraper);
-    return this.jikanGet(`https://api.jikan.moe/v4/anime/${id}/episodes?page=${page}`);
   }
 
   async getAnimeStreaming(id: number): Promise<any> {
