@@ -6,6 +6,7 @@ import { Auth } from '../lib/auth';
 import { MalAPI } from '../lib/mal-api';
 import { buildCardMetaMap } from '../lib/anime-card';
 import { getUserAnimeStatuses } from '../lib/user-list';
+import { getAnimeEpisodeThumbnails } from '../lib/episode-thumb';
 
 export const mobileHomeRoutes = new Hono<{ Bindings: Env }>();
 
@@ -66,13 +67,24 @@ mobileHomeRoutes.get('/api/mobile/home-v2', async (c) => {
         'SELECT anime_id, anime_title, anime_image, episode_num, ep_title, ep_thumb, watched_at, watch_time, episode_duration FROM watch_history WHERE user_id = ? ORDER BY watched_at DESC LIMIT 8',
         [currentUser.id]
       );
+      const ids = [...new Set(rows.map((r) => Number(r.anime_id)))];
+      const details = new Map<number, any>();
+      await Promise.all(ids.map(async (id) => {
+        await mal.getAnimeEpisodes(id).catch(() => null);
+        const result = await mal.getAnime(id, true).catch(() => null);
+        details.set(id, result?.data ?? null);
+      }));
+      const thumbs = new Map<number, Record<number, string>>();
+      await Promise.all(ids.map(async (id) => {
+        thumbs.set(id, await getAnimeEpisodeThumbnails(c.env, db, id));
+      }));
       continueWatching = rows.map((r) => ({
         animeId: r.anime_id,
         title: r.anime_title,
-        image: r.anime_image,
+        image: details.get(Number(r.anime_id))?.images?.jpg?.large_image_url || '',
         episodeNum: r.episode_num,
         epTitle: r.ep_title,
-        epThumb: r.ep_thumb,
+        epThumb: thumbs.get(Number(r.anime_id))?.[Number(r.episode_num)] || '',
         watchTime: r.watch_time,
         episodeDuration: r.episode_duration,
       }));
