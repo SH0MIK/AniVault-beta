@@ -166,74 +166,35 @@ homeRoutes.get('/', async (c) => {
     requestUrl: c.req.url,
   });
 
-  // Hero slider slides. Curated admin banners are authoritative and are
-  // read directly from D1. Auto slides use the local D1 artwork libraries.
+  // All hero artwork comes from Hoshika. Admin-curated rows still choose
+  // which anime appear, but their saved banners/logos/posters are not used.
   let heroPool: NormalisedAnime[] = [];
   let heroBanners: string[] = [];
   let heroLogos: string[] = [];
   let heroCovers: string[] = [];
 
   if (curatedRows.length > 0) {
-    // Admin-selected hero rows are the source of truth. Build the slides
-    // directly from D1; do not hydrate curated heroes from MAL or another
-    // metadata table on the homepage.
-    const curatedIds = curatedRows.map((r) => Number(r.anime_id));
-    const curatedImageMap = await mal.getLocalAnimeImagesMany(curatedIds);
-    const snapshotAnime = [...topList, ...upcomingList];
-    const snapshotById = new Map(snapshotAnime.map((anime) => [anime.mal_id, anime]));
-
-    for (const r of curatedRows) {
-      const id = Number(r.anime_id);
-      const cover = curatedImageMap.get(id) || '';
-      let storedAnime: NormalisedAnime | null = null;
-      try {
-        const parsed = r.metadata_json ? JSON.parse(r.metadata_json) : null;
-        if (parsed && Number(parsed.mal_id) === id) storedAnime = parsed as NormalisedAnime;
-      } catch { /* malformed/legacy metadata — fall back below */ }
-
-      const cachedAnime = storedAnime || snapshotById.get(id);
-      const anime = cachedAnime
-        ? ({
-            ...cachedAnime,
-            title: cachedAnime.title || r.anime_title || `Anime #${id}`,
-            images: {
-              jpg: {
-                image_url: cover || cachedAnime.images?.jpg?.image_url || '',
-                large_image_url: cover || cachedAnime.images?.jpg?.large_image_url || '',
-              },
-            },
-          } as NormalisedAnime)
-        : ({
-            mal_id: id,
-            title: r.anime_title || `Anime #${id}`,
-            title_english: '',
-            title_japanese: '',
-            synopsis: '',
-            score: 0,
-            episodes: 0,
-            type: '',
-            status: '',
-            genres: [],
-            images: { jpg: { image_url: cover, large_image_url: cover } },
-          } as NormalisedAnime);
-      heroPool.push(anime);
-      heroBanners.push(r.banner_image_url || '');
-      heroLogos.push(r.logo_image_url || '');
-      heroCovers.push(cover);
-    }
+    const resolved = await Promise.all(curatedRows.map(async (row) => {
+      const id = Number(row.anime_id);
+      const result = await mal.getAnime(id, true).catch(() => ({ data: null }));
+      const anime = result.data;
+      if (!anime) return null;
+      return {
+        ...anime,
+        title: anime.title || row.anime_title || `Anime #${id}`,
+      } as NormalisedAnime;
+    }));
+    heroPool = resolved.filter((anime): anime is NormalisedAnime => !!anime);
+    heroBanners = heroPool.map((anime) => anime.cover_image || '');
+    heroLogos = heroPool.map(() => '');
+    heroCovers = heroPool.map((anime) => anime.images?.jpg?.large_image_url || '');
   }
 
   if (heroPool.length === 0) {
     heroPool = topList.slice(0, 6);
-    const heroIds = heroPool.map((a) => a.mal_id);
-    const [bannerMap, logoMap, imageMap] = await Promise.all([
-      mal.getLocalAnimeBannerInfoMany(heroIds),
-      mal.getLocalAnimeLogosMany(heroIds),
-      mal.getLocalAnimeImagesMany(heroIds),
-    ]);
-    heroBanners = heroPool.map((a) => bannerMap.get(a.mal_id)?.image_url || '');
-    heroLogos = heroPool.map((a) => logoMap.get(a.mal_id) || '');
-    heroCovers = heroPool.map((a) => imageMap.get(a.mal_id) || '');
+    heroBanners = heroPool.map((anime) => anime.cover_image || '');
+    heroLogos = heroPool.map(() => '');
+    heroCovers = heroPool.map((anime) => anime.images?.jpg?.large_image_url || '');
   }
   // Preload slide 0's LCP image so it starts downloading during <head> parsing.
   if (heroPool.length > 0) {
