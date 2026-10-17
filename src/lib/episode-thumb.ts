@@ -33,6 +33,7 @@ export function episodeThumbCacheKey(malId: number, epNum: number): string {
 
 export interface EpisodeThumbEnv {
   SCRAPER_API_BASE?: string;
+  API_CACHE?: KVNamespace;
 }
 
 export interface EpisodeThumbResult {
@@ -222,11 +223,10 @@ export async function getEpisodeThumbnail(
   if (!malId || !epNum) return null;
   // Ignore legacy per-episode rows and admin-imported/scraper artwork.
   // Only a bulk row explicitly written from Hoshika is eligible.
-  const bulkRaw = await getCachedRaw(db, animeEpisodeThumbsCacheKey(malId));
-  if (!bulkRaw) return null;
+  if (!env.API_CACHE) return null;
   try {
-    const bulk = JSON.parse(bulkRaw) as AnimeThumbCacheValue;
-    if (bulk.source !== 'hoshika') return null;
+    const bulk = await env.API_CACHE.get(`hoshika_site_episode_thumbs_v1_${malId}`, 'json') as AnimeThumbCacheValue | null;
+    if (bulk?.source !== 'hoshika') return null;
     return bulk.episodes?.[epNum] ?? null;
   } catch {
     return null;
@@ -251,13 +251,14 @@ interface AnimeThumbCacheValue {
   source?: string;
 }
 
-/** Store only Hoshika-provided episode stills in the shared cache. */
+/** Store Hoshika episode stills under a beta-specific KV key. This avoids
+ * writing into the shared production D1 episode cache while beta is being tested. */
 export async function importHoshikaEpisodeThumbnails(
-  db: Db,
+  kv: KVNamespace | undefined,
   malId: number,
   episodes: Array<{ episode: number; thumbnail?: string | null }>,
 ): Promise<void> {
-  if (!malId) return;
+  if (!kv || !malId) return;
   const bulk: Record<number, string> = {};
   for (const ep of episodes) {
     const n = Number(ep.episode);
@@ -265,12 +266,15 @@ export async function importHoshikaEpisodeThumbnails(
       ? ep.thumbnail : '';
     if (Number.isInteger(n) && n > 0 && thumb) bulk[n] = thumb;
   }
-  const value: AnimeThumbCacheValue = {
-    episodes: bulk,
-    checkedAt: Date.now(),
-    source: 'hoshika',
-  };
-  await putCachedRaw(db, animeEpisodeThumbsCacheKey(malId), JSON.stringify(value), null);
+  const key = `hoshika_site_episode_thumbs_v1_${malId}`;
+  const value: AnimeThumbCacheValue = { episodes: bulk, checkedAt: Date.now(), source: 'hoshika' };
+  try {
+    const existing = await kv.get(key, 'json') as AnimeThumbCacheValue | null;
+    if (existing?.source === 'hoshika' && JSON.stringify(existing.episodes) === JSON.stringify(bulk)) return;
+    await kv.put(key, JSON.stringify(value), { expirationTtl: 2592000 });
+  } catch (error) {
+    console.warn('[hoshika] Episode thumbnail KV cache failed:', String(error));
+  }
 }
 
 // Upper bound on how many NEW episode numbers get probed in a single check,
@@ -315,11 +319,10 @@ export async function getAnimeEpisodeThumbnails(
   totalEpisodesKnown?: number | null
 ): Promise<Record<number, string>> {
   if (!malId) return {};
-  const raw = await getCachedRaw(db, animeEpisodeThumbsCacheKey(malId));
-  if (!raw) return {};
+  if (!env.API_CACHE) return {};
   try {
-    const cached = JSON.parse(raw) as AnimeThumbCacheValue;
-    return cached.source === 'hoshika' && cached.episodes && typeof cached.episodes === 'object'
+    const cached = await env.API_CACHE.get(`hoshika_site_episode_thumbs_v1_${malId}`, 'json') as AnimeThumbCacheValue | null;
+    return cached?.source === 'hoshika' && cached.episodes && typeof cached.episodes === 'object'
       ? cached.episodes
       : {};
   } catch {
