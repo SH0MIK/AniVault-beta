@@ -73,9 +73,7 @@ homeRoutes.get('/', async (c) => {
   }
 
   // Trending/seasonal is intentionally not loaded on the homepage.
-  // Resolve only the sections that are actually rendered.
-  const homepageArtItems = [...topList, ...upcomingList];
-  await mal.prefetchTmdbArtForCards(homepageArtItems);
+  // Posters have already been resolved from Hoshika by MalAPI.normalise().
 
   // Watch Now — anime that have episodes available in episode_videos
   let watchNowList: any[] = [];
@@ -83,16 +81,12 @@ homeRoutes.get('/', async (c) => {
     const rows = await db.fetchAll<{ anime_id: number }>(
       'SELECT DISTINCT anime_id FROM episode_videos WHERE is_active = 1 ORDER BY updated_at DESC LIMIT 12'
     );
-    // Watch Now is a homepage card row too. Resolve its poster art directly
-    // from TMDB using the same anime-title matching/filtering as the scraper;
-    // Railway is not involved in the homepage request path.
+    // Reuse already-normalised Hoshika posters; don't query TMDB or saved art.
     const snapshotAnime = [...topList, ...upcomingList];
     const snapshotById = new Map(snapshotAnime.map((anime) => [anime.mal_id, anime]));
     watchNowList = rows
       .map((r) => snapshotById.get(r.anime_id))
       .filter(Boolean) as NormalisedAnime[];
-    // Only resolve TMDB art for cards we can render from the D1/MAL snapshot.
-    await mal.prefetchTmdbArtForCards(watchNowList);
   } catch {
     watchNowList = [];
   }
