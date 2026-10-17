@@ -44,20 +44,26 @@ async function recordWatchActivity(db: Db, userId: number, episodes: number): Pr
   ).catch(() => undefined);
 }
 
-async function getLocalAnimeImage(db: Db, animeId: number): Promise<string> {
-  if (!animeId) return '';
-  const row = await db.fetchOne<{ image_url: string }>('SELECT image_url FROM anime_images WHERE anime_id = ?', [animeId]);
-  return row ? row.image_url : '';
+async function getHoshikaImage(mal: MalAPI | undefined, animeId: number, title: string): Promise<string> {
+  if (!mal || !animeId || !title) return '';
+  return mal.getHoshikaPoster(animeId, title);
 }
 
 export const AnimeTracker = {
-  async getUserList(db: Db, userId: number, status: string, page: number): Promise<{ items: AnimeListEntry[]; total: number; pages: number }> {
+  async getUserList(db: Db, userId: number, status: string, page: number, mal?: MalAPI): Promise<{ items: AnimeListEntry[]; total: number; pages: number }> {
     const offset = (page - 1) * ITEMS_PER_PAGE;
     let where = 'WHERE user_id = ?';
     const params: unknown[] = [userId];
     if (status) { where += ' AND status = ?'; params.push(status); }
     const items = await db.fetchAll<AnimeListEntry>(`SELECT * FROM anime_list ${where} ORDER BY updated_at DESC LIMIT ${ITEMS_PER_PAGE} OFFSET ${offset}`, params);
     const total = await db.count(`SELECT COUNT(*) as cnt FROM anime_list ${where}`, params);
+    if (mal) {
+      await Promise.all(items.map(async (item) => {
+        item.anime_image = await getHoshikaImage(mal, item.anime_id, item.anime_title || '');
+      }));
+    } else {
+      for (const item of items) item.anime_image = '';
+    }
     return { items, total, pages: Math.ceil(total / ITEMS_PER_PAGE) };
   },
 
@@ -111,8 +117,7 @@ export const AnimeTracker = {
     const score = data.score ? parseInt(data.score, 10) : null;
     const review = data.review ?? null;
     const title = data.anime_title ?? '';
-    const localImage = await getLocalAnimeImage(db, animeId);
-    const image = localImage || data.anime_image || '';
+    const image = await getHoshikaImage(mal, animeId, title);
     const episodes = parseInt(data.anime_episodes ?? '0', 10) || 0;
 
     const existing = await db.fetchOne<{ id: number; genres: string | null }>(
@@ -178,8 +183,7 @@ export const AnimeTracker = {
     );
 
     if (!existing) {
-      const localImage = await getLocalAnimeImage(db, animeId);
-      const image = localImage || animeImage || '';
+      const image = animeImage || '';
       const isFullyWatched = reachedComplete && totalEps > 0 && epNum >= totalEps;
       const status = isFullyWatched ? 'completed' : 'watching';
       const episodesWatched = reachedComplete ? epNum : 0;
@@ -239,7 +243,15 @@ export const AnimeTracker = {
     return !!row;
   },
 
-  async getFavorites(db: Db, userId: number): Promise<any[]> {
-    return db.fetchAll('SELECT * FROM favorites WHERE user_id=? ORDER BY created_at DESC', [userId]);
+  async getFavorites(db: Db, userId: number, mal?: MalAPI): Promise<any[]> {
+    const items = await db.fetchAll<any>('SELECT * FROM favorites WHERE user_id=? ORDER BY created_at DESC', [userId]);
+    if (mal) {
+      await Promise.all(items.map(async (item) => {
+        item.anime_image = await getHoshikaImage(mal, Number(item.anime_id), item.anime_title || '');
+      }));
+    } else {
+      for (const item of items) item.anime_image = '';
+    }
+    return items;
   },
 };
