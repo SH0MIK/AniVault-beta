@@ -623,14 +623,8 @@ scraperRoutes.get('/api/ep_count.php', async (c) => {
   const mal = new MalAPI(c.env, c.env.API_CACHE, db);
 
   const animeRes = await mal.getAnime(animeId).catch(() => null);
-  const status = animeRes?.data?.status;
-  if (status && status !== 'Currently Airing') {
-    const eps = animeRes?.data?.episodes ?? 0;
-    return c.json({ aired: eps || null, total: eps || null });
-  }
-
-  const airedInfo = await EpisodeAir.get(db, c.env, mal, animeId);
-  return c.json({ aired: airedInfo?.aired ?? null, total: airedInfo?.total ?? null });
+  const eps = animeRes?.data?.episodes ?? 0;
+  return c.json({ aired: eps || null, total: eps || null });
 });
 
 // ── api/anime_episodes.php ──────────────────────────────────────────────────
