@@ -117,15 +117,9 @@ homeRoutes.get('/', async (c) => {
       const missing = watchHistory;
       const distinctIds = [...new Set(missing.map((r) => r.anime_id))];
       await Promise.all(distinctIds.map(async (id) => {
-        await mal.getAnimeEpisodes(id).catch(() => null);
-        const animeData = await mal.getAnime(id, true).catch(() => null);
-        const thumbs = await getAnimeEpisodeThumbnails(
-          c.env,
-          db,
-          id,
-          animeData?.data?.status,
-          animeData?.data?.episodes ?? null
-        );
+        // Use only already-cached Hoshika episode stills here. Cold history
+        // cards stay neutral rather than triggering several API calls per show.
+        const thumbs = await getAnimeEpisodeThumbnails(c.env, db, id);
         for (const row of missing) {
           if (row.anime_id !== id) continue;
           const thumb = thumbs[row.episode_num];
