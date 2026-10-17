@@ -944,45 +944,11 @@ export class MalAPI {
   // Ids already cached (e.g. from an earlier prefetch this request) are
   // skipped. Scraper art is still fetched per-id (KV + a subrequest, not
   // D1) since there's no batched endpoint for that.
-  async prefetchAnimeArt(animeIds: number[], liveFetch = true): Promise<void> {
-    const ids = [...new Set(animeIds.filter(Boolean))].filter((id) => !this.artCache.has(id));
-    if (!ids.length) return;
-
-    const priority = await this.getImagePriority();
-
-    // List/grid callers deliberately pass liveFetch=false. In that mode,
-    // never call getScraperArt() once per title: its durable D1 fallback is
-    // itself a D1 request, turning a 100-title genre page into 100+ extra
-    // Worker API requests. Resolve all durable art in one query instead.
-    const storedArts = liveFetch ? new Map<number, { poster: string; cover: string; logo: string }>() : await this.getStoredArtMany(ids);
-
-    const [posterMap, bannerMap, logoMap] = await Promise.all([
-      this.getLocalAnimeImagesMany(ids),
-      this.getLocalAnimeBannerInfoMany(ids),
-      this.getLocalAnimeLogosMany(ids),
-    ]);
-
-    let scraperArts = new Map<number, { poster: string; cover: string; logo: string }>();
-    if (liveFetch) {
-      const resolved = await Promise.all(ids.map((id) => this.getScraperArt(id, true)));
-      scraperArts = new Map(ids.map((id, i) => [id, resolved[i]]));
-    }
-
-    const pick = (api: string, saved: string) => (priority === 'api' ? (api || saved) : (saved || api));
-
-    ids.forEach((id) => {
-      const scraperArt = liveFetch
-        ? (scraperArts.get(id) || { poster: '', cover: '', logo: '' })
-        : (storedArts.get(id) || { poster: '', cover: '', logo: '' });
-      const savedPoster = posterMap.get(id) || '';
-      const savedCover = bannerMap.get(id)?.image_url || '';
-      const savedLogo = logoMap.get(id) || '';
-      this.artCache.set(id, {
-        poster: pick(scraperArt.poster, savedPoster),
-        cover: pick(scraperArt.cover, savedCover),
-        logo: pick(scraperArt.logo, savedLogo),
-      });
-    });
+  // Art prefetching from saved images, TMDB, or the scraper is disabled.
+  // Normalisation resolves Hoshika metadata directly, so this intentionally
+  // performs no legacy D1 art reads and cannot override Hoshika URLs.
+  async prefetchAnimeArt(_animeIds: number[], _liveFetch = true): Promise<void> {
+    return;
   }
 
   private async normalise(node: any, isList = false): Promise<NormalisedAnime> {
