@@ -6,7 +6,7 @@
 import { Db } from './db';
 import { Settings } from './settings';
 import { getHoshikaAnimeMetadata, getHoshikaAnimeEpisodes } from './hoshika-api';
-import { importAnimeEpisodeThumbnails } from './episode-thumb';
+import { importHoshikaEpisodeThumbnails } from './episode-thumb';
 
 const MAL_API_BASE = 'https://api.myanimelist.net/v2';
 const LIST_FIELDS = 'id,title,alternative_titles,main_picture,synopsis,mean,rank,popularity,num_episodes,status,genres,start_date,rating,media_type,nsfw,num_list_users,broadcast,average_episode_duration';
@@ -1175,10 +1175,10 @@ export class MalAPI {
         ? await getHoshikaAnimeEpisodes(anime.data.title, this.kv)
         : null;
       if (hoshikaEpisodes) {
-        await importAnimeEpisodeThumbnails(this.db, id, hoshikaEpisodes.map((episode) => ({
+        await importHoshikaEpisodeThumbnails(this.db, id, hoshikaEpisodes.map((episode) => ({
           episode: episode.number,
           thumbnail: episode.thumbnail || null,
-        })), false);
+        })));
         const data = hoshikaEpisodes.map((episode) => ({
           mal_id: episode.number,
           title: episode.title,
