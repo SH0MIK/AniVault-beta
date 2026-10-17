@@ -132,9 +132,9 @@ userRoutes.get('/u/:username', async (c) => {
   const wrappedMonthNames=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const wrappedPeakMonthIndex=wrappedPeakMonthCounts.indexOf(Math.max(...wrappedPeakMonthCounts));
   const wrappedPeakMonth=wrappedPeakMonthCounts.some(Boolean)?wrappedMonthNames[wrappedPeakMonthIndex]:'—';
-  const favs = await AnimeTracker.getFavorites(db, profileId);
-  const recentList = await AnimeTracker.getUserList(db, profileId, filterStatus, listPage);
-  const currentlyWatching = await AnimeTracker.getUserList(db, profileId, 'watching', 1);
+  const favs = await AnimeTracker.getFavorites(db, profileId, wrappedMal);
+  const recentList = await AnimeTracker.getUserList(db, profileId, filterStatus, listPage, wrappedMal);
+  const currentlyWatching = await AnimeTracker.getUserList(db, profileId, 'watching', 1, wrappedMal);
   const watchRange = '7d';
   const watchHistory = await db.fetchAll<{activity_date:string;episodes_watched:number}>(
     "SELECT activity_date, episodes_watched FROM anime_watch_history WHERE user_id=? AND activity_date >= date('now','-6 days') AND activity_date <= date('now') ORDER BY activity_date ASC",
