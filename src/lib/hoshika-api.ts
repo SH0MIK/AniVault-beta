@@ -264,7 +264,7 @@ export async function getHoshikaAnimeMetadata(
   if (!malId || !title) return null;
 
   const memory = hoshikaMemory.get(malId);
-  if (memory && memory.expiresAt > Date.now() && (!includeDetail || memory.value?.episodes !== null)) {
+  if (memory && memory.expiresAt > Date.now() && (!includeDetail || (memory.value !== null && memory.value?.episodes !== null))) {
     return memory.value;
   }
   if (memory) hoshikaMemory.delete(malId);
