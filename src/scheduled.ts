@@ -36,8 +36,8 @@ export async function warmArtCache(db: Db, mal: MalAPI, env: Env, limit: number)
   try {
     const [seasonal, top, upcoming] = await Promise.all([
       mal.getAniListSeasonNow(),
-      mal.getTopAnime('bypopularity', 1),
-      mal.getSeasonUpcoming(),
+      mal.getTopAnime('bypopularity', 1, 12),
+      mal.getSeasonUpcoming(8),
     ]);
     for (const a of (seasonal.data ?? []).slice(0, 12)) if (a.mal_id) ids.add(a.mal_id);
     for (const a of (top.data ?? []).slice(0, 12)) if (a.mal_id) ids.add(a.mal_id);
