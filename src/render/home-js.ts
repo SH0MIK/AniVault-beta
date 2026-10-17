@@ -53,7 +53,8 @@ export function continueWatchingScript(siteUrl: string): string {
       var epNum     = nextItem.episode_num;
       var epTitle   = nextItem.ep_title  || ('Episode ' + epNum);
       var animeName = nextItem.anime_title || ('Anime #' + nextItem.anime_id);
-      var thumb     = nextItem.anime_image || '';
+      // Do not use legacy saved anime_image; Hoshika episode still is loaded below.
+      var thumb     = '';
       var imgHtml   = thumb
         ? '<img src="'+thumb+'" class="wh-ep-thumb" data-anime-id="'+nextItem.anime_id+'" data-ep="'+epNum+'" loading="lazy" alt="">'
         : '<div class="cw-placeholder"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,.15)" stroke-width="1.5"><polygon points="5 3 19 12 5 21 5 3"/></svg></div>';
@@ -92,14 +93,13 @@ export function continueWatchingScript(siteUrl: string): string {
 
       grid.appendChild(newCard);
 
-      // Pick up an admin-saved thumbnail override for this episode, if any
-      // (this card was built client-side so it didn't go through the
-      // server-side render that normally injects it).
+      // Pick up the Hoshika episode still for this card, if cached.
+      // Missing Hoshika stills leave the neutral placeholder in place.
       if (nextItem.anime_id) {
         fetch(__cwSiteUrl + '/api/episode_override.php?anime_id=' + nextItem.anime_id + '&ep=' + epNum)
           .then(function(r){ return r.ok ? r.json() : null; })
           .then(function(od) {
-            var url = od && od.override && od.override.image_url;
+            var url = od && od.thumbnail;
             if (!url) return;
             var img = newCard.querySelector('.wh-ep-thumb');
             if (img) { img.src = url; return; }
