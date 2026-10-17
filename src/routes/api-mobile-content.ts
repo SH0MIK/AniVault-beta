@@ -91,14 +91,14 @@ mobileContentRoutes.get('/api/mobile/history', async (c) => {
     [userId, limit, offset]
   );
   const ids = [...new Set(rows.map((r) => Number(r.anime_id)))];
-  const details = new Map<number, any>();
+  const posters = new Map<number, string>();
   await Promise.all(ids.map(async (id) => {
-    await mal.getAnimeEpisodes(id).catch(() => null);
-    const result = await mal.getAnime(id, true).catch(() => null);
-    details.set(id, result?.data ?? null);
+    const row = rows.find((r) => Number(r.anime_id) === id);
+    posters.set(id, await mal.getHoshikaPoster(id, row?.anime_title || ''));
   }));
   const thumbs = new Map<number, Record<number, string>>();
   await Promise.all(ids.map(async (id) => {
+    // Only already-cached Hoshika stills are returned for history rows.
     thumbs.set(id, await getAnimeEpisodeThumbnails(c.env, db, id));
   }));
   return c.json({
@@ -106,7 +106,7 @@ mobileContentRoutes.get('/api/mobile/history', async (c) => {
     data: rows.map((r) => ({
       animeId: r.anime_id,
       title: r.anime_title,
-      image: details.get(Number(r.anime_id))?.images?.jpg?.large_image_url || '',
+      image: posters.get(Number(r.anime_id)) || '',
       episodeNum: r.episode_num,
       epTitle: r.ep_title,
       epThumb: thumbs.get(Number(r.anime_id))?.[Number(r.episode_num)] || '',
