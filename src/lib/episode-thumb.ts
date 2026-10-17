@@ -270,7 +270,10 @@ export async function importHoshikaEpisodeThumbnails(
   const value: AnimeThumbCacheValue = { episodes: bulk, checkedAt: Date.now(), source: 'hoshika' };
   try {
     const existing = await kv.get(key, 'json') as AnimeThumbCacheValue | null;
-    if (existing?.source === 'hoshika' && JSON.stringify(existing.episodes) === JSON.stringify(bulk)) return;
+    if (existing?.source === 'hoshika' && (
+      JSON.stringify(existing.episodes) === JSON.stringify(bulk) ||
+      (Object.keys(bulk).length === 0 && Object.keys(existing.episodes ?? {}).length > 0)
+    )) return;
     await kv.put(key, JSON.stringify(value), { expirationTtl: 2592000 });
   } catch (error) {
     console.warn('[hoshika] Episode thumbnail KV cache failed:', String(error));
