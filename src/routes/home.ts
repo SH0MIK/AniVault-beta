@@ -312,8 +312,8 @@ ${heroSliderScript(heroPool.length)}
 
 function renderContinueWatchingCard(hRow: WatchHistoryRow, siteUrl: string, episodeThumbOverrides: Record<string, string>): string {
   const watchUrl = `${siteUrl}/watch?anime=${hRow.anime_id}&ep=${hRow.episode_num}`;
-  // Only an admin-saved override shows here now -- the legacy ep_thumb
-  // column (populated by old client-side auto-fetch code) is ignored.
+  // Only cached Hoshika episode stills are shown; saved overrides and
+  // the legacy ep_thumb column are ignored.
   const thumbSrc = episodeThumbOverrides[`${hRow.anime_id}:${hRow.episode_num}`] || '';
   const epNum = hRow.episode_num;
   const animeTitle = h(hRow.anime_title || `Anime #${hRow.anime_id}`);
