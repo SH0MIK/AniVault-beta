@@ -52,6 +52,109 @@ adminMergeUsersRoutes.on(['GET', 'POST'], '/admin/merge_users.php', async (c) =>
         for (const table of MERGE_TABLES_PLAIN) {
           await db.query(`UPDATE ${table} SET user_id=? WHERE user_id=?`, [keepId, mergeId]);
         }
+        // Preserve community relationships before deleting the source account.
+        // A merged account must not leave follower/following references behind.
+        await db.query(
+          `INSERT OR IGNORE INTO follows (follower_id, following_id)
+           SELECT CASE WHEN follower_id=? THEN ? ELSE follower_id END,
+                  CASE WHEN following_id=? THEN ? ELSE following_id END
+           FROM follows
+           WHERE (follower_id=? OR following_id=?)
+             AND CASE WHEN follower_id=? THEN ? ELSE follower_id END
+                 != CASE WHEN following_id=? THEN ? ELSE following_id END`,
+          [mergeId, keepId, mergeId, keepId, mergeId, mergeId, mergeId, keepId, mergeId, keepId]
+        );
+        await db.query('DELETE FROM follows WHERE follower_id=? OR following_id=?', [mergeId, mergeId]);
+
+        // Move non-unique user-owned records and ownership references.
+        await db.query('UPDATE chat_messages SET user_id=? WHERE user_id=?', [keepId, mergeId]);
+        await db.query('UPDATE feedback SET user_id=? WHERE user_id=?', [keepId, mergeId]);
+        await db.query('UPDATE survey_responses SET user_id=? WHERE user_id=?', [keepId, mergeId]);
+        await db.query('UPDATE surveys SET created_by=? WHERE created_by=?', [keepId, mergeId]);
+
+        // Ephemeral single-row-per-user state: keep the target's row when it exists.
+        await db.query('DELETE FROM chat_presence WHERE user_id=? AND EXISTS (SELECT 1 FROM chat_presence WHERE user_id=?)', [mergeId, keepId]);
+        await db.query('UPDATE chat_presence SET user_id=? WHERE user_id=?', [keepId, mergeId]);
+        await db.query(
+          'UPDATE chat_reads SET last_read_id=MAX(last_read_id, (SELECT last_read_id FROM chat_reads WHERE user_id=?)) WHERE user_id=? AND EXISTS (SELECT 1 FROM chat_reads WHERE user_id=?)',
+          [mergeId, keepId, mergeId]
+        );
+        await db.query('DELETE FROM chat_reads WHERE user_id=? AND EXISTS (SELECT 1 FROM chat_reads WHERE user_id=?)', [mergeId, keepId]);
+        await db.query('UPDATE chat_reads SET user_id=? WHERE user_id=?', [keepId, mergeId]);
+
+        // Keep reactions from both accounts without duplicating the same reaction.
+        await db.query(
+          `DELETE FROM chat_reactions
+           WHERE user_id=? AND EXISTS (
+             SELECT 1 FROM chat_reactions target
+             WHERE target.user_id=? AND target.message_id=chat_reactions.message_id
+               AND target.emoji=chat_reactions.emoji
+           )`,
+          [mergeId, keepId]
+        );
+        await db.query('UPDATE chat_reactions SET user_id=? WHERE user_id=?', [keepId, mergeId]);
+
+        // Merge points balances instead of letting ON DELETE CASCADE discard them.
+        await db.query(
+          `INSERT INTO points_wallets (user_id, balance, lifetime_earned, lifetime_spent, updated_at)
+           SELECT ?, balance, lifetime_earned, lifetime_spent, updated_at
+           FROM points_wallets WHERE user_id=?
+           ON CONFLICT(user_id) DO UPDATE SET
+             balance=points_wallets.balance+excluded.balance,
+             lifetime_earned=points_wallets.lifetime_earned+excluded.lifetime_earned,
+             lifetime_spent=points_wallets.lifetime_spent+excluded.lifetime_spent,
+             updated_at=MAX(points_wallets.updated_at, excluded.updated_at)`,
+          [keepId, mergeId]
+        );
+        await db.query('DELETE FROM points_wallets WHERE user_id=?', [mergeId]);
+        // Ledger event keys are idempotency keys; retain one row per event key.
+        await db.query(
+          'DELETE FROM points_ledger WHERE user_id=? AND event_key IN (SELECT event_key FROM points_ledger WHERE user_id=?)',
+          [mergeId, keepId]
+        );
+        await db.query('UPDATE points_ledger SET user_id=? WHERE user_id=?', [keepId, mergeId]);
+
+        await db.query(
+          `INSERT OR IGNORE INTO points_daily_claims (user_id, task_key, claim_date, points, created_at)
+           SELECT ?, task_key, claim_date, points, created_at FROM points_daily_claims WHERE user_id=?`,
+          [keepId, mergeId]
+        );
+        await db.query('DELETE FROM points_daily_claims WHERE user_id=?', [mergeId]);
+
+        await db.query(
+          `INSERT OR IGNORE INTO points_inventory (user_id, item_id, purchased_at, equipped)
+           SELECT ?, item_id, purchased_at, equipped FROM points_inventory WHERE user_id=?`,
+          [keepId, mergeId]
+        );
+        await db.query('DELETE FROM points_inventory WHERE user_id=?', [mergeId]);
+
+        await db.query(
+          `INSERT INTO points_watch_sessions (user_id, anime_id, episode_num, last_position, watched_seconds, last_seen_at, rewarded)
+           SELECT ?, anime_id, episode_num, last_position, watched_seconds, last_seen_at, rewarded
+           FROM points_watch_sessions WHERE user_id=?
+           ON CONFLICT(user_id, anime_id, episode_num) DO UPDATE SET
+             last_position=MAX(points_watch_sessions.last_position, excluded.last_position),
+             watched_seconds=MAX(points_watch_sessions.watched_seconds, excluded.watched_seconds),
+             last_seen_at=MAX(points_watch_sessions.last_seen_at, excluded.last_seen_at),
+             rewarded=MAX(points_watch_sessions.rewarded, excluded.rewarded)`,
+          [keepId, mergeId]
+        );
+        await db.query('DELETE FROM points_watch_sessions WHERE user_id=?', [mergeId]);
+
+        await db.query(
+          `INSERT INTO anime_watch_history (user_id, activity_date, episodes_watched, updated_at)
+           SELECT ?, activity_date, episodes_watched, updated_at FROM anime_watch_history WHERE user_id=?
+           ON CONFLICT(user_id, activity_date) DO UPDATE SET
+             episodes_watched=anime_watch_history.episodes_watched+excluded.episodes_watched,
+             updated_at=MAX(anime_watch_history.updated_at, excluded.updated_at)`,
+          [keepId, mergeId]
+        );
+        await db.query('DELETE FROM anime_watch_history WHERE user_id=?', [mergeId]);
+
+        // Keep the target's cosmetic/banner preferences if already configured.
+        await db.query('DELETE FROM user_cosmetic_settings WHERE user_id=? AND EXISTS (SELECT 1 FROM user_cosmetic_settings WHERE user_id=?)', [mergeId, keepId]);
+        await db.query('UPDATE user_cosmetic_settings SET user_id=? WHERE user_id=?', [keepId, mergeId]);
+
         await db.query('DELETE FROM users WHERE id=?', [mergeId]);
         await Logger.log(db, userId, 'owner_merge_users', `Merged user #${mergeId} (${mergeUser.username}) into #${keepId} (${keepUser.username})`);
         session.setFlash('success', `Merged "${mergeUser.username}" into "${keepUser.username}" successfully. The merged account has been deleted.`);
