@@ -171,7 +171,14 @@ function episodeThumbnailFrom(item: any): string {
     }
     if (typeof value !== 'object' || seen.has(value)) return '';
     seen.add(value);
-    for (const key of ['url', 'src', 'original', 'large', 'medium', 'small', 'webp', 'thumbnail', 'image', 'still', 'preview']) {
+    if (Array.isArray(value)) {
+      for (const entry of value) {
+        const found = visit(entry, depth + 1);
+        if (found) return found;
+      }
+      return '';
+    }
+    for (const key of ['url', 'src', 'href', 'original', 'originalUrl', 'full', 'large', 'medium', 'small', 'webp', 'thumbnail', 'thumbnailUrl', 'image', 'imageUrl', 'still', 'preview', 'path']) {
       const found = visit(value[key], depth + 1);
       if (found) return found;
     }
