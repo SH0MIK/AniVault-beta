@@ -106,6 +106,7 @@ adminMergeUsersRoutes.on(['GET', 'POST'], '/admin/merge_users.php', async (c) =>
              updated_at=MAX(points_wallets.updated_at, excluded.updated_at)`,
           [keepId, mergeId]
         );
+        await db.query('DELETE FROM points_wallets WHERE user_id=?', [mergeId]);
         // Ledger event keys are idempotency keys; retain one row per event key.
         await db.query(
           'DELETE FROM points_ledger WHERE user_id=? AND event_key IN (SELECT event_key FROM points_ledger WHERE user_id=?)',
