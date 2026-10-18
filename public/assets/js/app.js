@@ -74,7 +74,19 @@ async function authSubmitLogin() {
       sucEl.textContent = 'Signed in! Redirecting…';
       sucEl.style.display = '';
       setTimeout(() => {
-        window.location.href = window.__authRedirect || (window.__siteUrl + '/');
+        const destination = window.__authRedirect || (window.__siteUrl + '/');
+        const target = new URL(destination, window.location.href);
+        const current = new URL(window.location.href);
+        // A successful AJAX login must rebuild the server-rendered navigation
+        // so the Login / Sign Up buttons are replaced with the account menu.
+        if (target.origin === current.origin &&
+            target.pathname === current.pathname &&
+            target.search === current.search &&
+            target.hash === current.hash) {
+          window.location.reload();
+        } else {
+          window.location.assign(target.href);
+        }
       }, 600);
     } else {
       errEl.textContent = data.message || 'Invalid credentials.';
@@ -119,7 +131,18 @@ async function authSubmitSignup() {
       sucEl.textContent = 'Account created! Welcome to AniVault 🎌 Redirecting…';
       sucEl.style.display = '';
       setTimeout(() => {
-        window.location.href = window.__authRedirect || (window.__siteUrl + '/');
+        const destination = window.__authRedirect || (window.__siteUrl + '/');
+        const target = new URL(destination, window.location.href);
+        const current = new URL(window.location.href);
+        // Refresh server-rendered auth state after account creation.
+        if (target.origin === current.origin &&
+            target.pathname === current.pathname &&
+            target.search === current.search &&
+            target.hash === current.hash) {
+          window.location.reload();
+        } else {
+          window.location.assign(target.href);
+        }
       }, 800);
     } else {
       errEl.textContent = data.message || 'Registration failed.';
