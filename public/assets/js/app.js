@@ -83,7 +83,10 @@ async function authSubmitLogin() {
             target.pathname === current.pathname &&
             target.search === current.search &&
             target.hash === current.hash) {
-          window.location.reload();
+          // Add a one-time query marker so an intermediary cache cannot serve
+          // the pre-login HTML with guest navigation again.
+          target.searchParams.set('__auth_refresh', String(Date.now()));
+          window.location.replace(target.href);
         } else {
           window.location.assign(target.href);
         }
@@ -139,7 +142,10 @@ async function authSubmitSignup() {
             target.pathname === current.pathname &&
             target.search === current.search &&
             target.hash === current.hash) {
-          window.location.reload();
+          // Add a one-time query marker so an intermediary cache cannot serve
+          // the pre-login HTML with guest navigation again.
+          target.searchParams.set('__auth_refresh', String(Date.now()));
+          window.location.replace(target.href);
         } else {
           window.location.assign(target.href);
         }
