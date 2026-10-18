@@ -1,5 +1,13 @@
 // AnimeVault — Main JS
 
+// Remove the one-time cache-busting marker after a successful auth refresh.
+(() => {
+  const url = new URL(window.location.href);
+  if (!url.searchParams.has('__auth_refresh')) return;
+  url.searchParams.delete('__auth_refresh');
+  window.history.replaceState(window.history.state, '', url.pathname + url.search + url.hash);
+})();
+
 // ══════════════════════════════════════════════════════════════
 //  AUTH POPUP MODAL
 //  requireLogin()  — call instead of redirecting to login.php
