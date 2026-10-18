@@ -246,8 +246,6 @@ export async function getHoshikaAnimeEpisodes(
       for (const item of payload.items) {
         const number = Number(item?.number);
         const thumbnail = episodeThumbnailFrom(item);
-          ? item.thumbnail
-          : '';
         if (!Number.isInteger(number) || number < 1) continue;
         episodes.push({
           number,
