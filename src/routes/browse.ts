@@ -246,28 +246,28 @@ browseRoutes.get('/search', (c) => {
 
 // ── api/search_suggest.php — live search dropdown ─────────────────────────
 browseRoutes.get('/api/search_suggest.php', async (c) => {
-  const db = new Db(c.env.DB);
-  const mal = new MalAPI(c.env, c.env.API_CACHE, db);
   const q = (c.req.query('q') ?? '').trim();
-
-  if (q.length < 2) {
-    return c.json([], 200, { 'Cache-Control': 'public, max-age=60' });
+  if (q.length < 1) {
+    return c.json([], 200, { 'Cache-Control': 'no-store' });
   }
 
   try {
-    const result = await mal.searchAnime(q, 1);
-    const items = (result.data ?? []).slice(0, 4);
+    // Search suggestions now come from Hoshika only. Hoshika shortId is
+    // returned separately so it cannot be mistaken for a legacy MAL ID.
+    const { searchHoshikaAnime } = await import('../lib/hoshika-api');
+    const items = await searchHoshikaAnime(q, 4);
     const out = items.map((a) => ({
-      mal_id: a.mal_id,
-      title: a.title_english || a.title,
+      shortId: a.shortId,
+      title: a.title,
       type: a.type ?? '',
-      year: a.start_date ? a.start_date.substring(0, 4) : null,
-      score: a.score ? a.score.toFixed(1) : null,
-      image: a.images?.jpg?.image_url ?? '',
+      year: a.year ? String(a.year) : null,
+      score: a.score !== null ? a.score.toFixed(1) : null,
+      image: a.poster || a.cover || '',
+      source: 'hoshika',
     }));
-    return c.json(out, 200, { 'Cache-Control': 'public, max-age=60' });
+    return c.json(out, 200, { 'Cache-Control': 'no-store' });
   } catch {
-    return c.json([], 200, { 'Cache-Control': 'public, max-age=60' });
+    return c.json([], 200, { 'Cache-Control': 'no-store' });
   }
 });
 
