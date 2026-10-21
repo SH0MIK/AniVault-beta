@@ -502,17 +502,21 @@ export interface HoshikaHomeSections {
 }
 
 function findCatalogArray(root: any, keys: string[], depth = 0): any[] {
-  if (!root || typeof root !== 'object' || depth > 5) return [];
+  if (!root || typeof root !== 'object' || depth > 6) return [];
+  if (Array.isArray(root)) return root;
   for (const key of keys) {
     const value = root[key];
     if (Array.isArray(value)) return value;
     if (value && typeof value === 'object') {
+      for (const childKey of ['items', 'results', 'anime', 'entries', 'data']) {
+        if (Array.isArray(value[childKey])) return value[childKey];
+      }
       const nested = findCatalogArray(value, keys, depth + 1);
       if (nested.length) return nested;
     }
   }
   for (const value of Object.values(root)) {
-    if (value && typeof value === 'object' && !Array.isArray(value)) {
+    if (value && typeof value === 'object') {
       const nested = findCatalogArray(value, keys, depth + 1);
       if (nested.length) return nested;
     }
