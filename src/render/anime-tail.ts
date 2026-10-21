@@ -200,7 +200,7 @@ function buildEpCard(ep, animeId, cover, thumbMap, banner) {
   // Use admin-saved override thumbnail if available; fall back to the anime's
   // wide banner (landscape, matches the 16:9 card) before the portrait cover,
   // which only gets used if there's no banner either.
-  const thumb = (thumbMap && thumbMap[parseInt(epNum)]) || banner || cover;
+  const thumb = (thumbMap && thumbMap[parseInt(epNum)]) || ep.thumbnail || banner || cover;
 
   const div = document.createElement('a');
   div.href      = (window.__siteUrl || '') + '/watch?anime=' + animeId + '&ep=' + epNum;
