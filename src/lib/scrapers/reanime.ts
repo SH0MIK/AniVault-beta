@@ -741,8 +741,8 @@ async function resolveReanimeSeriesByTitle(title: string, altTitle?: string | nu
   const series = {
     animeId: selected.animeId,
     title: selected.item?.title?.english || selected.item?.title?.romaji || selected.animeId,
-    anilistId: Number(selected.item?.anilist_id || selected.detail?.anilist_id || malId || 0),
-    malId: selected.detail?.mal_id ? Number(selected.detail.mal_id) : (malId ? Number(malId) : null),
+    anilistId: Number(selected.item?.anilist_id || selected.item?.anilist || selected.detail?.anilist_id || selected.detail?.anilist || extractAnilistIdFromCover(selected.detail?.cover_image || selected.detail?.coverImage || selected.detail?.cover_image_url) || malId || 0),
+    malId: (selected.detail?.mal_id ?? selected.detail?.malId ?? selected.detail?.myanimelist_id) ? Number(selected.detail?.mal_id ?? selected.detail?.malId ?? selected.detail?.myanimelist_id) : (malId ? Number(malId) : null),
     subbed: Number.isFinite(selected.item?.subbed) ? selected.item.subbed : null,
     dubbed: Number.isFinite(selected.item?.dubbed) ? selected.item.dubbed : null,
     episodesCount: Number.isFinite(selected.item?.episodes) ? selected.item.episodes : null,
@@ -929,11 +929,11 @@ export async function getReanimeEpisodes(input: number | string | ReanimeEpisode
     : await resolveReanimeSeriesByTitle(title!, altTitle, malId);
   const [episodes, anizip] = await Promise.all([fetchEpisodesList(series.animeId), fetchAnizip(series.anilistId || alId || 0)]);
   const merged = episodes.map((ep) => {
-    const num = Number(ep.episode_number);
+    const num = Number(ep.episode_number ?? ep.episodeNumber ?? ep.episode ?? ep.number);
     const meta = anizip?.episodes?.[String(num)] ?? null;
     return {
       num,
-      id: encodePayload({ anilistId: alId, malId, title, altTitle, ep: num }),
+      id: encodePayload({ anilistId: series.anilistId || alId, malId: series.malId || malId, title: title || series.title, altTitle: altTitle || series.title, ep: num }),
       title: meta?.title?.en || meta?.title?.['x-jat'] || ep.title || `Episode ${num}`,
       titleJapanese: meta?.title?.ja || ep.title_japanese || null,
       titleRomanji: meta?.title?.['x-jat'] || ep.title_romanji || null,
