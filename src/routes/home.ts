@@ -142,9 +142,18 @@ homeRoutes.get('/', async (c) => {
     } catch {
       watchHistory = [];
     }
-    // Continue Watching thumbnails use admin-saved overrides only during
-    // the Hoshika migration. Missing images use the card placeholder; legacy
-    // scraper caches are intentionally not read or repopulated.
+    // Resolve portrait posters from Hoshika for history cards. The legacy
+    // anime_image field may contain a landscape banner, so never use it as a
+    // poster fallback.
+    const historyPosters: Record<number, string> = {};
+    await Promise.all(watchHistory.map(async (row) => {
+      try {
+        const identity = await findIdentityByLegacyMalId(db, row.anime_id);
+        if (!identity?.hoshika_short_id) return;
+        const anime = await getHoshikaAnimeById(identity.hoshika_short_id);
+        if (anime?.poster) historyPosters[row.anime_id] = anime.poster;
+      } catch { /* keep a neutral placeholder if Hoshika has no poster */ }
+    }));
     if (watchHistory.length > 0) {
       try {
         const pairs = watchHistory.map(() => '(?, ?)').join(', ');
@@ -297,7 +306,7 @@ ${heroSliderScript(heroPool.length)}
           </div>
         </div>
         <div class="scroll-row" id="row-history">
-          ${watchHistory.map((hRow) => renderContinueWatchingCard(hRow, siteUrl, episodeThumbOverrides)).join('')}
+          ${watchHistory.map((hRow) => renderContinueWatchingCard(hRow, siteUrl, episodeThumbOverrides, historyPosters[hRow.anime_id] || '')).join('')}
         </div>
       </section>
       ${continueWatchingScript(siteUrl)}`;
@@ -369,14 +378,14 @@ ${heroSliderScript(heroPool.length)}
   return response;
 });
 
-function renderContinueWatchingCard(hRow: WatchHistoryRow, siteUrl: string, episodeThumbOverrides: Record<string, string>): string {
+function renderContinueWatchingCard(hRow: WatchHistoryRow, siteUrl: string, episodeThumbOverrides: Record<string, string>, animePoster = ''): string {
   const watchUrl = `${siteUrl}/watch?anime=${hRow.anime_id}&ep=${hRow.episode_num}`;
   // Prefer admin-saved episode artwork, then retain existing episode/anime
   // artwork already stored in watch_history. This avoids blank cards for
   // history created before the Hoshika migration.
   const thumbSrc = episodeThumbOverrides[`${hRow.anime_id}:${hRow.episode_num}`]
     || hRow.ep_thumb
-    || hRow.anime_image
+    || animePoster
     || '';
   const epNum = hRow.episode_num;
   const animeTitle = h(hRow.anime_title || `Anime #${hRow.anime_id}`);
