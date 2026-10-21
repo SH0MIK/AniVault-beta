@@ -61,15 +61,19 @@ function posterFrom(item: any): string {
   const poster = obj(x.poster);
   const cover = obj(x.cover);
   const mainPicture = obj(x.main_picture);
+  const artwork = obj(x.artwork);
   return imageUrl(
-    // Prefer a CDN-provided medium/small variant for card posters instead of
-    // downloading the original artwork when Hoshika exposes multiple sizes.
-    poster.medium, poster.small, images.poster_medium, images.poster_small,
+    // Hoshika catalog feeds have used both poster/cover objects and flat
+    // posterImage/coverImage URL fields. Accept both without changing source.
+    poster.medium, poster.small, poster.url, poster.src, poster.large, poster.original,
+    x.posterImage, x.poster_image, x.poster_image_url, x.poster_url, x.posterUrl,
+    x.coverImage, x.cover_image, x.cover_image_url, x.cover_url, x.coverUrl,
+    images.posterImage, images.poster_image, images.poster_medium, images.poster_small,
     images.medium, images.small, mainPicture.medium, mainPicture.small,
-    x.poster_url, x.posterUrl, x.cover_url, x.coverUrl, x.cover_image, x.coverImage,
     poster, cover, images.poster, images.cover, images.cover_image, images.poster_url,
     images.original, images.large, images.medium, mainPicture.large,
-    x.image, x.image_url, x.thumbnail,
+    x.image, x.imageUrl, x.image_url, x.thumbnail, x.thumbnailUrl, x.thumbnail_url,
+    artwork.poster, artwork.cover, artwork.image, artwork,
   );
 }
 
@@ -77,9 +81,12 @@ function coverFrom(item: any): string {
   const x = obj(item);
   const images = obj(x.images);
   const banner = obj(x.banner);
+  const artwork = obj(x.artwork);
   return imageUrl(
-    x.banner_url, x.bannerUrl, x.bannerImage, x.backdrop_url, x.backdropUrl,
+    x.bannerImage, x.banner_image, x.banner_url, x.bannerUrl,
+    x.backdrop, x.backdropImage, x.backdrop_image, x.backdrop_url, x.backdropUrl,
     banner, images.banner, images.backdrop, images.banner_url, images.backdrop_url,
+    artwork.banner, artwork.backdrop,
   );
 }
 
