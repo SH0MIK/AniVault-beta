@@ -603,21 +603,53 @@ async function fetchAnizip(anilistId: number): Promise<any> {
 }
 
 async function searchReanime(query: string): Promise<any[]> {
-  const res = await axios.get(`${BASE}/api/v1/search`, {
-    params: { q: query, limit: 10 },
-    headers: HEADERS,
-    timeout: 15000,
-  });
-  return Array.isArray(res.data?.results) ? res.data.results : [];
+  // ReAnime's public API moved from /api/v1/search to /api/search.
+  // Keep the legacy path as a fallback, and normalize both response shapes.
+  for (const path of ['/api/search', '/api/v1/search']) {
+    try {
+      const res = await axios.get(`${BASE}${path}`, {
+        params: { q: query, limit: 10 },
+        headers: HEADERS,
+        timeout: 15000,
+      });
+      const payload = res.data;
+      const rows = Array.isArray(payload) ? payload
+        : Array.isArray(payload?.results) ? payload.results
+        : Array.isArray(payload?.data) ? payload.data
+        : Array.isArray(payload?.anime) ? payload.anime : [];
+      if (rows.length) {
+        return rows.map((item: any) => {
+          const id = item?.anime_id ?? item?.slug ?? item?.id ?? item?.animeId;
+          const rawTitle = item?.title;
+          const title = typeof rawTitle === 'string'
+            ? { english: rawTitle, romaji: rawTitle }
+            : rawTitle ?? { english: item?.title_english ?? item?.name ?? '', romaji: item?.title_romaji ?? item?.name ?? '' };
+          return { ...item, anime_id: id == null ? undefined : String(id), title };
+        }).filter((item: any) => item.anime_id && (item.title?.english || item.title?.romaji));
+      }
+    } catch {
+      // Try the other known API version.
+    }
+  }
+  return [];
 }
 
 async function fetchAnimeDetail(animeId: string): Promise<any | null> {
-  try {
-    const res = await axios.get(`${BASE}/api/v1/anime/${encodeURIComponent(animeId)}`, { headers: HEADERS, timeout: 15000 });
-    return res.data;
-  } catch {
-    return null;
+  // Current ReAnime exposes the anime object through /api/watch/{slug}/1.
+  // The older /api/v1/anime/{slug} endpoint remains a compatibility fallback.
+  for (const path of [
+    `/api/watch/${encodeURIComponent(animeId)}/1`,
+    `/api/v1/anime/${encodeURIComponent(animeId)}`,
+  ]) {
+    try {
+      const res = await axios.get(`${BASE}${path}`, { headers: HEADERS, timeout: 15000 });
+      const data = res.data?.anime ?? res.data?.data ?? res.data;
+      if (data && typeof data === 'object') return data;
+    } catch {
+      // Try the next known endpoint.
+    }
   }
+  return null;
 }
 
 function extractAnilistIdFromCover(coverImage: any): number | null {
@@ -720,12 +752,27 @@ async function resolveReanimeSeriesByTitle(title: string, altTitle?: string | nu
 }
 
 async function fetchEpisodesList(animeId: string): Promise<any[]> {
-  const res = await axios.get(`${BASE}/api/v1/anime/${encodeURIComponent(animeId)}/episodes`, {
-    params: { limit: 2000 },
-    headers: HEADERS,
-    timeout: 15000,
-  });
-  return Array.isArray(res.data?.data) ? res.data.data : [];
+  // Current ReAnime uses /api/episodes/{slug}; support the older v1 route too.
+  for (const path of [
+    `/api/episodes/${encodeURIComponent(animeId)}`,
+    `/api/v1/anime/${encodeURIComponent(animeId)}/episodes`,
+  ]) {
+    try {
+      const res = await axios.get(`${BASE}${path}`, {
+        params: { limit: 2000 },
+        headers: HEADERS,
+        timeout: 15000,
+      });
+      const payload = res.data;
+      const rows = Array.isArray(payload) ? payload
+        : Array.isArray(payload?.data) ? payload.data
+        : Array.isArray(payload?.episodes) ? payload.episodes : [];
+      if (rows.length) return rows;
+    } catch {
+      // Try the next known endpoint.
+    }
+  }
+  return [];
 }
 
 function normalizeSubtitles(raw: any[], masterUrl: string): ReanimeSubtitle[] {
