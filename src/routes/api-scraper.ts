@@ -389,7 +389,7 @@ scraperRoutes.get('/api/server_check_stream.php', async (c) => {
 
       const results: Record<string, boolean> = {};
       const checks: [string, Promise<boolean>][] = [
-        ['volt', checkSenshiUp(base, malId, epNum)],
+        ['volt', checkSenshiUp(base, malId, epNum, c.env.SCRAPER_API_KEY || '')],
         ['warp', checkEmbedUp(`https://tryembed.us.cc/embed/anime/${anilistId}/${epNum}/sub`)],
         ['ayame', checkEmbedUp(`https://vidnest.fun/animepahe/${anilistId}/${epNum}/sub`)],
       ];
