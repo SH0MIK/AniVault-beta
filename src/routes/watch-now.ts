@@ -29,11 +29,11 @@ watchNowRoutes.get('/watch-now', async (c) => {
   const page = Math.max(1, parseInt(c.req.query('page') ?? '1', 10) || 1);
   const offset = (page - 1) * perPage;
 
-  const total = await db.count('SELECT COUNT(DISTINCT anime_id) as cnt FROM episode_videos WHERE is_active = 1');
+  const total = await db.count('SELECT COUNT(DISTINCT ev.anime_id) as cnt FROM episode_videos ev JOIN anime_identity_map im ON im.legacy_mal_id = ev.anime_id AND im.verified = 1 WHERE ev.is_active = 1');
   const totalPages = total > 0 ? Math.ceil(total / perPage) : 1;
 
   const rows = await db.fetchAll<{ anime_id: number }>(
-    'SELECT DISTINCT anime_id FROM episode_videos WHERE is_active = 1 ORDER BY updated_at DESC LIMIT ? OFFSET ?',
+    'SELECT DISTINCT ev.anime_id FROM episode_videos ev JOIN anime_identity_map im ON im.legacy_mal_id = ev.anime_id AND im.verified = 1 WHERE ev.is_active = 1 ORDER BY MAX(ev.updated_at) DESC LIMIT ? OFFSET ?',
     [perPage, offset]
   );
   const animeList = (await Promise.all(rows.map(async (row): Promise<NormalisedAnime | null> => {
