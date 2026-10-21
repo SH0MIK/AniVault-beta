@@ -16,7 +16,6 @@ import { Auth } from '../lib/auth';
 import { h } from '../lib/helpers';
 import { findIdentityByLegacyMalId } from '../lib/anime-identity';
 import { getHoshikaAnimeById, getHoshikaAnimeEpisodesById } from '../lib/hoshika-api';
-import { MalAPI } from '../lib/mal-api';
 import { AnimeTracker } from '../lib/tracker';
 import { getEpisodeThumbnail } from '../lib/episode-thumb';
 
@@ -680,43 +679,19 @@ scraperRoutes.get('/api/anime_episodes.php', async (c) => {
   });
 });
 
-// ── api/anime_characters.php ────────────────────────────────────────────────
-// Same reasoning as anime_episodes.php above, for the character grid tab.
-scraperRoutes.get('/api/anime_characters.php', async (c) => {
-  const animeId = parseInt(c.req.query('anime') ?? '0', 10) || 0;
-  if (!animeId) return c.json({ error: 'Missing anime' }, 400);
-  const db = new Db(c.env.DB);
-  const mal = new MalAPI(c.env, c.env.API_CACHE, db);
-  const result = await mal.getAnimeCharacters(animeId);
-  return c.json(result);
-});
+// Hoshika's currently confirmed public API does not expose character, theme-song,
+// trailer, or picture-gallery endpoints. Return explicit unavailable states;
+// never substitute MAL/Jikan catalogue data.
+for (const [path, label] of [
+  ['/api/anime_characters.php', 'Character data'],
+  ['/api/anime_themes.php', 'Theme-song data'],
+  ['/api/anime_videos.php', 'Trailer data'],
+  ['/api/anime_pictures.php', 'Picture-gallery data'],
+] as const) {
+  scraperRoutes.get(path, (c) => {
+    const animeId = parseInt(c.req.query('anime') ?? '0', 10) || 0;
+    if (!animeId) return c.json({ error: 'Missing anime' }, 400);
+    return c.json({ data: [], unavailable: true, message: label + ' is not available from the confirmed Hoshika API.' }, 501);
+  });
+}
 
-// ── api/anime_themes.php, anime_videos.php, anime_pictures.php ─────────────
-// Same same-origin-proxy reasoning as the two routes above, for the new
-// trailer/theme-song/picture-gallery sections.
-scraperRoutes.get('/api/anime_themes.php', async (c) => {
-  const animeId = parseInt(c.req.query('anime') ?? '0', 10) || 0;
-  if (!animeId) return c.json({ error: 'Missing anime' }, 400);
-  const db = new Db(c.env.DB);
-  const mal = new MalAPI(c.env, c.env.API_CACHE, db);
-  const result = await mal.getAnimeThemes(animeId);
-  return c.json(result);
-});
-
-scraperRoutes.get('/api/anime_videos.php', async (c) => {
-  const animeId = parseInt(c.req.query('anime') ?? '0', 10) || 0;
-  if (!animeId) return c.json({ error: 'Missing anime' }, 400);
-  const db = new Db(c.env.DB);
-  const mal = new MalAPI(c.env, c.env.API_CACHE, db);
-  const result = await mal.getAnimeVideos(animeId);
-  return c.json(result);
-});
-
-scraperRoutes.get('/api/anime_pictures.php', async (c) => {
-  const animeId = parseInt(c.req.query('anime') ?? '0', 10) || 0;
-  if (!animeId) return c.json({ error: 'Missing anime' }, 400);
-  const db = new Db(c.env.DB);
-  const mal = new MalAPI(c.env, c.env.API_CACHE, db);
-  const result = await mal.getAnimePictures(animeId);
-  return c.json(result);
-});
