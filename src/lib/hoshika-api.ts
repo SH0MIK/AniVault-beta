@@ -465,8 +465,28 @@ export async function getHoshikaAnimeById(shortId: string | number): Promise<Hos
     if (!response.ok) return null;
     const payload: any = await response.json();
     if (payload?.ok === false) return null;
-    const record = normaliseHoshikaAnime(unwrap(payload));
-    return record?.shortId ? record : null;
+    const detail: any = unwrap(payload);
+    // Some public detail responses omit the top-level catalog identity fields
+    // while still including the current title in watchOrder. Use that exact
+    // shortId entry as a metadata supplement; never match by title.
+    const watchOrder = Array.isArray(detail?.watchOrder) ? detail.watchOrder : [];
+    const currentEntry = watchOrder.find((entry: any) => String(entry?.shortId ?? '') === id && entry?.current)
+      ?? watchOrder.find((entry: any) => String(entry?.shortId ?? '') === id)
+      ?? null;
+    const merged = {
+      ...(currentEntry ?? {}),
+      ...detail,
+      shortId: detail?.shortId ?? detail?.short_id ?? id,
+      title: detail?.title ?? currentEntry?.title,
+      titleEnglish: detail?.titleEnglish ?? currentEntry?.titleEnglish,
+      titleRomaji: detail?.titleRomaji ?? currentEntry?.titleRomaji,
+      slug: detail?.slug ?? currentEntry?.slug,
+      coverImage: detail?.coverImage ?? currentEntry?.coverImage,
+      format: detail?.format ?? currentEntry?.format,
+      year: detail?.year ?? currentEntry?.year,
+    };
+    const record = normaliseHoshikaAnime(merged);
+    return record?.shortId ? { ...record, raw: merged } : null;
   } catch (error) {
     console.warn('[hoshika] Detail lookup failed:', String(error));
     return null;
