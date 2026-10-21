@@ -33,7 +33,7 @@ watchNowRoutes.get('/watch-now', async (c) => {
   const totalPages = total > 0 ? Math.ceil(total / perPage) : 1;
 
   const rows = await db.fetchAll<{ anime_id: number }>(
-    'SELECT DISTINCT ev.anime_id FROM episode_videos ev JOIN anime_identity_map im ON im.legacy_mal_id = ev.anime_id AND im.verified = 1 WHERE ev.is_active = 1 ORDER BY MAX(ev.updated_at) DESC LIMIT ? OFFSET ?',
+    'SELECT ev.anime_id FROM episode_videos ev JOIN anime_identity_map im ON im.legacy_mal_id = ev.anime_id AND im.verified = 1 WHERE ev.is_active = 1 GROUP BY ev.anime_id ORDER BY MAX(ev.updated_at) DESC LIMIT ? OFFSET ?',
     [perPage, offset]
   );
   const animeList = (await Promise.all(rows.map(async (row): Promise<NormalisedAnime | null> => {
