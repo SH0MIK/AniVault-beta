@@ -3,11 +3,9 @@ import type { Env } from '../index';
 import { Db } from '../lib/db';
 import { Session } from '../lib/session';
 import { Auth } from '../lib/auth';
-import { MalAPI } from '../lib/mal-api';
-import { buildCardMetaMap } from '../lib/anime-card';
+import { searchHoshikaAnime, getHoshikaAnimeById, getHoshikaAnimeEpisodesById } from '../lib/hoshika-api';
+import { findIdentityByLegacyMalId } from '../lib/anime-identity';
 import { getUserAnimeStatuses } from '../lib/user-list';
-import { DubStatus } from '../lib/dub-status';
-import { EpisodeAir } from '../lib/episode-air';
 
 export const mobileContentRoutes = new Hono<{ Bindings: Env }>();
 
@@ -15,34 +13,80 @@ async function buildCtx(c: any) {
   const db = new Db(c.env.DB); const lifetime = Number(c.env.SESSION_LIFETIME_SECONDS ?? 86400);
   const session = await Session.load(c, db, lifetime);
   const auth = new Auth(db, session, c.env as any, c.req.header('cf-connecting-ip') ?? 'unknown');
-  const mal = new MalAPI(c.env as any, c.env.API_CACHE, db); return { db, session, auth, mal };
+  return { db, session, auth };
 }
 
 mobileContentRoutes.get('/api/mobile/browse', async (c) => {
-  const { db, auth, mal } = await buildCtx(c); const q = (c.req.query('q') ?? '').trim(); const status = c.req.query('status') ?? ''; const type = c.req.query('type') ?? '';
+  const q = (c.req.query('q') ?? '').trim();
   const page = Math.max(1, parseInt(c.req.query('page') ?? '1', 10) || 1);
-  const genres = c.req.queries('genres[]')?.map((g) => parseInt(g, 10)).filter((n) => !Number.isNaN(n)) ?? [];
-  let result: { data: any[]; pagination: any };
-  if (q) result = await mal.searchAnime(q, page, type, status); else if (genres.length > 0) result = await mal.getAnimeByGenres(genres, page); else result = await mal.getTopAnime('bypopularity', page);
-  const items = result.data ?? []; const cardMeta = await buildCardMetaMap(db, items); const currentUser = auth.check() ? await auth.getCurrentUser() : null; const userStatuses = currentUser ? await getUserAnimeStatuses(db, currentUser.id) : {};
-  const data = items.map((a: any) => ({ id: a.mal_id, title: a.title_english && a.title_english !== a.title ? a.title_english : a.title, image: a.images?.jpg?.large_image_url ?? a.images?.jpg?.image_url ?? '', score: a.score ?? null, type: a.type ?? '', episodes: a.episodes ?? 0, airedInfo: cardMeta.get(a.mal_id)?.airedInfo ?? null, dubbedLangs: cardMeta.get(a.mal_id)?.dubbedLangs ?? [], userStatus: userStatuses[a.mal_id] ?? null }));
-  return c.json({ data, pagination: result.pagination ?? {}, genres: mal.getAnimeGenres().data });
+  // Hoshika currently exposes public search but not the old MAL genre/top
+  // catalogue endpoints. Never silently fall back to another anime provider.
+  if (!q) return c.json({
+    data: [], pagination: { current_page: page, last_visible_page: 1 },
+    genres: [], source: 'hoshika',
+    message: 'Search by title while the Hoshika catalogue filters are being migrated.',
+  }, 200, { 'Cache-Control': 'no-store' });
+  const items = await searchHoshikaAnime(q, 50);
+  const data = items.map((a) => ({
+    id: a.shortId, shortId: a.shortId, title: a.title,
+    image: a.poster, score: a.score, type: a.type, episodes: a.episodes ?? 0,
+    status: a.status, year: a.year, genres: a.genres, source: 'hoshika',
+  }));
+  return c.json({
+    data, pagination: { current_page: page, last_visible_page: 1, has_next_page: false },
+    genres: [], source: 'hoshika',
+  }, 200, { 'Cache-Control': 'no-store' });
 });
 
 mobileContentRoutes.get('/api/mobile/anime/:id', async (c) => {
-  const { db, auth, mal } = await buildCtx(c); const id = parseInt(c.req.param('id'), 10) || 0; if (!id) return c.json({ success: false, message: 'Invalid anime id.' }, 400);
-  const result = await mal.getAnime(id); const anime = result.data; if (!anime) return c.json({ success: false, message: 'Anime not found.' }, 404);
-  const isAiring = anime.status === 'Currently Airing'; let airedInfo = null; if (isAiring) ({ info: airedInfo } = await EpisodeAir.getCachedAny(db, id));
-  const totalEps = isAiring ? (airedInfo?.total ?? anime.episodes ?? 0) : (anime.episodes ?? 0); const airedSoFar = isAiring ? (airedInfo?.aired ?? null) : null; const dubbedLangs = (await DubStatus.getForMany(db, [id])).get(id) ?? [];
-  const currentUser = auth.check() ? await auth.getCurrentUser() : null; let userEntry = null; let isFavorite = false;
-  if (currentUser) { const { AnimeTracker } = await import('../lib/tracker'); userEntry = await AnimeTracker.getUserEntry(db, currentUser.id, id); isFavorite = await AnimeTracker.isFavorite(db, currentUser.id, id); }
-  const seriesEntries = (anime.related_anime ?? []).filter((rel: any) => rel).map((rel: any) => ({ id: rel?.entry?.mal_id ?? 0, title: rel?.entry?.title ?? '', type: rel?.relation_type_formatted ?? '' }));
-  return c.json({ success: true, anime: { id: anime.mal_id, title: anime.title_english && anime.title_english !== anime.title ? anime.title_english : anime.title, titleJapanese: anime.title_japanese ?? null, image: anime.images?.jpg?.large_image_url ?? '', synopsis: anime.synopsis ?? '', score: anime.score ?? null, status: anime.status ?? '', type: anime.type ?? '', genres: (anime.genres ?? []).map((g: any) => ({ id: g.mal_id, name: g.name })), totalEpisodes: totalEps, airedSoFar, isAiring, dubbedLangs, related: seriesEntries }, userEntry, isFavorite });
+  const { db, auth } = await buildCtx(c);
+  const id = parseInt(c.req.param('id'), 10) || 0;
+  if (!id) return c.json({ success: false, message: 'Invalid legacy anime id.' }, 400);
+  const identity = await findIdentityByLegacyMalId(db, id).catch(() => null);
+  if (identity?.verified !== 1 || !identity.hoshika_short_id) {
+    return c.json({ success: false, message: 'This legacy anime ID has no verified Hoshika mapping.', source: 'hoshika' }, 404, { 'Cache-Control': 'no-store' });
+  }
+  const anime = await getHoshikaAnimeById(identity.hoshika_short_id);
+  if (!anime) return c.json({ success: false, message: 'Anime not found in Hoshika.', source: 'hoshika' }, 404, { 'Cache-Control': 'no-store' });
+  const currentUser = auth.check() ? await auth.getCurrentUser() : null;
+  let userEntry = null; let isFavorite = false;
+  if (currentUser) {
+    const { AnimeTracker } = await import('../lib/tracker');
+    userEntry = await AnimeTracker.getUserEntry(db, currentUser.id, id);
+    isFavorite = await AnimeTracker.isFavorite(db, currentUser.id, id);
+  }
+  return c.json({
+    success: true,
+    anime: {
+      id, shortId: anime.shortId, title: anime.title,
+      titleJapanese: anime.titleJapanese || null, image: anime.poster,
+      cover: anime.cover, synopsis: anime.synopsis, score: anime.score,
+      status: anime.status, type: anime.type,
+      genres: anime.genres.map((name) => ({ name })),
+      totalEpisodes: anime.episodes ?? 0, airedSoFar: null,
+      isAiring: /airing/i.test(anime.status), dubbedLangs: [],
+      related: [],
+    },
+    userEntry, isFavorite, source: 'hoshika',
+  }, 200, { 'Cache-Control': 'no-store' });
 });
 
 mobileContentRoutes.get('/api/mobile/anime/:id/episodes', async (c) => {
-  const { mal } = await buildCtx(c); const id = parseInt(c.req.param('id'), 10) || 0; const page = Math.max(1, parseInt(c.req.query('page') ?? '1', 10) || 1); if (!id) return c.json({ success: false, message: 'Invalid anime id.' }, 400);
-  const result = await mal.getAnimeEpisodes(id, page); return c.json({ success: true, data: result.data ?? [], pagination: result.pagination ?? {} });
+  const { db } = await buildCtx(c);
+  const id = parseInt(c.req.param('id'), 10) || 0;
+  if (!id) return c.json({ success: false, message: 'Invalid legacy anime id.' }, 400);
+  const identity = await findIdentityByLegacyMalId(db, id).catch(() => null);
+  if (identity?.verified !== 1 || !identity.hoshika_short_id) {
+    return c.json({ success: false, message: 'This legacy anime ID has no verified Hoshika mapping.', source: 'hoshika' }, 404, { 'Cache-Control': 'no-store' });
+  }
+  const episodes = await getHoshikaAnimeEpisodesById(identity.hoshika_short_id);
+  if (!episodes) return c.json({ success: false, message: 'Episode data unavailable from Hoshika.', source: 'hoshika' }, 502, { 'Cache-Control': 'no-store' });
+  const data = episodes.map((ep) => ({
+    mal_id: ep.number, episode: ep.number, title: ep.title,
+    aired: ep.aired, filler: ep.filler, recap: ep.recap,
+    images: { jpg: { image_url: ep.thumbnail, small_image_url: ep.thumbnail } },
+  }));
+  return c.json({ success: true, data, pagination: { current_page: 1, last_visible_page: 1, has_next_page: false }, source: 'hoshika' }, 200, { 'Cache-Control': 'no-store' });
 });
 
 mobileContentRoutes.get('/api/mobile/profile', async (c) => {
