@@ -20,7 +20,6 @@ import { continueWatchingScript, heroSliderScript, rowNavScript } from '../rende
 import type { NormalisedAnime } from '../lib/mal-api';
 import { getBannerData } from '../lib/settings';
 import { getAnimeEpisodeThumbnails } from '../lib/episode-thumb';
-import { getHomepageSnapshot } from '../lib/home-cache';
 
 export const homeRoutes = new Hono<{ Bindings: Env }>();
 
@@ -67,31 +66,11 @@ homeRoutes.get('/', async (c) => {
   const mal = new MalAPI(c.env, c.env.API_CACHE, db);
   const siteUrl = c.env.SITE_URL;
 
-  // Homepage API sections are served from the D1 snapshot. This keeps
-  // AniList/MAL completely off the normal homepage request path once the
-  // cache has been populated. If the cache is genuinely empty (first deploy
-  // before the scheduled job/admin refresh), keep the old live fallback so
-  // the homepage still renders instead of showing empty rows.
-  const homepageSnapshot = await getHomepageSnapshot(db);
-  let topList: NormalisedAnime[];
-  let upcomingList: NormalisedAnime[];
-
-  if (homepageSnapshot) {
-    topList = homepageSnapshot.popular.slice(0, 12);
-    upcomingList = homepageSnapshot.upcoming.slice(0, 8);
-  } else {
-    const [topAnime, upcoming] = await Promise.all([
-      mal.getTopAnime('bypopularity', 1),
-      mal.getSeasonUpcoming(),
-    ]);
-    topList = (topAnime.data ?? []).slice(0, 12);
-    upcomingList = (upcoming.data ?? []).slice(0, 8);
-  }
-
-  // Trending/seasonal is intentionally not loaded on the homepage.
-  // Resolve only the sections that are actually rendered.
-  const homepageArtItems = [...topList, ...upcomingList];
-  await mal.prefetchHoshikaArtForCards(homepageArtItems);
+  // Hoshika does not currently expose a verified popularity/upcoming feed.
+  // Do not reuse stale MAL/AniList homepage snapshots or fall back to them.
+  // Search and detail pages remain available through the Hoshika-only routes.
+  const topList: NormalisedAnime[] = [];
+  const upcomingList: NormalisedAnime[] = [];
 
   // Watch Now — anime that have episodes available in episode_videos
   let watchNowList: any[] = [];
@@ -99,9 +78,8 @@ homeRoutes.get('/', async (c) => {
     const rows = await db.fetchAll<{ anime_id: number }>(
       'SELECT DISTINCT anime_id FROM episode_videos WHERE is_active = 1 ORDER BY updated_at DESC LIMIT 12'
     );
-    // Watch Now is a homepage card row too. Resolve its poster art directly
-    // from TMDB using the same anime-title matching/filtering as the scraper;
-    // Railway is not involved in the homepage request path.
+    // Watch Now remains keyed by legacy IDs; until a verified Hoshika identity
+    // exists in the rendered feed, do not guess a catalog card from numeric IDs.
     const snapshotAnime = [...topList, ...upcomingList];
     const snapshotById = new Map(snapshotAnime.map((anime) => [anime.mal_id, anime]));
     watchNowList = rows
@@ -277,6 +255,9 @@ homeRoutes.get('/', async (c) => {
     heroLogos = heroPool.map(() => '');
     heroCovers = heroPool.map((a) => imageMap.get(a.mal_id) || '');
   }
+  if (heroPool.length === 0) {
+    heroPool = [];
+  }
   // Preload slide 0's LCP image so it starts downloading during <head> parsing.
   if (heroPool.length > 0) {
     const p0 = heroPool[0];
@@ -316,7 +297,7 @@ ${heroSliderScript(heroPool.length)}
   }
 
   // ── Genre bar ────────────────────────────────────────────────────────────
-  const genreList = mal.getAnimeGenres().data;
+  const genreList: Array<{ mal_id: number; name: string }> = [];
   html += `
   <div class="genre-nav-wrap">
     <button class="btn btn-ghost btn-sm btn-icon genre-nav-btn prev" data-target="genre-bar" data-dir="prev" aria-label="Previous genres">${icon('chevron-left', 'icon-small')}</button>
