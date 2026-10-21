@@ -301,11 +301,20 @@ ${heroSliderScript(heroPool.length)}
       </section>`;
   }
 
-  html += `
+  if (topList.length > 0) {
+    html += `
       <section class="content-section">
         ${sectionHeader('Most Popular', 'row-popular', `${siteUrl}/top`, 'View Full Rankings')}
         <div class="scroll-row" id="row-popular">${topList.map((a) => renderAnimeCard(a, siteUrl, userStatuses[a.mal_id] ?? null, cardMeta.get(a.mal_id), transformHomepageCardImage)).join('')}</div>
       </section>`;
+  } else {
+    html += `
+      <section class="content-section">
+        <h2 class="section-title">Most Popular</h2>
+        <p class="text-muted">Hoshika's popularity feed is not available yet. Search titles to explore the catalog.</p>
+        <a class="section-link" href="${siteUrl}/browse">Search Anime ${icon('arrow-right', 'icon-small')}</a>
+      </section>`;
+  }
 
   if (upcomingList.length > 0) {
     html += `
@@ -318,12 +327,12 @@ ${heroSliderScript(heroPool.length)}
   html += `
     </div>
 
-    <aside>
+    ${topList.length > 0 ? `<aside>
       <div class="sidebar-widget">
         <div class="sidebar-widget-header">${icon('trophy', 'icon-small')} Top 10 Ranked</div>
         ${topList.slice(0, 10).map((a, i) => renderSidebarItem(a, i + 1, siteUrl)).join('')}
       </div>
-    </aside>
+    </aside>` : ''}
   </div>`;
 
   html += `</div>`;
