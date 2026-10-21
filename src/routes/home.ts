@@ -435,7 +435,8 @@ function renderHeroSlide(a: NormalisedAnime, i: number, siteUrl: string, banner?
   logo = originalLogo ? resizeHeroImageUrl(originalLogo, 420, 146, 'contain', 65) : '';
   const desc = a.synopsis || '';
   const genres = (a.genres || []).slice(0, 3);
-  const aurl = `${siteUrl}/anime?id=${a.mal_id}`;
+  const hoshikaId = (a as NormalisedAnime & { hoshika_short_id?: string }).hoshika_short_id;
+  const aurl = hoshikaId ? `${siteUrl}/anime?id=${encodeURIComponent(hoshikaId)}` : `${siteUrl}/anime?id=${a.mal_id}`;
 
   // Same scraper-backed count as the card grids below (see anime-card.ts) —
   // cache-only, so this never blocks the homepage render.
@@ -483,7 +484,8 @@ function renderSidebarItem(a: NormalisedAnime, rank: number, siteUrl: string): s
   // never rewrite self-hosted/custom artwork URLs.
   const originalImg = a.images?.jpg?.image_url || '';
   const img = originalImg ? transformHomepageCardImage(originalImg, 96) : '';
-  const aurl = `${siteUrl}/anime?id=${a.mal_id}`;
+  const hoshikaId = (a as NormalisedAnime & { hoshika_short_id?: string }).hoshika_short_id;
+  const aurl = hoshikaId ? `${siteUrl}/anime?id=${encodeURIComponent(hoshikaId)}` : `${siteUrl}/anime?id=${a.mal_id}`;
 
   return `
 <a class="sidebar-item" href="${aurl}">
