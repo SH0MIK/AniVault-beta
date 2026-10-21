@@ -581,8 +581,8 @@ export async function getHoshikaCatalog(options: {
   const root = unwrap(payload ?? {});
   const rawItems = resultsFrom(payload ?? {});
   const items = normalizeCatalogArray(rawItems.length ? rawItems : findCatalogArray(root, ['items', 'results', 'anime', 'catalog']));
-  const total = numberOrNull(root?.total ?? root?.pagination?.total ?? payload?.total) ?? items.length;
-  const totalPages = numberOrNull(root?.totalPages ?? root?.total_pages ?? root?.pagination?.totalPages ?? payload?.totalPages) ?? (total ? Math.max(1, Math.ceil(total / Math.max(items.length, 1))) : 1);
+  const total = numberOrNull(root?.total ?? root?.pagination?.total ?? root?.pagination?.items?.total ?? root?.items?.total ?? payload?.total) ?? items.length;
+  const totalPages = numberOrNull(root?.totalPages ?? root?.total_pages ?? root?.lastPage ?? root?.last_page ?? root?.last_visible_page ?? root?.pagination?.totalPages ?? root?.pagination?.total_pages ?? root?.pagination?.lastPage ?? root?.pagination?.last_page ?? root?.pagination?.last_visible_page ?? payload?.totalPages) ?? (total ? Math.max(1, Math.ceil(total / Math.max(items.length, 1))) : 1);
   return { items, total, totalPages };
 }
 
