@@ -386,8 +386,8 @@ ${rowNavScript()}
 <script>window.__totalEps  = ${JSON.stringify(totalEps)};</script>
 <script>window.__animeCover = ${JSON.stringify(image)};</script>
 <script>window.__animeBanner = ${JSON.stringify(backdrop)};</script>
-<script>window.__tmdbKey    = '';
-<script>window.__legacyAnimeId = ${JSON.stringify(legacyId)};</script></script>
+<script>window.__tmdbKey = '';</script>
+<script>window.__legacyAnimeId = ${JSON.stringify(legacyId)};</script>
 <script>window.__videoEps  = ${JSON.stringify(videoEpSet)};</script>
 ${epsNeedsRefresh ? epsLiveScript(id) : ''}
 ${animeTailScript(animeDubConfirmed)}`;
