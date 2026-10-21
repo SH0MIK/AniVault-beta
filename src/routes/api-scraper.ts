@@ -17,7 +17,6 @@ import { h } from '../lib/helpers';
 import { findIdentityByLegacyMalId } from '../lib/anime-identity';
 import { getHoshikaAnimeById, getHoshikaAnimeEpisodesById } from '../lib/hoshika-api';
 import { AnimeTracker } from '../lib/tracker';
-import { getEpisodeThumbnail } from '../lib/episode-thumb';
 
 export const scraperRoutes = new Hono<{ Bindings: Env }>();
 
@@ -535,22 +534,15 @@ scraperRoutes.get('/api/embed.php', async (c) => {
   const image = animeData?.poster || '';
   const epTitle = episodes?.find((ep) => ep.number === epNum)?.title || `Episode ${epNum}`;
 
-  // Priority: an admin-saved override wins (episode_overrides.image_url,
-  // set via the Episode Thumbnails admin panel), then a live lookup against
-  // our own scraper API (cached in D1), then the anime cover as last resort.
-  let ogImage = image;
+  // Admin overrides win; otherwise use the Hoshika episode still, then cover art.
+  let ogImage = episodes?.find((ep) => ep.number === epNum)?.thumbnail || image;
   try {
     const row = await db.fetchOne<{ image_url: string | null }>(
       'SELECT image_url FROM episode_overrides WHERE anime_id = ? AND episode_num = ?',
       [animeId, epNum]
     );
-    if (row?.image_url) {
-      ogImage = row.image_url;
-    } else {
-      const scraped = await getEpisodeThumbnail(c.env, db, animeId, epNum);
-      if (scraped) ogImage = scraped;
-    }
-  } catch { /* fall back to anime cover */ }
+    if (row?.image_url) ogImage = row.image_url;
+  } catch { /* fall back to Hoshika art */ }
 
   const watchUrl = `${siteUrl}/watch?anime=${animeId}&ep=${epNum}`;
   const html = `<!DOCTYPE html>
