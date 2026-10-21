@@ -18,7 +18,6 @@ import { CONTINUE_WATCHING_CSS } from '../render/home-css';
 import { continueWatchingScript, heroSliderScript, rowNavScript } from '../render/home-js';
 import type { NormalisedAnime } from '../lib/mal-api';
 import { getBannerData } from '../lib/settings';
-import { getAnimeEpisodeThumbnails } from '../lib/episode-thumb';
 import { getHoshikaAnimeById } from '../lib/hoshika-api';
 import { findIdentityByLegacyMalId } from '../lib/anime-identity';
 
@@ -121,13 +120,9 @@ homeRoutes.get('/', async (c) => {
     } catch {
       watchHistory = [];
     }
-    // Continue Watching thumbnails: an admin-saved override wins where one
-    // exists (episode_overrides.image_url, set via the Episode Thumbnails
-    // admin panel). Batch look these up for the episodes on this page in
-    // one query, then live-fetch (via our scraper API, KV-cached) whatever
-    // episodes are still missing one -- only a handful of cards per page
-    // load, so this stays cheap. Cards fall back to a placeholder only if
-    // both miss.
+    // Continue Watching thumbnails use admin-saved overrides only during
+    // the Hoshika migration. Missing images use the card placeholder; legacy
+    // scraper caches are intentionally not read or repopulated.
     if (watchHistory.length > 0) {
       try {
         const pairs = watchHistory.map(() => '(?, ?)').join(', ');
@@ -141,24 +136,7 @@ homeRoutes.get('/', async (c) => {
         }
       } catch { /* best-effort -- cards fall back to scraper/placeholder */ }
 
-      const missing = watchHistory.filter((r) => !episodeThumbOverrides[`${r.anime_id}:${r.episode_num}`]);
-      if (missing.length > 0) {
-        // Use the same bulk thumbnail resolver as the anime detail page.
-        // That endpoint seeds/reads one D1 cache entry per anime, while the
-        // old home-page path asked the scraper once per history card. Besides
-        // being slower, that meant a cold individual lookup could miss while
-        // the anime page's already-populated bulk cache had the thumbnail.
-        // Resolve each distinct show once, then pick the watched episode.
-        const distinctIds = [...new Set(missing.map((r) => r.anime_id))];
-        await Promise.all(distinctIds.map(async (id) => {
-          const thumbs = await getAnimeEpisodeThumbnails(c.env, db, id, null, null);
-          for (const row of missing) {
-            if (row.anime_id !== id) continue;
-            const thumb = thumbs[row.episode_num];
-            if (thumb) episodeThumbOverrides[`${row.anime_id}:${row.episode_num}`] = thumb;
-          }
-        }));
-      }
+      // Missing thumbnails stay blank rather than reading or repopulating the legacy scraper cache.
     }
   }
 
