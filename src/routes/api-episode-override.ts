@@ -4,7 +4,8 @@ import type { Env } from '../index';
 import { Db } from '../lib/db';
 import { Session } from '../lib/session';
 import { Auth } from '../lib/auth';
-import { MalAPI } from '../lib/mal-api';
+import { findIdentityByLegacyMalId } from '../lib/anime-identity';
+import { getHoshikaAnimeById, getHoshikaAnimeEpisodesById } from '../lib/hoshika-api';
 import { Logger } from '../lib/logger';
 import { getAnimeEpisodeThumbnails, getEpisodeThumbnail } from '../lib/episode-thumb';
 
@@ -28,20 +29,29 @@ episodeOverrideRoutes.on(['GET', 'POST'], '/api/episode_override.php', async (c)
   if (c.req.method === 'GET') {
     if (animeId && c.req.query('all') !== undefined) {
       const rows: any[] = await db.fetchAll('SELECT * FROM episode_overrides WHERE anime_id = ?', [animeId]);
-      const mal = new MalAPI(c.env, c.env.API_CACHE, db);
-      const animeData = await mal.getAnime(animeId);
-      const totalEps = animeData.data?.episodes ?? 0;
+      // Legacy override rows use MAL IDs. Bridge to Hoshika only when that
+      // exact relationship has been explicitly verified in anime_identity_map.
+      const identity = await findIdentityByLegacyMalId(db, animeId).catch(() => null);
+      const hoshikaId = identity?.verified === 1 ? identity.hoshika_short_id : null;
+      const [animeData, hoshikaEpisodes] = hoshikaId
+        ? await Promise.all([
+            getHoshikaAnimeById(hoshikaId),
+            getHoshikaAnimeEpisodesById(hoshikaId),
+          ])
+        : [null, null];
+      const totalEps = hoshikaEpisodes?.length || animeData?.episodes || 0;
 
-      // Fill in episodes that don't have an admin-saved override with a
-      // live lookup against our own scraper API (one HTTP call for the
-      // whole anime, D1-cached -- see getAnimeEpisodeThumbnails). This is
-      // what both the watch page sidebar and the episode grid on anime
-      // detail pages call, so fixing it here covers both. Passing the
-      // show's status lets a Finished Airing show get cached permanently
-      // instead of re-fetched every 6h.
+      // Preserve admin overrides; prefer Hoshika stills for verified mappings,
+      // then fill any remaining gaps from the existing scraper thumbnail cache.
       const overriddenEps = new Set(rows.map((r) => Number(r.episode_num)));
-      const scraped = await getAnimeEpisodeThumbnails(c.env, db, animeId, animeData.data?.status, totalEps);
       const combined = [...rows];
+      for (const ep of hoshikaEpisodes ?? []) {
+        if (!overriddenEps.has(ep.number) && ep.thumbnail) {
+          combined.push({ anime_id: animeId, episode_num: ep.number, image_url: ep.thumbnail });
+          overriddenEps.add(ep.number);
+        }
+      }
+      const scraped = await getAnimeEpisodeThumbnails(c.env, db, animeId, undefined, totalEps);
       for (const [epNumStr, image_url] of Object.entries(scraped)) {
         const epNum = Number(epNumStr);
         if (!overriddenEps.has(epNum)) combined.push({ anime_id: animeId, episode_num: epNum, image_url });
@@ -68,9 +78,13 @@ episodeOverrideRoutes.on(['GET', 'POST'], '/api/episode_override.php', async (c)
     // that's no longer needed now that this endpoint resolves it too.
     let thumbnail: string | null = row?.image_url ?? null;
     if (!thumbnail) {
-      const mal = new MalAPI(c.env, c.env.API_CACHE, db);
-      const animeData = await mal.getAnime(animeId).catch(() => null);
-      thumbnail = await getEpisodeThumbnail(c.env, db, animeId, epNum, animeData?.data?.status);
+      // Never interpret a MAL ID as a Hoshika ID; require a verified mapping.
+      const identity = await findIdentityByLegacyMalId(db, animeId).catch(() => null);
+      if (identity?.verified === 1) {
+        const episodes = await getHoshikaAnimeEpisodesById(identity.hoshika_short_id);
+        thumbnail = episodes?.find((ep) => ep.number === epNum)?.thumbnail || null;
+      }
+      if (!thumbnail) thumbnail = await getEpisodeThumbnail(c.env, db, animeId, epNum);
     }
 
     await session.save(c, lifetime);
