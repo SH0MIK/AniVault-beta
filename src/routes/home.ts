@@ -18,7 +18,7 @@ import { CONTINUE_WATCHING_CSS } from '../render/home-css';
 import { continueWatchingScript, heroSliderScript, rowNavScript } from '../render/home-js';
 import type { NormalisedAnime } from '../lib/mal-api';
 import { getBannerData } from '../lib/settings';
-import { getHoshikaAnimeById, getHoshikaHomeSections, getHoshikaGenres, type HoshikaCatalogAnime } from '../lib/hoshika-api';
+import { getHoshikaAnimeById, getHoshikaAnimeEpisodesById, getHoshikaHomeSections, getHoshikaGenres, type HoshikaCatalogAnime } from '../lib/hoshika-api';
 import { findIdentityByLegacyMalId } from '../lib/anime-identity';
 
 export const homeRoutes = new Hono<{ Bindings: Env }>();
@@ -173,7 +173,25 @@ homeRoutes.get('/', async (c) => {
         }
       } catch { /* best-effort -- cards fall back to scraper/placeholder */ }
 
-      // Missing thumbnails stay blank rather than reading or repopulating the legacy scraper cache.
+      // Fill missing history-card art from Hoshika's actual episode endpoint.
+      // The API returns { items: [{ number, thumbnail, ... }] }; use the
+      // episode-specific thumbnail and preserve admin overrides above it.
+      await Promise.all(watchHistory.map(async (row) => {
+        const key = `${row.anime_id}:${row.episode_num}`;
+        if (episodeThumbOverrides[key]) return;
+        try {
+          let episodes = await getHoshikaAnimeEpisodesById(String(row.anime_id));
+          if (!episodes) {
+            const identity = await findIdentityByLegacyMalId(db, Number(row.anime_id));
+            if (identity?.hoshika_short_id) {
+              episodes = await getHoshikaAnimeEpisodesById(identity.hoshika_short_id);
+            }
+          }
+          const episode = episodes?.find((item) => item.number === Number(row.episode_num));
+          if (episode?.thumbnail) episodeThumbOverrides[key] = episode.thumbnail;
+        } catch { /* retain stored image/poster fallbacks */ }
+      }));
+\n      // Missing thumbnails stay blank rather than reading or repopulating the legacy scraper cache.
     }
   }
 
