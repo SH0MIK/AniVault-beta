@@ -1919,19 +1919,16 @@ async function epedSave() {
 
 // ── Search Suggestions ──────────────────────────────────────────────────────
 (function () {
-  let _cache = {};
   let _userCache = {};
   let _debounceTimer = null;
 
   async function fetchSuggestions(query) {
     const q = query.trim();
     if (!q || q.length < 1) return [];
-    if (_cache[q]) return _cache[q];
     try {
       const res = await fetch(`/api/search_suggest.php?q=${encodeURIComponent(q)}`);
       if (!res.ok) return [];
       const results = await res.json();
-      _cache[q] = results;
       return results;
     } catch (e) {
       return [];
