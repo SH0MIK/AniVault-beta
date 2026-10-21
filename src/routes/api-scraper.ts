@@ -14,7 +14,7 @@ import { Db } from '../lib/db';
 import { Session } from '../lib/session';
 import { Auth } from '../lib/auth';
 import { h } from '../lib/helpers';
-import { findIdentityByLegacyMalId } from '../lib/anime-identity';
+import { findIdentityByHoshikaId, findIdentityByLegacyMalId } from '../lib/anime-identity';
 import { getHoshikaAnimeById, getHoshikaAnimeEpisodesById } from '../lib/hoshika-api';
 import { AnimeTracker } from '../lib/tracker';
 import { resolveAnimeHeavenMp4 } from '../lib/scrapers/animeheaven';
@@ -50,21 +50,38 @@ async function fetchJson(url: string, timeoutMs = 12000, apiKey = ''): Promise<{
 }
 
 // ── api/animeheaven_stream.php ─────────────────────────────────────────────
-// AnimeHeaven now runs inside this Worker. Hoshika remains the canonical
-// catalog; a verified legacy MAL mapping is used only to look up its title.
+// AnimeHeaven runs inside this Worker. Hoshika IDs are canonical; numeric
+// legacy MAL IDs remain supported only through the verified identity map.
 scraperRoutes.get('/api/animeheaven_stream.php', async (c) => {
-  const animeId = parseInt(c.req.query('anime') ?? '0', 10) || 0;
+  const animeParam = (c.req.query('anime') ?? '').trim();
+  const legacyMalId = /^\\d+$/.test(animeParam) ? Number(animeParam) : 0;
   const epNum = parseInt(c.req.query('ep') ?? '0', 10) || 0;
-  if (!animeId || !epNum) return c.json({ error: 'Missing anime or ep' }, 400);
+  if (!animeParam || !epNum) return c.json({ error: 'Missing anime or ep' }, 400);
 
   const db = new Db(c.env.DB);
-  const identity = await findIdentityByLegacyMalId(db, animeId).catch(() => null);
-  if (!identity || identity.verified !== 1 || identity.legacy_mal_id !== animeId) {
-    return c.json({ error: 'No verified Hoshika mapping for this anime' }, 404);
+  let title = '';
+
+  // Prefer the canonical Hoshika shortId, including IDs not yet linked to
+  // legacy user data. This lets newly migrated watch URLs work without MAL.
+  const directAnime = await getHoshikaAnimeById(animeParam).catch(() => null);
+  if (directAnime) {
+    title = directAnime.titleEnglish || directAnime.titleRomaji || directAnime.title || '';
   }
 
-  const anime = await getHoshikaAnimeById(identity.hoshika_short_id);
-  const title = anime?.titleEnglish || anime?.titleRomaji || anime?.title || identity.title;
+  if (!title) {
+    const hoshikaIdentity = await findIdentityByHoshikaId(db, animeParam).catch(() => null);
+    if (hoshikaIdentity?.title) title = hoshikaIdentity.title;
+  }
+
+  // Backward compatibility for older pages that still send a MAL ID.
+  if (!title && legacyMalId > 0) {
+    const identity = await findIdentityByLegacyMalId(db, legacyMalId).catch(() => null);
+    if (identity?.verified === 1 && identity.legacy_mal_id === legacyMalId) {
+      const anime = await getHoshikaAnimeById(identity.hoshika_short_id).catch(() => null);
+      title = anime?.titleEnglish || anime?.titleRomaji || anime?.title || identity.title || '';
+    }
+  }
+
   if (!title) return c.json({ error: 'Could not resolve anime title from Hoshika' }, 404);
 
   try {
