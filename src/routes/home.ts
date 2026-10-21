@@ -191,7 +191,8 @@ homeRoutes.get('/', async (c) => {
           if (episode?.thumbnail) episodeThumbOverrides[key] = episode.thumbnail;
         } catch { /* retain stored image/poster fallbacks */ }
       }));
-\n      // Missing thumbnails stay blank rather than reading or repopulating the legacy scraper cache.
+
+      // Missing thumbnails stay blank rather than reading or repopulating the legacy scraper cache.
     }
   }
 
