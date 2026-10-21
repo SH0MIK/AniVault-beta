@@ -219,7 +219,8 @@ homeRoutes.get('/', async (c) => {
     ].join('\n');
     html = html.replace('<head>', '<head>\n' + pre);
   }
-  html += `
+  if (heroPool.length > 0) {
+    html += `
 <section id="hero">
   <div id="hero-slides">
     ${heroPool.map((a, i) => renderHeroSlide(a, i, siteUrl, heroBanners[i] || a.banner_image, heroCovers[i], heroLogos[i], cardMeta.get(a.mal_id))).join('')}
@@ -231,8 +232,17 @@ homeRoutes.get('/', async (c) => {
   <button class="hero-next" id="hero-next" aria-label="Next slide">${icon('chevron-right', 'icon-medium')}</button>
 </section>
 ${heroSliderScript(heroPool.length)}
-
-<div class="container">`;
+    `;
+  } else {
+    html += `
+<section class="container" style="padding:3.5rem 1rem 2rem;text-align:center">
+  <h1 style="font-size:clamp(2rem,5vw,3.25rem);margin:0 0 .75rem">Discover your next anime</h1>
+  <p class="text-muted" style="max-width:38rem;margin:0 auto 1.25rem">AniVault's catalog is switching to Hoshika. Search titles to explore the available catalog while curated homepage picks are being restored.</p>
+  <a href="${siteUrl}/browse" class="btn btn-primary">${icon('search', 'icon-small')} Search Anime</a>
+</section>
+    `;
+  }
+  html += `<div class="container">;
 
   if (currentUser) {
     const stats = await AnimeTracker.getStats(db, currentUser.id);
