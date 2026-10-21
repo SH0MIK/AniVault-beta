@@ -264,7 +264,7 @@ ${heroSliderScript(heroPool.length)}
   }
 
   // ── Genre bar ────────────────────────────────────────────────────────────
-  const genreList: Array<{ mal_id: number; name: string }> = [];
+  const genreList = await getHoshikaGenres();
   if (genreList.length > 0) {
     html += `
   <div class="genre-nav-wrap">
