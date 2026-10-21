@@ -119,9 +119,10 @@ function titleMatchScore(item: any, title: string): number {
     x.titleEnglish, x.titleRomaji, x.titleLocalized, x.titleJapanese,
     x.title, x.slug,
   ].map(normaliseTitle).filter(Boolean);
-  if (variants.some((candidate) => candidate === wanted)) return 100;
-  if (variants.some((candidate) => candidate.startsWith(wanted) || wanted.startsWith(candidate))) return 80;
-  return 0;
+  // Prefix matches can silently cross-link seasons (e.g. a series and its
+  // Final Season). Only accept exact normalized titles until an explicit
+  // Hoshika-ID mapping exists.
+  return variants.some((candidate) => candidate === wanted) ? 100 : 0;
 }
 
 
@@ -325,7 +326,7 @@ export async function getHoshikaAnimeMetadata(
 
     const match = resultsFrom(payload)
       .map((item) => ({ item, score: titleMatchScore(item, title) }))
-      .filter((entry) => entry.score >= 80)
+      .filter((entry) => entry.score === 100)
       .sort((a, b) => b.score - a.score)[0]?.item;
     if (!match) {
       return null;
