@@ -4,7 +4,7 @@ import { buildAdminCtx } from '../../lib/admin-ctx';
 import { h } from '../../lib/helpers';
 import { Logger } from '../../lib/logger';
 import { renderAdminHeader, renderAdminFooter } from '../../render/admin-layout';
-import { getHomepageRefreshMinutes, getHomepageSnapshot, refreshHomepageSnapshot } from '../../lib/home-cache';
+import { getHomepageRefreshMinutes, getHomepageSnapshot } from '../../lib/home-cache';
 
 export const adminHomepageCacheRoutes = new Hono<{ Bindings: Env }>();
 
@@ -73,9 +73,9 @@ ${error ? '<div class="alert alert-error mb-2">' + h(error) + '</div>' : ''}
       <tr><td>Coming Soon</td><td>${snapshot?.upcoming.length ?? 0} cards</td></tr>
     </tbody></table></div>
     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:1rem;">
-      <form method="POST" onsubmit="return confirm('Delete ALL homepage art cache data? This removes the homepage snapshot plus stored scraper artwork so the next refresh fetches fresh TMDB URLs.');">
+      <form method="POST">
         <input type="hidden" name="action" value="clear_art_cache">
-        <button class="btn btn-danger" type="submit">Ignore Legacy Cache (No Delete)</button>
+        <button class="btn btn-secondary" type="submit">Confirm Legacy Cache Is Ignored</button>
       </form>
       <form method="POST">
         <input type="hidden" name="action" value="refresh_now">
@@ -86,7 +86,7 @@ ${error ? '<div class="alert alert-error mb-2">' + h(error) + '</div>' : ''}
 
   <div class="card card-body">
     <h2 class="mb-2">⏱️ Automatic Refresh</h2>
-    <p class="text-muted" style="font-size:.85rem;">The Worker checks this setting on its scheduled tick. Visitors never need to wait for the refresh.</p>
+    <p class="text-muted" style="font-size:.85rem;">The interval setting is retained for compatibility, but automatic catalogue refresh is paused until Hoshika exposes a supported listing feed.</p>
     <form method="POST">
       <input type="hidden" name="action" value="save_interval">
       <select class="form-control" name="refresh_minutes" style="max-width:240px;margin-bottom:12px;">
