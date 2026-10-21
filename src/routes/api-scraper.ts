@@ -302,8 +302,8 @@ scraperRoutes.get('/api/watchanimeworld_stream.php', async (c) => {
 // ── api/server_check.php ───────────────────────────────────────────────────
 const ERROR_PHRASES = ['episode not found', 'video not found', '404 not found', 'page not found', 'no video found', 'no sources found', 'no servers found', 'this episode is not available', 'something went wrong'];
 
-async function checkSenshiUp(base: string, malId: number, epNum: number): Promise<boolean> {
-  const { ok, data } = await fetchJson(`${base}/watch/senshi/mal-${malId}/${epNum}/sub`, 10000, c.env.SCRAPER_API_KEY || '');
+async function checkSenshiUp(base: string, malId: number, epNum: number, apiKey: string): Promise<boolean> {
+  const { ok, data } = await fetchJson(`${base}/watch/senshi/mal-${malId}/${epNum}/sub`, 10000, apiKey);
   if (!ok) return false;
   return !!(data?.hlsProxyUrl ?? data?.m3u8);
 }
@@ -345,7 +345,7 @@ scraperRoutes.get('/api/server_check.php', async (c) => {
   if (cached) { await session.save(c, lifetime); return c.json(cached); }
 
   const [volt, warp, ayame] = await Promise.all([
-    checkSenshiUp(base, malId, epNum),
+    checkSenshiUp(base, malId, epNum, c.env.SCRAPER_API_KEY || ''),
     checkEmbedUp(`https://tryembed.us.cc/embed/anime/${anilistId}/${epNum}/sub`),
     checkEmbedUp(`https://vidnest.fun/animepahe/${anilistId}/${epNum}/sub`),
   ]);
