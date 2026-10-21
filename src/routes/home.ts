@@ -103,7 +103,8 @@ homeRoutes.get('/', async (c) => {
   // Homepage feeds come directly from Hoshika. No MAL/Jikan/AniList fallback.
   const hoshikaHome = await getHoshikaHomeSections();
   const topList: NormalisedAnime[] = hoshikaHome.trending.map(toHoshikaHomeAnime);
-  const upcomingList: NormalisedAnime[] = (hoshikaHome.seasonal.length ? hoshikaHome.seasonal : hoshikaHome.recent).map(toHoshikaHomeAnime);
+  const upcomingList: NormalisedAnime[] = hoshikaHome.seasonal.map(toHoshikaHomeAnime);
+  const recentList: NormalisedAnime[] = hoshikaHome.recent.map(toHoshikaHomeAnime);
 
   // Watch Now — only display rows whose legacy IDs have verified Hoshika mappings.
   let watchNowList: NormalisedAnime[] = [];
@@ -328,8 +329,15 @@ ${heroSliderScript(heroPool.length)}
   if (upcomingList.length > 0) {
     html += `
       <section class="content-section">
-        ${sectionHeader('Coming Soon', 'row-upcoming')}
+        ${sectionHeader('Current Season', 'row-upcoming', `${siteUrl}/browse?sort=trending`)}
         <div class="scroll-row" id="row-upcoming">${upcomingList.map((a) => renderHoshikaHomeCard(a, siteUrl)).join('')}</div>
+      </section>`;
+  }
+  if (recentList.length > 0) {
+    html += `
+      <section class="content-section">
+        ${sectionHeader('Recently Added', 'row-recent', `${siteUrl}/browse?sort=recent`)}
+        <div class="scroll-row" id="row-recent">${recentList.map((a) => renderHoshikaHomeCard(a, siteUrl)).join('')}</div>
       </section>`;
   }
 
