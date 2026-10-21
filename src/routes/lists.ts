@@ -398,9 +398,9 @@ export function renderHistoryCard(hRow: any, siteUrl: string, episodeThumbOverri
   const epNum = hRow.episode_num;
   const animeTitle = h(hRow.anime_title || `Anime #${hRow.anime_id}`);
   const epTitle = hRow.ep_title ? h(hRow.ep_title) : `Episode ${epNum}`;
-  // Only an admin-saved override shows here now -- the legacy ep_thumb
-  // column (populated by old client-side auto-fetch code) is ignored.
-  const thumb = episodeThumbOverrides[`${hRow.anime_id}:${epNum}`] || '';
+  // Prefer admin-saved episode art, then existing episode art, then the
+  // anime cover saved with the watch-history entry.
+  const thumb = episodeThumbOverrides[`${hRow.anime_id}:${epNum}`] || hRow.ep_thumb || '';
   const cover = hRow.anime_image ?? '';
   const date = hRow.watched_at ? new Date(hRow.watched_at.replace(' ', 'T') + 'Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }) : '';
 
