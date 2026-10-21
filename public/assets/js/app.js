@@ -1607,12 +1607,6 @@ function getStreamingKey(url) {
   return null;
 }
 
-// Anime metadata and streaming-service links must not be fetched from Jikan.
-// The modal uses only locally configured overrides and the site's own API.
-async function getAnimeInfo() {
-  return { streamingLinks: [] };
-}
-
 document.addEventListener('click', async function(e) {
   const card = e.target.closest('.ep-card');
   if (!card) return;
@@ -1663,14 +1657,11 @@ document.addEventListener('click', async function(e) {
   }
 
   try {
-    // Fetch streaming info + override/scraper-cached thumb + synopsis in parallel.
+    // Fetch the site's own override/scraper-cached thumbnail and saved synopsis.
     // episode_override.php now resolves the thumbnail itself (admin override,
     // else our scraper's D1 cache -- see api-episode-override.ts), so there's
     // no separate direct-to-AniList call needed here anymore.
-    const [animeInfo, overrideRes] = await Promise.all([
-      getAnimeInfo(),
-      fetch(`/api/episode_override.php?anime_id=${animeId}&ep=${epNum}`).then(r => r.ok ? r.json() : null),
-    ]);
+    const overrideRes = await fetch(`/api/episode_override.php?anime_id=${animeId}&ep=${epNum}`).then(r => r.ok ? r.json() : null);
 
     const override      = overrideRes?.override || null;
     const jikanSynop    = jikanRes?.data?.synopsis || '';
@@ -1680,9 +1671,9 @@ document.addEventListener('click', async function(e) {
     // Thumbnail: admin override > scraper-cached (via episode_override.php) > cached > anime cover fallback
     const thumb = override?.image_url || overrideRes?.thumbnail || '';
 
-    // Watch links: override takes priority, then Jikan streaming
+    // Watch links: use only admin-configured local overrides
     const overrideLinks = override ? (JSON.parse(override.watch_links || '[]') || []) : [];
-    const streamLinks   = animeInfo?.streamingLinks || [];
+    const streamLinks   = [];
     const watchLinks    = overrideLinks.length ? overrideLinks : streamLinks;
 
     const cached = { synopsis, thumb, watchLinks };
