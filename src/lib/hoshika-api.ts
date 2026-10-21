@@ -492,3 +492,110 @@ export async function getHoshikaAnimeById(shortId: string | number): Promise<Hos
     return null;
   }
 }
+
+
+export interface HoshikaHomeSections {
+  trending: HoshikaCatalogAnime[];
+  recent: HoshikaCatalogAnime[];
+  top: HoshikaCatalogAnime[];
+  seasonal: HoshikaCatalogAnime[];
+}
+
+function findCatalogArray(root: any, keys: string[], depth = 0): any[] {
+  if (!root || typeof root !== 'object' || Array.isArray(root) || depth > 6) return [];
+  for (const key of keys) {
+    const value = root[key];
+    if (Array.isArray(value)) return value;
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      for (const childKey of ['items', 'results', 'anime', 'entries', 'data']) {
+        if (Array.isArray(value[childKey])) return value[childKey];
+      }
+      const nested = findCatalogArray(value, keys, depth + 1);
+      if (nested.length) return nested;
+    }
+  }
+  for (const value of Object.values(root)) {
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      const nested = findCatalogArray(value, keys, depth + 1);
+      if (nested.length) return nested;
+    }
+  }
+  return [];
+}
+
+async function fetchHoshikaJson(path: string): Promise<any | null> {
+  try {
+    const response = await fetch('https://hoshika.app/api/v1/' + path.replace(/^\/+/, ''), {
+      headers: { Accept: 'application/json' },
+    });
+    if (!response.ok) return null;
+    const payload: any = await response.json();
+    return payload?.ok === false ? null : payload;
+  } catch (error) {
+    console.warn('[hoshika] Catalog request failed:', path, String(error));
+    return null;
+  }
+}
+
+function normalizeCatalogArray(items: any[]): HoshikaCatalogAnime[] {
+  return items.map(normaliseHoshikaAnime).filter((item): item is HoshikaCatalogAnime => !!item);
+}
+
+/** Load the public Hoshika homepage feeds; deliberately no third-party fallback. */
+export async function getHoshikaHomeSections(): Promise<HoshikaHomeSections> {
+  const payload = await fetchHoshikaJson('home?locale=en');
+  const root = unwrap(payload ?? {});
+  let trending = normalizeCatalogArray(findCatalogArray(root, ['trending', 'trendingAnime']));
+  let recent = normalizeCatalogArray(findCatalogArray(root, ['recentlyAdded', 'recently_added', 'recent', 'latest', 'recentAnime']));
+  let top = normalizeCatalogArray(findCatalogArray(root, ['top', 'topRated', 'top_rated', 'highestRated']));
+  let seasonal = normalizeCatalogArray(findCatalogArray(root, ['seasonal', 'currentSeason', 'current_season', 'season']));
+
+  // Some Hoshika deployments expose the individual feeds but omit one or more
+  // sections from /home. Fill only those missing sections from Hoshika itself.
+  const [trendingPayload, recentPayload, topPayload, seasonPayload] = await Promise.all([
+    trending.length ? Promise.resolve(null) : fetchHoshikaJson('browse?type=anime&sort=trending'),
+    recent.length ? Promise.resolve(null) : fetchHoshikaJson('browse?type=anime&sort=recent'),
+    top.length ? Promise.resolve(null) : fetchHoshikaJson('browse?type=anime&sort=top'),
+    seasonal.length ? Promise.resolve(null) : fetchHoshikaJson('season?locale=en'),
+  ]);
+  if (!trending.length) trending = normalizeCatalogArray(resultsFrom(trendingPayload ?? {}));
+  if (!recent.length) recent = normalizeCatalogArray(resultsFrom(recentPayload ?? {}));
+  if (!top.length) top = normalizeCatalogArray(resultsFrom(topPayload ?? {}));
+  if (!seasonal.length) seasonal = normalizeCatalogArray(resultsFrom(seasonPayload ?? {}));
+  return { trending, recent, top: top.length ? top : trending, seasonal };
+}
+
+/** Hoshika's paginated, filterable anime catalog. */
+export async function getHoshikaCatalog(options: {
+  genre?: string; year?: number; sort?: string; page?: number; type?: string; status?: string;
+} = {}): Promise<{ items: HoshikaCatalogAnime[]; total: number; totalPages: number }> {
+  const url = new URL('https://hoshika.app/api/v1/catalog');
+  url.searchParams.set('type', 'anime');
+  if (options.genre) url.searchParams.set('genre', options.genre);
+  if (options.year) url.searchParams.set('year', String(options.year));
+  url.searchParams.set('sort', options.sort || 'popular');
+  url.searchParams.set('page', String(Math.max(1, options.page || 1)));
+  if (options.type) url.searchParams.set('format', options.type);
+  if (options.status) url.searchParams.set('status', options.status);
+  const payload = await fetchHoshikaJson(url.pathname.replace('/api/v1/', '') + url.search);
+  const root = unwrap(payload ?? {});
+  const rawItems = resultsFrom(payload ?? {});
+  const items = normalizeCatalogArray(rawItems.length ? rawItems : findCatalogArray(root, ['items', 'results', 'anime', 'catalog']));
+  const total = numberOrNull(root?.total ?? root?.pagination?.total ?? root?.pagination?.items?.total ?? root?.items?.total ?? payload?.total) ?? items.length;
+  const totalPages = numberOrNull(root?.totalPages ?? root?.total_pages ?? root?.lastPage ?? root?.last_page ?? root?.last_visible_page ?? root?.pagination?.totalPages ?? root?.pagination?.total_pages ?? root?.pagination?.lastPage ?? root?.pagination?.last_page ?? root?.pagination?.last_visible_page ?? payload?.totalPages) ?? (total ? Math.max(1, Math.ceil(total / Math.max(items.length, 1))) : 1);
+  return { items, total, totalPages };
+}
+
+/** Fetch Hoshika's anime genre slugs and display names. */
+export async function getHoshikaGenres(): Promise<Array<{ slug: string; name: string }>> {
+  const payload = await fetchHoshikaJson('genres');
+  const root = unwrap(payload ?? {});
+  const raw = findCatalogArray(root, ['genres', 'items', 'results']);
+  const source = raw.length ? raw : (Array.isArray(root) ? root : []);
+  return source.map((item: any) => {
+    if (typeof item === 'string') return { slug: item.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''), name: item };
+    const slug = firstText(item?.slug, item?.id, item?.name).toLowerCase();
+    const name = firstText(item?.name, item?.title, item?.label, slug);
+    return { slug, name };
+  }).filter((item: { slug: string; name: string }) => !!item.slug && !!item.name);
+}
