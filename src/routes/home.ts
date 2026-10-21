@@ -23,10 +23,12 @@ import { findIdentityByLegacyMalId } from '../lib/anime-identity';
 
 export const homeRoutes = new Hono<{ Bindings: Env }>();
 
-// Homepage-only Cloudflare Image Transformations for Hoshika, TMDB, and
-// admin-entered art. Stable dimensions let repeat visits reuse cached variants.
+// Keep Hoshika-hosted catalog art on its own CDN. Cloudflare image
+// transformations are only used for TMDB URLs; wrapping third-party Hoshika
+// URLs through /cdn-cgi/image can fail when the remote origin is not eligible.
 function resizeHeroImageUrl(url: string, width: number, height: number, fit: 'cover' | 'contain', quality = 75): string {
   if (!url || !/^https?:\/\//i.test(url)) return url;
+  if (!/^https:\/\/image\.tmdb\.org\//i.test(url)) return url;
   return `/cdn-cgi/image/width=${width},height=${height},fit=${fit},format=auto,quality=${quality}/${url}`;
 }
 
@@ -35,7 +37,8 @@ function transformHomepageCardImage(url: string, width: number): string {
   // Use a consistent, reasonably high-resolution TMDB source for every
   // variant; otherwise a w342 source could be upscaled for the 500px card.
   const tmdb = url.match(/^(https:\/\/image\.tmdb\.org\/t\/p\/)w\d+(\/.+)$/);
-  const source = tmdb ? `${tmdb[1]}w500${tmdb[2]}` : url;
+  if (!tmdb) return url;
+  const source = `${tmdb[1]}w500${tmdb[2]}`;
   return `/cdn-cgi/image/width=${width},height=${Math.round(width * 1.5)},fit=cover,format=auto,quality=75/${source}`;
 }
 
