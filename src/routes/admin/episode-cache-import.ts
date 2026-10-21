@@ -73,7 +73,7 @@ adminEpisodeCacheImportRoutes.on(['GET', 'POST'], '/admin/episode_cache_import.p
   let html = renderAdminHeader({ siteUrl, pageTitle: 'Episode Cache Import', adminPage: 'episode_cache_import', isOwner, impersonating });
   html += `
 <div class="admin-header">
-  <div><h1>${icon('database', 'icon-medium')} Episode Cache Import</h1><p class="text-muted" style="font-size:.9rem;">Paste or upload the scraper's raw <code>/api/episode?malId=…</code> JSON to save it straight into the site's episode thumbnail cache -- no per-episode scraper calls needed after this.</p></div>
+  <div><h1>${icon('database', 'icon-medium')} Episode Cache Import</h1><p class="text-muted" style="font-size:.9rem;">Cache import and clearing are paused during the Hoshika-only migration. Existing cache rows are left untouched.</p></div>
 </div>
 
 <div class="card card-body mb-3" style="max-width:760px;">
@@ -93,7 +93,7 @@ adminEpisodeCacheImportRoutes.on(['GET', 'POST'], '/admin/episode_cache_import.p
   <textarea id="eci-raw" class="form-control" rows="12" style="font-family:monospace;font-size:.82rem;" placeholder='{"malId": 1, "episodes": [{"episode": 1, "thumbnail": "https://..."}, ...]}'></textarea>
 
   <div style="margin-top:1rem;display:flex;gap:.6rem;align-items:center;">
-    <button class="btn btn-primary" id="eci-save">${icon('database', 'icon-small')} Save to Cache</button>
+    <button class="btn btn-primary" id="eci-save" disabled title="Paused during Hoshika migration">${icon('database', 'icon-small')} Cache Import Paused</button>
     <span id="eci-status" style="font-size:.85rem;color:var(--text-muted);"></span>
   </div>
 </div>
@@ -110,7 +110,7 @@ adminEpisodeCacheImportRoutes.on(['GET', 'POST'], '/admin/episode_cache_import.p
           ${a.permanent ? ' · Finished (permanent)' : a.checkedAt ? ` · Ongoing, last checked ${new Date(a.checkedAt).toLocaleString()}` : ' · Ongoing'}
         </div>
       </div>
-      <button class="btn btn-sm" style="color:#f87171;white-space:nowrap;" onclick="eciClear(${a.malId}, this)">${icon('x', 'icon-small')} Clear</button>
+      <span class="text-muted" style="font-size:.8rem;white-space:nowrap;">Read-only during migration</span>
     </div>`).join('')}
   </div>
 </div>
