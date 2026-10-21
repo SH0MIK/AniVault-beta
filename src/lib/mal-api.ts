@@ -6,10 +6,9 @@
 import { Db } from './db';
 import { Settings } from './settings';
 import { getAnimeEpisodeInfo } from './episode-info';
-import { getHoshikaAnimeMetadata, getHoshikaAnimeEpisodes } from './hoshika-api';
+import { getHoshikaAnimeMetadata, getHoshikaAnimeEpisodes, getHoshikaAnimeById, searchHoshikaAnime } from './hoshika-api';
 import { importAnimeEpisodeThumbnails } from './episode-thumb';
 import { findIdentityByLegacyMalId } from './anime-identity';
-import { getHoshikaAnimeById, searchHoshikaAnime } from './hoshika-api';
 
 const MAL_API_BASE = 'https://api.myanimelist.net/v2';
 const LIST_FIELDS = 'id,title,alternative_titles,main_picture,synopsis,mean,rank,popularity,num_episodes,status,genres,start_date,rating,media_type,nsfw,num_list_users,broadcast,average_episode_duration';
@@ -1263,17 +1262,8 @@ export class MalAPI {
     return { data: [], pagination: { last_visible_page: 1 } };
   }
   getAnimeGenres(): { data: { mal_id: number; name: string }[] } {
-    return {
-      data: [
-        { mal_id: 1, name: 'Action' }, { mal_id: 2, name: 'Adventure' }, { mal_id: 4, name: 'Comedy' },
-        { mal_id: 8, name: 'Drama' }, { mal_id: 10, name: 'Fantasy' }, { mal_id: 14, name: 'Horror' },
-        { mal_id: 7, name: 'Mystery' }, { mal_id: 22, name: 'Romance' }, { mal_id: 24, name: 'Sci-Fi' },
-        { mal_id: 36, name: 'Slice of Life' }, { mal_id: 30, name: 'Sports' }, { mal_id: 37, name: 'Supernatural' },
-        { mal_id: 41, name: 'Thriller' }, { mal_id: 62, name: 'Isekai' }, { mal_id: 63, name: 'Magical Girl' },
-        { mal_id: 17, name: 'Mecha' }, { mal_id: 18, name: 'Music' }, { mal_id: 38, name: 'Military' },
-        { mal_id: 23, name: 'School' }, { mal_id: 29, name: 'Space' },
-      ],
-    };
+    // Do not present a fabricated MAL genre list as Hoshika catalog metadata.
+    return { data: [] };
   }
 
   async getAnimeByGenres(_genreIds: number[], _page = 1): Promise<{ data: NormalisedAnime[]; pagination: any }> {
