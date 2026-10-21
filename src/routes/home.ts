@@ -86,7 +86,6 @@ homeRoutes.get('/', async (c) => {
       .map((r) => snapshotById.get(r.anime_id))
       .filter(Boolean) as NormalisedAnime[];
     // Only resolve TMDB art for cards we can render from the D1/MAL snapshot.
-    await mal.prefetchHoshikaArtForCards(watchNowList);
   } catch {
     watchNowList = [];
   }
@@ -138,14 +137,7 @@ homeRoutes.get('/', async (c) => {
         // Resolve each distinct show once, then pick the watched episode.
         const distinctIds = [...new Set(missing.map((r) => r.anime_id))];
         await Promise.all(distinctIds.map(async (id) => {
-          const animeData = await mal.getAnime(id, true).catch(() => null);
-          const thumbs = await getAnimeEpisodeThumbnails(
-            c.env,
-            db,
-            id,
-            animeData?.data?.status,
-            animeData?.data?.episodes ?? null
-          );
+          const thumbs = await getAnimeEpisodeThumbnails(c.env, db, id, null, null);
           for (const row of missing) {
             if (row.anime_id !== id) continue;
             const thumb = thumbs[row.episode_num];
