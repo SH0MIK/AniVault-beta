@@ -656,19 +656,34 @@ scraperRoutes.get('/api/ep_count.php', async (c) => {
 });
 
 // ── api/anime_episodes.php ──────────────────────────────────────────────────
-// Same-origin replacement for anime-tail.ts's client-side lazy loader, which
-// used to fetch api.jikan.moe directly from the browser. Routes through
-// MalAPI.getAnimeEpisodes -- own scraper first, Jikan as a fallback -- so the
-// browser never talks to either backend directly and picks up whichever is
-// actually working without a client-side redeploy.
+// Legacy detail pages still pass MAL IDs. Episode metadata now comes only
+// from Hoshika after an explicit verified mapping; there is no MAL/Jikan or
+// title-based fallback. Unmapped legacy IDs return an empty list so the page
+// can still render numbered stubs for videos already stored in D1.
 scraperRoutes.get('/api/anime_episodes.php', async (c) => {
   const animeId = parseInt(c.req.query('anime') ?? '0', 10) || 0;
   const page = parseInt(c.req.query('page') ?? '1', 10) || 1;
   if (!animeId) return c.json({ error: 'Missing anime' }, 400);
   const db = new Db(c.env.DB);
-  const mal = new MalAPI(c.env, c.env.API_CACHE, db);
-  const result = await mal.getAnimeEpisodes(animeId, page);
-  return c.json(result);
+  const identity = await findIdentityByLegacyMalId(db, animeId).catch(() => null);
+  if (identity?.verified !== 1) {
+    return c.json({ data: [], pagination: { last_visible_page: 1, has_next_page: false } });
+  }
+  const episodes = await getHoshikaAnimeEpisodesById(identity.hoshika_short_id);
+  const data = (episodes ?? []).map((episode) => ({
+    mal_id: episode.number,
+    title: episode.title,
+    title_japanese: null,
+    aired: episode.aired,
+    filler: episode.filler,
+    recap: episode.recap,
+    images: { jpg: { image_url: episode.thumbnail } },
+    thumbnail: episode.thumbnail,
+  }));
+  return c.json({
+    data: page > 1 ? [] : data,
+    pagination: { last_visible_page: 1, has_next_page: false },
+  });
 });
 
 // ── api/anime_characters.php ────────────────────────────────────────────────
