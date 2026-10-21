@@ -3,13 +3,11 @@ import type { Env } from '../index';
 import { Db } from '../lib/db';
 import { Session } from '../lib/session';
 import { Auth } from '../lib/auth';
-import { MalAPI } from '../lib/mal-api';
 import { searchHoshikaAnime } from '../lib/hoshika-api';
 import { Notification } from '../lib/notification';
 import { getUserAnimeStatuses } from '../lib/user-list';
 import { icon } from '../lib/icons';
 import { h } from '../lib/helpers';
-import { renderAnimeCard, buildCardMetaMap } from '../lib/anime-card';
 import { renderHeader, renderFooter } from '../render/layout';
 import { getBannerData } from '../lib/settings';
 
@@ -20,7 +18,6 @@ browseRoutes.get('/browse', async (c) => {
   const lifetime = Number(c.env.SESSION_LIFETIME_SECONDS ?? 86400);
   const session = await Session.load(c, db, lifetime);
   const auth = new Auth(db, session, c.env as any, c.req.header('cf-connecting-ip') ?? 'unknown');
-  const mal = new MalAPI(c.env, c.env.API_CACHE, db);
   const siteUrl = c.env.SITE_URL;
 
   const q = (c.req.query('q') ?? '').trim();
@@ -41,19 +38,17 @@ browseRoutes.get('/browse', async (c) => {
     // All title search is Hoshika-only; no MAL/Jikan fallback on errors or empty results.
     hoshikaSearchItems = await searchHoshikaAnime(q, 50);
     result = { data: [], pagination: { items: { total: hoshikaSearchItems.length }, last_visible_page: 1 } };
-  } else if (genres.length > 0) {
-    result = await mal.getAnimeByGenres(genres, page);
   } else {
-    result = await mal.getTopAnime('bypopularity', page);
+    // Hoshika currently exposes search/details/episodes, not a verified
+    // popularity or genre catalogue. Never fill these sections from MAL/Jikan.
+    result = { data: [], pagination: { items: { total: 0 }, last_visible_page: 1 } };
   }
 
-  const items = q ? hoshikaSearchItems : (result.data ?? []);
-  // Legacy catalog enrichment must not run on Hoshika-native records.
-  if (!q) await mal.prefetchHoshikaArtForCards(items);
+  const items = q ? hoshikaSearchItems : [];
   const pagination = result.pagination ?? {};
   const totalPages = pagination.last_visible_page ?? 1;
-  const cardMeta = q ? new Map() : await buildCardMetaMap(db, items);
-  const genreList = mal.getAnimeGenres().data;
+  const cardMeta = new Map();
+  const genreList: Array<{ mal_id: number; name: string }> = [];
 
   const currentUser = auth.check() ? await auth.getCurrentUser() : null;
   const unreadCount = currentUser ? await Notification.unreadCount(db, currentUser.id) : 0;
@@ -68,7 +63,7 @@ browseRoutes.get('/browse', async (c) => {
     currentUser: layoutUser, unreadCount, requestUrl: c.req.url,
   });
 
-  const heading = q ? `🔍 Results for "${h(q)}"` : (genres.length > 0 ? '🏷️ Genre Browse' : '🌐 All Anime');
+  const heading = q ? `🔍 Results for "${h(q)}"` : '🌐 Browse Anime';
   const totalCount = pagination.items?.total ?? items.length;
 
   const activeFilterCount = (type ? 1 : 0) + (status ? 1 : 0) + genres.length + (q ? 1 : 0);
@@ -162,7 +157,7 @@ browseRoutes.get('/browse', async (c) => {
       ${items.length === 0 ? `
       <div class="flex-center" style="padding:4rem;flex-direction:column;gap:1rem;">
         <span style="font-size:3rem;">🔍</span>
-        <p class="text-muted">No results found. Try a different search.</p>
+        <p class="text-muted">${q ? 'No Hoshika results found. Try a different title.' : 'Hoshika catalog listings and genre filters are not available yet. Use the title search above; no MAL/Jikan fallback is used.'}</p>
       </div>` : `
       <div class="anime-grid">
         ${q ? items.map((a: any) => renderHoshikaSearchCard(a)).join('') : items.map((a: any) => renderAnimeCard(a, siteUrl, userStatuses[a.mal_id] ?? null, cardMeta.get(a.mal_id))).join('')}
