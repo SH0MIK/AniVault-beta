@@ -109,7 +109,8 @@ animeRoutes.get('/anime', async (c) => {
   // setting on admin/anime_images.php). Plus a simple sub/dub yes-no
   // readout for the meta row -- replaces the old "Watch on" list of every
   // streaming provider with just the two badges that actually matter.
-  const titleLogo = anime.logo_image ?? '';
+  // Hoshika does not provide title logos. Keep the title as plain text until the later TMDB-logo phase.
+  const titleLogo = '';
   const hasSub = videoEpRows.length > 0;
   const hasDub = animeDubConfirmed || dubbedLangs.length > 0 || Object.values(videoEpSet).some((v) => v.dub);
 
