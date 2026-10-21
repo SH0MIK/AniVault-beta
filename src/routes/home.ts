@@ -257,16 +257,18 @@ ${heroSliderScript(heroPool.length)}
 
   // ── Genre bar ────────────────────────────────────────────────────────────
   const genreList: Array<{ mal_id: number; name: string }> = [];
-  html += `
+  if (genreList.length > 0) {
+    html += `
   <div class="genre-nav-wrap">
     <button class="btn btn-ghost btn-sm btn-icon genre-nav-btn prev" data-target="genre-bar" data-dir="prev" aria-label="Previous genres">${icon('chevron-left', 'icon-small')}</button>
     <div class="genre-bar" id="genre-bar">
       ${genreList.map((g) => `<a href="${siteUrl}/browse?genre=${g.mal_id}" class="genre-pill">${h(g.name)}</a>`).join('')}
     </div>
     <button class="btn btn-ghost btn-sm btn-icon genre-nav-btn next" data-target="genre-bar" data-dir="next" aria-label="Next genres">${icon('chevron-right', 'icon-small')}</button>
-  </div>
+  </div>`;
+  }
 
-  <div class="home-grid">
+  html += `<div class="home-grid">
     <div class="home-sections">`;
 
   // ── Continue Watching ──────────────────────────────────────────────────
