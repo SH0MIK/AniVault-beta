@@ -258,7 +258,6 @@ browseRoutes.get('/api/search_suggest.php', async (c) => {
   try {
     // Search suggestions now come from Hoshika only. Hoshika shortId is
     // returned separately so it cannot be mistaken for a legacy MAL ID.
-    const { searchHoshikaAnime } = await import('../lib/hoshika-api');
     const items = await searchHoshikaAnime(q, 4);
     const out = items.map((a) => ({
       shortId: a.shortId,
