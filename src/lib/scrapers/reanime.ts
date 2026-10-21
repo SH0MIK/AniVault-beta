@@ -1010,13 +1010,31 @@ export async function getReanimeStream(sourceId: string): Promise<ReanimeStream>
   const embedUrl = payload.dataLink;
   const serverName = payload.name || 'ReAnime';
   if (!embedUrl) throw new Error('Missing ReAnime embed URL');
-  const embedRes = await axios.get(embedUrl, {
-    headers: { ...HEADERS, Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8', Referer: `${BASE}/` },
-    timeout: 20000,
-    responseType: 'text',
-    transformResponse: [(data: unknown) => data],
-  });
-  const decrypted = await decryptEmbed(String(embedRes.data));
+  let decrypted: Awaited<ReturnType<typeof decryptEmbed>>;
+  try {
+    const embedRes = await axios.get(embedUrl, {
+      headers: { ...HEADERS, Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8', Referer: `${BASE}/` },
+      timeout: 20000,
+      responseType: 'text',
+      transformResponse: [(data: unknown) => data],
+    });
+    decrypted = await decryptEmbed(String(embedRes.data));
+  } catch (error) {
+    // ReAnime/FlixCloud occasionally changes its embed crypto payload or blocks
+    // Worker-side extraction. Preserve the server as playable via its native
+    // embed instead of throwing and having the watch UI mark it dead.
+    console.warn('[ReAnime] HLS extraction failed; falling back to embed:', error instanceof Error ? error.message : String(error));
+    return {
+      embedUrl,
+      m3u8: null,
+      subtitles: [],
+      audioTracks: [],
+      qualities: [],
+      serverName,
+      dataType: payload.dataType,
+      type: 'iframe',
+    };
+  }
   const m3u8 = decrypted.url || null;
   const rawSubtitles = normalizeSubtitles(decrypted.subtitles, m3u8 || embedUrl);
   const hls = await enrichHls(m3u8, rawSubtitles, decrypted.playlistKey);
