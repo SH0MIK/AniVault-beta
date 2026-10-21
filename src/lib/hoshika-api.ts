@@ -204,13 +204,6 @@ export async function getHoshikaAnimeEpisodes(
     const shortId = shortIdFrom(match);
     if (!match || !shortId) return null;
 
-    const cacheKey = `hoshika_public_episodes_v2_${shortId}`;
-    if (kv) {
-      try {
-        const cached = await kv.get(cacheKey, 'json') as HoshikaEpisode[] | null;
-        if (cached && Array.isArray(cached) && cached.some((episode) => !!episode?.thumbnail)) return cached;
-      } catch { /* Cache failures must not block the live request. */ }
-    }
 
     const episodes: HoshikaEpisode[] = [];
     let after: string | null = null;
@@ -248,9 +241,6 @@ export async function getHoshikaAnimeEpisodes(
     }
 
     episodes.sort((a, b) => a.number - b.number);
-    if (kv && episodes.length) {
-      try { await kv.put(cacheKey, JSON.stringify(episodes), { expirationTtl: 21600 }); } catch {}
-    }
     return episodes.length ? episodes : null;
   } catch (error) {
     console.warn('[hoshika] Public episode lookup failed:', String(error));
@@ -269,8 +259,8 @@ function metadataFrom(item: any): HoshikaAnimeMetadata {
 /**
  * Resolve a MAL ID against Hoshika's public catalog. Search is one request in
  * the common case; detail is only fetched for a single-title/detail request
- * when search results do not include the requested fields. Cache successful
- * and empty results to avoid repeatedly hitting Hoshika for the same title.
+ * when search results do not include the requested fields. Legacy KV caches
+ * are deliberately bypassed during migration so only live Hoshika responses are used.
  */
 export async function getHoshikaAnimeMetadata(
   malId: number,
@@ -280,16 +270,6 @@ export async function getHoshikaAnimeMetadata(
 ): Promise<HoshikaAnimeMetadata | null> {
   if (!malId || !title) return null;
 
-  const cacheKey = `hoshika_public_anime_v2_${malId}`;
-  let cached: HoshikaAnimeMetadata | null = null;
-  if (kv) {
-    try {
-      cached = await kv.get(cacheKey, 'json') as HoshikaAnimeMetadata | null;
-      if (cached && (!includeDetail || (cached.poster && cached.cover && cached.episodes !== null))) {
-        return cached.poster || cached.cover || cached.episodes !== null ? cached : null;
-      }
-    } catch { /* Cache failures must not break anime pages. */ }
-  }
 
   try {
     const url = new URL('https://hoshika.app/api/v1/search');
@@ -297,18 +277,15 @@ export async function getHoshikaAnimeMetadata(
     const response = await fetch(url.toString(), {
       headers: { Accept: 'application/json' },
     });
-    if (!response.ok) return cached;
+    if (!response.ok) return null;
     const payload: any = await response.json();
-    if (payload?.ok === false) return cached;
+    if (payload?.ok === false) return null;
 
     const match = resultsFrom(payload)
       .map((item) => ({ item, score: titleMatchScore(item, title) }))
       .filter((entry) => entry.score >= 80)
       .sort((a, b) => b.score - a.score)[0]?.item;
     if (!match) {
-      if (kv) {
-        try { await kv.put(cacheKey, JSON.stringify({ poster: '', cover: '', episodes: null }), { expirationTtl: 3600 }); } catch {}
-      }
       return null;
     }
 
@@ -334,16 +311,9 @@ export async function getHoshikaAnimeMetadata(
       }
     }
 
-    if (kv) {
-      try {
-        await kv.put(cacheKey, JSON.stringify(result), {
-          expirationTtl: result.poster || result.cover || result.episodes !== null ? 86400 : 3600,
-        });
-      } catch { /* Metadata is still usable if KV is unavailable. */ }
-    }
     return result.poster || result.cover || result.episodes !== null ? result : null;
   } catch (error) {
     console.warn('[hoshika] Public catalog lookup failed:', String(error));
-    return cached;
+    return null;
   }
 }
