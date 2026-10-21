@@ -258,7 +258,8 @@ homeRoutes.get('/', async (c) => {
           } as NormalisedAnime);
       heroPool.push(anime);
       heroBanners.push(r.banner_image_url || '');
-      heroLogos.push(r.logo_image_url || '');
+      // Title logos are intentionally disabled until the later TMDB-logo phase.
+      heroLogos.push('');
       heroCovers.push(cover);
     }
   }
@@ -272,7 +273,8 @@ homeRoutes.get('/', async (c) => {
       mal.getLocalAnimeImagesMany(heroIds),
     ]);
     heroBanners = heroPool.map((a) => bannerMap.get(a.mal_id)?.image_url || '');
-    heroLogos = heroPool.map((a) => logoMap.get(a.mal_id) || '');
+    // Title logos are intentionally disabled until the later TMDB-logo phase.
+    heroLogos = heroPool.map(() => '');
     heroCovers = heroPool.map((a) => imageMap.get(a.mal_id) || '');
   }
   // Preload slide 0's LCP image so it starts downloading during <head> parsing.
