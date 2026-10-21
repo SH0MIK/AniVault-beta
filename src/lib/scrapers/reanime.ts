@@ -154,6 +154,7 @@ interface ReanimeLink {
 }
 
 interface ReanimeEpisodeLookup {
+  animeId?: string | null;
   anilistId?: number | string | null;
   malId?: number | string | null;
   title?: string | null;
@@ -874,12 +875,25 @@ async function fetchEpisodeLinks(lookup: ReanimeEpisodeLookup, ep: number): Prom
   const malId = lookup.malId == null ? null : Number(lookup.malId);
   const title = lookup.title && lookup.title !== 'Unknown' ? lookup.title : null;
   const altTitle = lookup.altTitle && lookup.altTitle !== 'Unknown' ? lookup.altTitle : null;
-  const series = alId != null && Number.isFinite(alId)
-    ? await resolveReanimeSeries(alId).catch((err) => {
-      if (title) return resolveReanimeSeriesByTitle(title, altTitle, malId);
-      throw err;
-    })
-    : await resolveReanimeSeriesByTitle(title || altTitle || 'Unknown', altTitle, malId);
+  // The episode ID carries the exact ReAnime slug used to fetch its episode
+  // list. Reuse it instead of searching by title a second time, which could
+  // resolve a different season or alias when the catalog has duplicate titles.
+  const series: ReanimeSeries = lookup.animeId
+    ? {
+      animeId: String(lookup.animeId),
+      title: title || altTitle || String(lookup.animeId),
+      anilistId: alId != null && Number.isFinite(alId) ? alId : 0,
+      malId: malId != null && Number.isFinite(malId) ? malId : null,
+      subbed: null,
+      dubbed: null,
+      episodesCount: null,
+    }
+    : alId != null && Number.isFinite(alId)
+      ? await resolveReanimeSeries(alId).catch((err) => {
+        if (title) return resolveReanimeSeriesByTitle(title, altTitle, malId);
+        throw err;
+      })
+      : await resolveReanimeSeriesByTitle(title || altTitle || 'Unknown', altTitle, malId);
   const [watchRes, flixRes] = await Promise.allSettled([
     axios.get(`${BASE}/api/watch/${encodeURIComponent(series.animeId)}/${ep}`, { headers: HEADERS, timeout: 15000 }).then((res: any) => res.data),
     alId != null && Number.isFinite(alId)
@@ -888,7 +902,32 @@ async function fetchEpisodeLinks(lookup: ReanimeEpisodeLookup, ep: number): Prom
   ]);
   const watchData = watchRes.status === 'fulfilled' ? watchRes.value : null;
   const flixData = flixRes.status === 'fulfilled' ? flixRes.value : null;
-  const links: ReanimeLink[] = Array.isArray(watchData?.episode_links) ? [...watchData.episode_links] : [];
+  const rawWatchLinks = [
+    watchData?.episode_links,
+    watchData?.episodeLinks,
+    watchData?.servers,
+    watchData?.links,
+    watchData?.data?.episode_links,
+    watchData?.data?.episodeLinks,
+    watchData?.data?.servers,
+    watchData?.data?.links,
+  ].find(Array.isArray) as any[] | undefined;
+  const normalizeLink = (raw: any): ReanimeLink | null => {
+    if (!raw || typeof raw !== 'object') return null;
+    const rawType = String(raw.dataType ?? raw.data_type ?? raw.audio ?? raw.language ?? raw.type ?? '').toLowerCase();
+    const serverName = String(raw.serverName ?? raw.server_name ?? raw.name ?? raw.server ?? '');
+    const dataLink = raw.dataLink ?? raw.data_link ?? raw.url ?? raw.link ?? raw.src ?? raw.href ?? raw.embedUrl ?? raw.embed_url;
+    let dataType = rawType;
+    if (!['sub', 's-sub', 'dub', 's-dub'].includes(dataType)) {
+      const hint = `${serverName} ${raw.label ?? ''} ${rawType}`.toLowerCase();
+      if (/\b(dub|english)\b/.test(hint)) dataType = 'dub';
+      else if (/\b(sub|japanese|raw)\b/.test(hint)) dataType = 'sub';
+    }
+    if (typeof dataLink !== 'string' || !/^https?:\/\//i.test(dataLink)) return null;
+    if (!['sub', 's-sub', 'dub', 's-dub'].includes(dataType)) return null;
+    return { '$id': raw['$id'] ?? raw.id, serverName: serverName || (dataType.includes('dub') ? 'DUB' : 'SUB'), dataType, dataLink };
+  };
+  const links: ReanimeLink[] = (rawWatchLinks ?? []).map(normalizeLink).filter(Boolean) as ReanimeLink[];
   if (flixData?.success && Array.isArray(flixData.servers)) {
     const seen = new Set(links.map((link) => link['$id'] || `${link.serverName}:${link.dataType}:${link.dataLink}`));
     for (const link of flixData.servers) {
@@ -933,7 +972,7 @@ export async function getReanimeEpisodes(input: number | string | ReanimeEpisode
     const meta = anizip?.episodes?.[String(num)] ?? null;
     return {
       num,
-      id: encodePayload({ anilistId: series.anilistId || alId, malId: series.malId || malId, title: title || series.title, altTitle: altTitle || series.title, ep: num }),
+      id: encodePayload({ animeId: series.animeId, anilistId: series.anilistId || alId, malId: series.malId || malId, title: title || series.title, altTitle: altTitle || series.title, ep: num }),
       title: meta?.title?.en || meta?.title?.['x-jat'] || ep.title || `Episode ${num}`,
       titleJapanese: meta?.title?.ja || ep.title_japanese || null,
       titleRomanji: meta?.title?.['x-jat'] || ep.title_romanji || null,
