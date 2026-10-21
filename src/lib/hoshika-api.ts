@@ -554,7 +554,7 @@ export async function getHoshikaHomeSections(): Promise<HoshikaHomeSections> {
 
 /** Hoshika's paginated, filterable anime catalog. */
 export async function getHoshikaCatalog(options: {
-  genre?: string; year?: number; sort?: string; page?: number; type?: string;
+  genre?: string; year?: number; sort?: string; page?: number; type?: string; status?: string;
 } = {}): Promise<{ items: HoshikaCatalogAnime[]; total: number; totalPages: number }> {
   const url = new URL('https://hoshika.app/api/v1/catalog');
   url.searchParams.set('type', 'anime');
@@ -563,6 +563,7 @@ export async function getHoshikaCatalog(options: {
   url.searchParams.set('sort', options.sort || 'popular');
   url.searchParams.set('page', String(Math.max(1, options.page || 1)));
   if (options.type) url.searchParams.set('format', options.type);
+  if (options.status) url.searchParams.set('status', options.status);
   const payload = await fetchHoshikaJson(url.pathname.replace('/api/v1/', '') + url.search);
   const root = unwrap(payload ?? {});
   const rawItems = resultsFrom(payload ?? {});
