@@ -13,6 +13,8 @@ import { renderAnimeCard, buildCardMetaMap, LANG_CODE } from '../lib/anime-card'
 import { renderHeader, renderFooter, CurrentUser } from '../render/layout';
 import { HISTORY_CSS } from '../render/history-css';
 import { getBannerData } from '../lib/settings';
+import { getHoshikaAnimeById } from '../lib/hoshika-api';
+import { findIdentityByLegacyMalId } from '../lib/anime-identity';
 
 export const listRoutes = new Hono<{ Bindings: Env }>();
 
@@ -308,9 +310,17 @@ listRoutes.get('/history', async (c) => {
   );
   const totalPages = total ? Math.ceil(total / limit) : 1;
 
-  // History thumbnails use admin-saved overrides only during the Hoshika
-  // migration. Missing images use a placeholder; legacy scraper caches are
-  // intentionally not read or repopulated.
+  // History cards need portrait posters from Hoshika. The legacy anime_image
+  // column can hold a landscape banner, so don't use it as a poster fallback.
+  const historyPosters: Record<number, string> = {};
+  await Promise.all(history.map(async (row: any) => {
+    try {
+      const identity = await findIdentityByLegacyMalId(db, Number(row.anime_id));
+      if (!identity?.hoshika_short_id) return;
+      const anime = await getHoshikaAnimeById(identity.hoshika_short_id);
+      if (anime?.poster) historyPosters[Number(row.anime_id)] = anime.poster;
+    } catch { /* keep a neutral placeholder if Hoshika has no poster */ }
+  }));
   const episodeThumbOverrides: Record<string, string> = {};
   if (history.length > 0) {
     try {
@@ -344,7 +354,7 @@ listRoutes.get('/history', async (c) => {
       <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
       <p>No watch history yet.</p>
       <a href="${siteUrl}/browse" style="color:var(--accent,#e00);font-weight:600;text-decoration:none;">Browse Anime →</a>
-    </div>` : history.map((hRow) => renderHistoryCard(hRow, siteUrl, episodeThumbOverrides)).join('')}
+    </div>` : history.map((hRow) => renderHistoryCard(hRow, siteUrl, episodeThumbOverrides, historyPosters[Number(hRow.anime_id)] || '')).join('')}
   </div>
 
   ${totalPages > 1 ? renderHistPagination(page, totalPages) : ''}
@@ -393,7 +403,7 @@ async function clearAll(btn) {
   return c.html(html);
 });
 
-export function renderHistoryCard(hRow: any, siteUrl: string, episodeThumbOverrides: Record<string, string> = {}): string {
+export function renderHistoryCard(hRow: any, siteUrl: string, episodeThumbOverrides: Record<string, string> = {}, animePoster = ''): string {
   const watchUrl = `${siteUrl}/watch?anime=${hRow.anime_id}&ep=${hRow.episode_num}`;
   const epNum = hRow.episode_num;
   const animeTitle = h(hRow.anime_title || `Anime #${hRow.anime_id}`);
@@ -401,7 +411,7 @@ export function renderHistoryCard(hRow: any, siteUrl: string, episodeThumbOverri
   // Prefer admin-saved episode art, then existing episode art, then the
   // anime cover saved with the watch-history entry.
   const thumb = episodeThumbOverrides[`${hRow.anime_id}:${epNum}`] || hRow.ep_thumb || '';
-  const cover = hRow.anime_image ?? '';
+  const cover = animePoster;
   const date = hRow.watched_at ? new Date(hRow.watched_at.replace(' ', 'T') + 'Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }) : '';
 
   const watchTime = hRow.watch_time ?? 0;
