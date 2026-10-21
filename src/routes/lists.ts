@@ -13,7 +13,6 @@ import { renderAnimeCard, buildCardMetaMap, LANG_CODE } from '../lib/anime-card'
 import { renderHeader, renderFooter, CurrentUser } from '../render/layout';
 import { HISTORY_CSS } from '../render/history-css';
 import { getBannerData } from '../lib/settings';
-import { getEpisodeThumbnail } from '../lib/episode-thumb';
 
 export const listRoutes = new Hono<{ Bindings: Env }>();
 
@@ -310,11 +309,9 @@ listRoutes.get('/history', async (c) => {
   );
   const totalPages = total ? Math.ceil(total / limit) : 1;
 
-  // History thumbnails: an admin-saved override wins where one exists
-  // (episode_overrides.image_url, set via the Episode Thumbnails admin
-  // panel). Batch-lookup for this page, then live-fetch (via our scraper
-  // API, KV-cached) whatever's still missing -- capped at 24/page so this
-  // stays cheap. Cards fall back to a placeholder only if both miss.
+  // History thumbnails use admin-saved overrides only during the Hoshika
+  // migration. Missing images use a placeholder; legacy scraper caches are
+  // intentionally not read or repopulated.
   const episodeThumbOverrides: Record<string, string> = {};
   if (history.length > 0) {
     try {
@@ -329,19 +326,7 @@ listRoutes.get('/history', async (c) => {
       }
     } catch { /* best-effort -- cards fall back to scraper/placeholder */ }
 
-    const missing = history.filter((r: any) => !episodeThumbOverrides[`${r.anime_id}:${r.episode_num}`]);
-    if (missing.length > 0) {
-      // Do not query MAL/Jikan just to classify legacy anime. The thumbnail
-      // resolver uses saved overrides and verified Hoshika-backed routes where
-      // available; unresolved legacy IDs fall back without guessed metadata.
-      const scraped = await Promise.all(
-        missing.map((r: any) => getEpisodeThumbnail(c.env, db, r.anime_id, r.episode_num, null))
-      );
-      missing.forEach((r: any, i: number) => {
-        const thumb = scraped[i];
-        if (thumb) episodeThumbOverrides[`${r.anime_id}:${r.episode_num}`] = thumb;
-      });
-    }
+    // Missing images stay blank rather than reading/repopulating legacy scraper caches.
   }
 
   const { unreadCount, layoutUser } = await commonLayoutData(db, auth);
