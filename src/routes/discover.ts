@@ -13,6 +13,15 @@ import { getBannerData } from '../lib/settings';
 
 export const discoverRoutes = new Hono<{ Bindings: Env }>();
 
+function hoshikaCatalogueNotice(siteUrl: string, title: string, view: string): string {
+  return `<main class="container section">
+    <h1>${h(title)}</h1>
+    <p class="text-muted">This ${h(view)} catalogue needs a Hoshika-native listing endpoint. AniVault won't silently substitute MAL, Jikan, or AniList data.</p>
+    <p><a class="btn btn-primary" href="${h(siteUrl)}/browse">Search the Hoshika catalog</a></p>
+  </main>`;
+}
+
+
 async function commonCtx(c: any) {
   const db = new Db(c.env.DB);
   const lifetime = Number(c.env.SESSION_LIFETIME_SECONDS ?? 86400);
@@ -30,6 +39,11 @@ async function commonCtx(c: any) {
 
 // ── pages/seasonal.php ────────────────────────────────────────────────────
 discoverRoutes.get('/seasonal', async (c) => {
+  const siteUrl = c.env.SITE_URL;
+  const banner = await getBannerData(new Db(c.env.DB));
+  const html = renderHeader({ ...banner, siteUrl, siteName: c.env.SITE_NAME, pageTitle: 'Seasonal Anime', currentPage: 'seasonal', requestUrl: c.req.url }) + hoshikaCatalogueNotice(siteUrl, 'Seasonal Anime', 'seasonal') + renderFooter({ siteUrl });
+  return c.html(html);
+  // Legacy implementation below is unreachable until Hoshika supports listings.
   const { db, session, lifetime, mal, unreadCount, userStatuses, layoutUser } = await commonCtx(c);
   const siteUrl = c.env.SITE_URL;
   const page = Math.max(1, parseInt(c.req.query('page') ?? '1', 10) || 1);
@@ -72,6 +86,11 @@ const TOP_FILTERS: Record<string, string> = {
 };
 
 discoverRoutes.get('/top', async (c) => {
+  const siteUrl = c.env.SITE_URL;
+  const banner = await getBannerData(new Db(c.env.DB));
+  const html = renderHeader({ ...banner, siteUrl, siteName: c.env.SITE_NAME, pageTitle: 'Top Anime', currentPage: 'top', requestUrl: c.req.url }) + hoshikaCatalogueNotice(siteUrl, 'Top Anime', 'ranked') + renderFooter({ siteUrl });
+  return c.html(html);
+  // Legacy implementation below is unreachable until Hoshika supports listings.
   const { db, session, lifetime, mal, unreadCount, userStatuses, layoutUser } = await commonCtx(c);
   const siteUrl = c.env.SITE_URL;
   const filter = c.req.query('filter') ?? 'bypopularity';
@@ -178,6 +197,11 @@ export function renderTopPagination(filter: string, page: number, totalPages: nu
 const DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
 
 discoverRoutes.get('/schedule', async (c) => {
+  const siteUrl = c.env.SITE_URL;
+  const banner = await getBannerData(new Db(c.env.DB));
+  const html = renderHeader({ ...banner, siteUrl, siteName: c.env.SITE_NAME, pageTitle: 'Anime Schedule', currentPage: 'schedule', requestUrl: c.req.url }) + hoshikaCatalogueNotice(siteUrl, 'Anime Schedule', 'schedule') + renderFooter({ siteUrl });
+  return c.html(html);
+  // Legacy implementation below is unreachable until Hoshika supports listings.
   const { db, session, lifetime, mal, unreadCount, userStatuses, layoutUser } = await commonCtx(c);
   const siteUrl = c.env.SITE_URL;
 
