@@ -18,6 +18,57 @@ import { findIdentityByHoshikaId, findIdentityByLegacyMalId } from '../lib/anime
 import { getHoshikaAnimeById, getHoshikaAnimeEpisodesById } from '../lib/hoshika-api';
 import { AnimeTracker } from '../lib/tracker';
 import { resolveAnimeHeavenMp4 } from '../lib/scrapers/animeheaven';
+import { getReanimeEpisodes, getReanimeServers, getReanimeStream } from '../lib/scrapers/reanime';
+
+type ReanimeProxyResource = { url: string; playlistKey: string | null; referer: string; kind: 'playlist' | 'asset' };
+const REANIME_PROXY_TTL = 1800;
+
+async function storeReanimeResource(kv: KVNamespace, resource: ReanimeProxyResource): Promise<string> {
+  const token = crypto.randomUUID();
+  await kv.put('rean-hls:' + token, JSON.stringify(resource), { expirationTtl: REANIME_PROXY_TTL });
+  return '/api/reanime_hls/' + token;
+}
+
+function decodeReanimePlaylist(text: string, playlistKey: string | null): string {
+  if (text.trimStart().startsWith('#EXTM3U') || !playlistKey) return text;
+  try {
+    const keyBinary = atob(playlistKey.replace(/-/g, '+').replace(/_/g, '/'));
+    const encryptedBinary = atob(text.trim().replace(/-/g, '+').replace(/_/g, '/'));
+    const decoded = new Uint8Array(encryptedBinary.length);
+    for (let i = 0; i < encryptedBinary.length; i++) decoded[i] = encryptedBinary.charCodeAt(i) ^ keyBinary.charCodeAt(i % keyBinary.length);
+    const plain = new TextDecoder().decode(decoded);
+    return plain.trimStart().startsWith('#EXTM3U') ? plain : text;
+  } catch { return text; }
+}
+
+function reanimeResourceKind(url: string): 'playlist' | 'asset' {
+  try { return /\\.(?:m3u8?|m3u)(?:$|\\?)/i.test(new URL(url).pathname + new URL(url).search) ? 'playlist' : 'asset'; }
+  catch { return 'asset'; }
+}
+
+async function rewriteReanimePlaylist(text: string, baseUrl: string, kv: KVNamespace, playlistKey: string | null, referer: string): Promise<string> {
+  const proxyUrl = async (raw: string): Promise<string> => {
+    try {
+      const absolute = new URL(raw, baseUrl).toString();
+      if (!/^https?:$/.test(new URL(absolute).protocol)) return raw;
+      return await storeReanimeResource(kv, { url: absolute, playlistKey, referer, kind: reanimeResourceKind(absolute) });
+    } catch { return raw; }
+  };
+  const lines = text.split(/\\r?\\n/);
+  const rewritten: string[] = [];
+  for (const line of lines) {
+    if (!line.trim()) { rewritten.push(line); continue; }
+    if (line.trimStart().startsWith('#')) {
+      const match = line.match(/URI="([^"]+)"/);
+      if (match) rewritten.push(line.replace(match[0], 'URI="' + await proxyUrl(match[1]) + '"'));
+      else rewritten.push(line);
+    } else {
+      rewritten.push(await proxyUrl(line.trim()));
+    }
+  }
+  return rewritten.join('\\n');
+}
+
 
 export const scraperRoutes = new Hono<{ Bindings: Env }>();
 
@@ -159,33 +210,132 @@ scraperRoutes.get('/api/desidub_stream.php', async (c) => {
 });
 
 // ── api/reanime_stream.php ───────────────────────────────────────────────
-// English-dub-only source. Same shape and reasoning as anikoto_stream.php
-// above — a single request lists servers (via /watch's availableServers,
-// no `server=` param) or resolves one specific server (with `server=`).
+// ReAnime now resolves directly in the Worker; no external scraper API call.
 scraperRoutes.get('/api/reanime_stream.php', async (c) => {
   const animeId = parseInt(c.req.query('anime') ?? '0', 10) || 0;
   const epNum = parseInt(c.req.query('ep') ?? '0', 10) || 0;
   const audio = ['sub', 'dub', 'raw'].includes(c.req.query('audio') ?? '') ? c.req.query('audio')! : 'sub';
   const server = (c.req.query('server') ?? '').trim();
   if (!animeId || !epNum) return c.json({ error: 'Missing anime or ep' }, 400);
-  const base = getScraperBase(c.env);
-  if (!base) return c.json({ error: 'Scraper API not configured' }, 500);
 
-  let watchUrl = `${base}/api/watch/reanime/mal-${animeId}/${epNum}/${audio}`;
-  if (server !== '') watchUrl += `?server=${encodeURIComponent(server)}`;
+  try {
+    const db = new Db(c.env.DB);
+    let title = '';
+    let reanimeMalId: number | undefined;
+    const direct = await getHoshikaAnimeById(String(animeId)).catch(() => null);
+    if (direct) {
+      // The player normally sends a Hoshika ID, not a MAL ID.
+      // Use the title for ReAnime lookup unless a verified MAL mapping is known.
+      title = direct.titleEnglish || direct.titleRomaji || direct.title || '';
+    }
+    if (!title) {
+      const identity = await findIdentityByLegacyMalId(db, animeId).catch(() => null);
+      if (identity?.verified === 1 && identity.legacy_mal_id === animeId) {
+        const anime = await getHoshikaAnimeById(identity.hoshika_short_id).catch(() => null);
+        title = anime?.titleEnglish || anime?.titleRomaji || anime?.title || identity.title || '';
+        reanimeMalId = identity.legacy_mal_id;
+      }
+    }
+    if (!title) return c.json({ error: 'Could not resolve anime title for ReAnime' }, 404);
 
-  const { ok, code, data } = await fetchJson(watchUrl, 23000, c.env.SCRAPER_API_KEY || '');
-  if (!ok) return c.json({ error: data?.error ?? `ReAnime fetch failed HTTP ${code}` });
+    const episodes = await getReanimeEpisodes({ malId: reanimeMalId, title, altTitle: title });
+    const episode = episodes.find((item) => item.num === epNum);
+    if (!episode) return c.json({ error: 'ReAnime episode not found' }, 404);
+    const available = await getReanimeServers(episode.id);
+    const servers = available.map((item) => ({ name: item.name, type: item.type }));
+    if (!server) return c.json({ servers });
 
-  const servers = (data?.availableServers ?? []).map((s: string) => ({ name: s, type: audio }));
-  const m3u8 = data?.hlsProxyUrl ?? data?.m3u8 ?? null;
-  const mp4 = data?.mp4ProxyUrl ?? data?.mp4 ?? null;
-  const qualities = Array.isArray(data?.qualities) ? data.qualities : [];
+    const selected = available.find((item) =>
+      item.name.toLowerCase() === server.toLowerCase() &&
+      (item.type === audio || audio === 'raw')
+    );
+    if (!selected) return c.json({ error: 'ReAnime server not found', servers }, 404);
 
-  if (data?.iframeOnly) return c.json({ servers, embedUrl: data.embedUrl ?? '', iframeOnly: true, server: data.server ?? server });
-  if (m3u8) return c.json({ servers, m3u8, server: data.server ?? server, subtitles: data.subtitles ?? [], qualities });
-  if (mp4) return c.json({ servers, mp4, server: data.server ?? server, qualities });
-  return c.json({ error: 'No stream URL in response' });
+    const stream = await getReanimeStream(selected.sourceId);
+    if (stream.type === 'iframe' || !stream.m3u8) {
+      return c.json({ servers, embedUrl: stream.embedUrl, iframeOnly: true, server: stream.serverName });
+    }
+    const proxiedMaster = await storeReanimeResource(c.env.API_CACHE, {
+      url: stream.m3u8,
+      playlistKey: stream.playlistKey ?? null,
+      referer: stream.referer || 'https://flixcloud.cc/',
+      kind: 'playlist',
+    });
+    const proxiedSubtitles = await Promise.all((stream.subtitles ?? []).map(async (subtitle: any) => ({
+      ...subtitle,
+      url: subtitle.url ? await storeReanimeResource(c.env.API_CACHE, {
+        url: subtitle.url,
+        playlistKey: stream.playlistKey ?? null,
+        referer: stream.referer || 'https://flixcloud.cc/',
+        kind: reanimeResourceKind(subtitle.url),
+      }) : subtitle.url,
+    })));
+    const proxiedQualities = await Promise.all((stream.qualities ?? []).map(async (quality: any) => ({
+      ...quality,
+      url: quality.url ? await storeReanimeResource(c.env.API_CACHE, {
+        url: quality.url,
+        playlistKey: stream.playlistKey ?? null,
+        referer: stream.referer || 'https://flixcloud.cc/',
+        kind: 'playlist',
+      }) : quality.url,
+    })));
+    return c.json({
+      servers,
+      m3u8: proxiedMaster,
+      server: stream.serverName,
+      subtitles: proxiedSubtitles,
+      qualities: proxiedQualities,
+      audioTracks: await Promise.all((stream.audioTracks ?? []).map(async (track: any) => ({
+        ...track,
+        url: track.url ? await storeReanimeResource(c.env.API_CACHE, {
+          url: track.url,
+          playlistKey: stream.playlistKey ?? null,
+          referer: stream.referer || 'https://flixcloud.cc/',
+          kind: reanimeResourceKind(track.url),
+        }) : track.url,
+      }))),
+      selectedAudioLang: stream.selectedAudioLang,
+    });
+  } catch (error) {
+    console.error('[ReAnime] Worker resolver failed:', error instanceof Error ? error.message : String(error));
+    return c.json({ error: 'ReAnime could not resolve this episode right now' }, 502);
+  }
+});
+
+// Opaque, short-lived resource tokens keep ReAnime's decrypted HLS playlists and
+// their child playlists/segments on the same-origin Worker without exposing an open proxy.
+scraperRoutes.get('/api/reanime_hls/:token', async (c) => {
+  const token = c.req.param('token');
+  if (!/^[0-9a-f-]{36}$/i.test(token)) return c.text('Not found', 404);
+  const stored = await c.env.API_CACHE.get('rean-hls:' + token);
+  if (!stored) return c.text('Stream link expired; reload the episode.', 410);
+  let resource: ReanimeProxyResource;
+  try { resource = JSON.parse(stored) as ReanimeProxyResource; } catch { return c.text('Invalid stream link', 500); }
+  let target: URL;
+  try { target = new URL(resource.url); } catch { return c.text('Invalid stream URL', 400); }
+  if (!['http:', 'https:'].includes(target.protocol)) return c.text('Invalid stream protocol', 400);
+
+  try {
+    const upstream = await fetch(target.toString(), {
+      headers: { Accept: '*/*', Referer: resource.referer || 'https://flixcloud.cc/', 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36' },
+      redirect: 'follow',
+    });
+    if (!upstream.ok) return c.text('Upstream stream returned HTTP ' + upstream.status, 502);
+    if (resource.kind === 'playlist') {
+      const raw = await upstream.text();
+      const decoded = decodeReanimePlaylist(raw, resource.playlistKey);
+      if (!decoded.trimStart().startsWith('#EXTM3U')) return c.text('Invalid HLS playlist', 502);
+      const rewritten = await rewriteReanimePlaylist(decoded, target.toString(), c.env.API_CACHE, resource.playlistKey, resource.referer);
+      return new Response(rewritten, { headers: { 'Content-Type': 'application/vnd.apple.mpegurl; charset=utf-8', 'Cache-Control': 'no-store' } });
+    }
+    return new Response(upstream.body, {
+      status: upstream.status,
+      headers: { 'Content-Type': upstream.headers.get('Content-Type') || 'application/octet-stream', 'Cache-Control': 'no-store' },
+    });
+  } catch (error) {
+    console.error('[ReAnime HLS] Proxy failed:', error instanceof Error ? error.message : String(error));
+    return c.text('Could not fetch ReAnime stream resource', 502);
+  }
 });
 
 // ── api/animenosub_stream.php ────────────────────────────────────────────
