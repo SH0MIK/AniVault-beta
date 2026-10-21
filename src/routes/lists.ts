@@ -359,7 +359,8 @@ listRoutes.get('/history', async (c) => {
         if (episode?.thumbnail) episodeThumbOverrides[key] = episode.thumbnail;
       } catch { /* retain stored image/poster fallbacks */ }
     }));
-\n    // Missing images stay blank rather than reading/repopulating legacy scraper caches.
+
+    // Missing images stay blank rather than reading/repopulating legacy scraper caches.
   }
 
   const { unreadCount, layoutUser } = await commonLayoutData(db, auth);
