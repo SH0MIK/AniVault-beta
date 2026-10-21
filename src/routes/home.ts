@@ -7,20 +7,19 @@ import type { Env } from '../index';
 import { Db } from '../lib/db';
 import { Session } from '../lib/session';
 import { Auth } from '../lib/auth';
-import { MalAPI } from '../lib/mal-api';
 import { AnimeTracker } from '../lib/tracker';
 import { Notification } from '../lib/notification';
 import { getUserAnimeStatuses } from '../lib/user-list';
 import { icon } from '../lib/icons';
 import { h } from '../lib/helpers';
-import { renderAnimeCard, buildCardMetaMap, AnimeCardMeta } from '../lib/anime-card';
+import { renderAnimeCard, AnimeCardMeta } from '../lib/anime-card';
 import { renderHeader, renderFooter } from '../render/layout';
 import { CONTINUE_WATCHING_CSS } from '../render/home-css';
 import { continueWatchingScript, heroSliderScript, rowNavScript } from '../render/home-js';
 import type { NormalisedAnime } from '../lib/mal-api';
 import { getBannerData } from '../lib/settings';
-import { getAnimeEpisodeThumbnails } from '../lib/episode-thumb';
-import { getHomepageSnapshot } from '../lib/home-cache';
+import { getHoshikaAnimeById } from '../lib/hoshika-api';
+import { findIdentityByLegacyMalId } from '../lib/anime-identity';
 
 export const homeRoutes = new Hono<{ Bindings: Env }>();
 
@@ -53,6 +52,22 @@ interface WatchHistoryRow {
   episode_duration: number;
 }
 
+function toHoshikaNormalisedAnime(anime: Awaited<ReturnType<typeof getHoshikaAnimeById>>, legacyId: number): NormalisedAnime | null {
+  if (!anime) return null;
+  const poster = anime.poster || '';
+  return {
+    mal_id: legacyId, title: anime.title || 'Unknown anime',
+    title_english: anime.titleEnglish || '', title_japanese: anime.titleJapanese || '',
+    images: { jpg: { image_url: poster, large_image_url: poster } },
+    synopsis: anime.synopsis || '', background: '', score: anime.score ?? 0,
+    scored_by: null, rank: null, popularity: null, episodes: anime.episodes ?? 0,
+    status: anime.status || 'Unknown', type: anime.type || '', rating: '', source: '',
+    duration: null, aired: { string: null }, start_date: null,
+    genres: anime.genres.map((name, index) => ({ mal_id: -(index + 1), name })),
+    studios: [], related_anime: [], recommendations: [], trailer: [], themes: [],
+    members: 0, broadcast: { day: null, time: null }, duration_mins: null,
+  } as NormalisedAnime;
+}
 homeRoutes.get('/', async (c) => {
   const db = new Db(c.env.DB);
   const lifetime = Number(c.env.SESSION_LIFETIME_SECONDS ?? 86400);
@@ -64,55 +79,30 @@ homeRoutes.get('/', async (c) => {
   }
   const session = await Session.load(c, db, lifetime);
   const auth = new Auth(db, session, c.env as any, c.req.header('cf-connecting-ip') ?? 'unknown');
-  const mal = new MalAPI(c.env, c.env.API_CACHE, db);
   const siteUrl = c.env.SITE_URL;
 
-  // Homepage API sections are served from the D1 snapshot. This keeps
-  // AniList/MAL completely off the normal homepage request path once the
-  // cache has been populated. If the cache is genuinely empty (first deploy
-  // before the scheduled job/admin refresh), keep the old live fallback so
-  // the homepage still renders instead of showing empty rows.
-  const homepageSnapshot = await getHomepageSnapshot(db);
-  let topList: NormalisedAnime[];
-  let upcomingList: NormalisedAnime[];
+  // Hoshika does not currently expose a verified popularity/upcoming feed.
+  // Do not reuse stale MAL/AniList homepage snapshots or fall back to them.
+  // Search and detail pages remain available through the Hoshika-only routes.
+  const topList: NormalisedAnime[] = [];
+  const upcomingList: NormalisedAnime[] = [];
 
-  if (homepageSnapshot) {
-    topList = homepageSnapshot.popular.slice(0, 12);
-    upcomingList = homepageSnapshot.upcoming.slice(0, 8);
-  } else {
-    const [topAnime, upcoming] = await Promise.all([
-      mal.getTopAnime('bypopularity', 1),
-      mal.getSeasonUpcoming(),
-    ]);
-    topList = (topAnime.data ?? []).slice(0, 12);
-    upcomingList = (upcoming.data ?? []).slice(0, 8);
-  }
-
-  // Trending/seasonal is intentionally not loaded on the homepage.
-  // Resolve only the sections that are actually rendered.
-  const homepageArtItems = [...topList, ...upcomingList];
-  await mal.prefetchHoshikaArtForCards(homepageArtItems);
-
-  // Watch Now — anime that have episodes available in episode_videos
-  let watchNowList: any[] = [];
+  // Watch Now — only display rows whose legacy IDs have verified Hoshika mappings.
+  let watchNowList: NormalisedAnime[] = [];
   try {
     const rows = await db.fetchAll<{ anime_id: number }>(
-      'SELECT DISTINCT anime_id FROM episode_videos WHERE is_active = 1 ORDER BY updated_at DESC LIMIT 12'
+      'SELECT anime_id FROM episode_videos WHERE is_active = 1 GROUP BY anime_id ORDER BY MAX(updated_at) DESC LIMIT 12'
     );
-    // Watch Now is a homepage card row too. Resolve its poster art directly
-    // from TMDB using the same anime-title matching/filtering as the scraper;
-    // Railway is not involved in the homepage request path.
-    const snapshotAnime = [...topList, ...upcomingList];
-    const snapshotById = new Map(snapshotAnime.map((anime) => [anime.mal_id, anime]));
-    watchNowList = rows
-      .map((r) => snapshotById.get(r.anime_id))
-      .filter(Boolean) as NormalisedAnime[];
-    // Only resolve TMDB art for cards we can render from the D1/MAL snapshot.
-    await mal.prefetchHoshikaArtForCards(watchNowList);
+    const resolved = await Promise.all(rows.map(async ({ anime_id }) => {
+      const identity = await findIdentityByLegacyMalId(db, anime_id).catch(() => null);
+      if (!identity || identity.verified !== 1 || !identity.hoshika_short_id) return null;
+      const anime = await getHoshikaAnimeById(identity.hoshika_short_id);
+      return toHoshikaNormalisedAnime(anime, anime_id);
+    }));
+    watchNowList = resolved.filter((anime): anime is NormalisedAnime => anime !== null);
   } catch {
     watchNowList = [];
   }
-
   // Watch history (logged-in users only) — the PHP version's CREATE TABLE /
   // ALTER TABLE self-healing runs on every home page load; that schema
   // migration dance isn't needed here since watch_history already exists
@@ -130,13 +120,9 @@ homeRoutes.get('/', async (c) => {
     } catch {
       watchHistory = [];
     }
-    // Continue Watching thumbnails: an admin-saved override wins where one
-    // exists (episode_overrides.image_url, set via the Episode Thumbnails
-    // admin panel). Batch look these up for the episodes on this page in
-    // one query, then live-fetch (via our scraper API, KV-cached) whatever
-    // episodes are still missing one -- only a handful of cards per page
-    // load, so this stays cheap. Cards fall back to a placeholder only if
-    // both miss.
+    // Continue Watching thumbnails use admin-saved overrides only during
+    // the Hoshika migration. Missing images use the card placeholder; legacy
+    // scraper caches are intentionally not read or repopulated.
     if (watchHistory.length > 0) {
       try {
         const pairs = watchHistory.map(() => '(?, ?)').join(', ');
@@ -150,46 +136,28 @@ homeRoutes.get('/', async (c) => {
         }
       } catch { /* best-effort -- cards fall back to scraper/placeholder */ }
 
-      const missing = watchHistory.filter((r) => !episodeThumbOverrides[`${r.anime_id}:${r.episode_num}`]);
-      if (missing.length > 0) {
-        // Use the same bulk thumbnail resolver as the anime detail page.
-        // That endpoint seeds/reads one D1 cache entry per anime, while the
-        // old home-page path asked the scraper once per history card. Besides
-        // being slower, that meant a cold individual lookup could miss while
-        // the anime page's already-populated bulk cache had the thumbnail.
-        // Resolve each distinct show once, then pick the watched episode.
-        const distinctIds = [...new Set(missing.map((r) => r.anime_id))];
-        await Promise.all(distinctIds.map(async (id) => {
-          const animeData = await mal.getAnime(id, true).catch(() => null);
-          const thumbs = await getAnimeEpisodeThumbnails(
-            c.env,
-            db,
-            id,
-            animeData?.data?.status,
-            animeData?.data?.episodes ?? null
-          );
-          for (const row of missing) {
-            if (row.anime_id !== id) continue;
-            const thumb = thumbs[row.episode_num];
-            if (thumb) episodeThumbOverrides[`${row.anime_id}:${row.episode_num}`] = thumb;
-          }
-        }));
-      }
+      // Missing thumbnails stay blank rather than reading or repopulating the legacy scraper cache.
     }
   }
 
   const unreadCount = currentUser ? await Notification.unreadCount(db, currentUser.id) : 0;
   const userStatuses = currentUser ? await getUserAnimeStatuses(db, currentUser.id) : {};
 
-  // Curated hero banners need their episode counts too (see hero-slide
-  // section below) — fetch just the IDs now so they can go into the same
-  // cache-only cardMeta lookup as everything else, instead of a second
-  // query later that the hero slides were silently missing out on.
+  // Curated homepage banners are legacy-ID keyed. Resolve only verified mappings;
+  // never hydrate catalog details from the old metadata_json snapshot or MAL caches.
   const curatedRows = await db
-    .fetchAll<any>('SELECT anime_id, anime_title, banner_image_url, logo_image_url, metadata_json FROM home_hero_banners ORDER BY display_order ASC LIMIT 8')
+    .fetchAll<any>('SELECT anime_id, anime_title, banner_image_url FROM home_hero_banners ORDER BY display_order ASC LIMIT 8')
     .catch(() => []);
-  const cardMeta = await buildCardMetaMap(db, [...watchNowList, ...topList, ...upcomingList, ...curatedRows.map((r) => ({ mal_id: r.anime_id } as NormalisedAnime))]);
-
+  const curatedHeroRows = (await Promise.all(curatedRows.map(async (row) => {
+    const legacyId = Number(row.anime_id);
+    const identity = await findIdentityByLegacyMalId(db, legacyId).catch(() => null);
+    if (!identity || identity.verified !== 1 || !identity.hoshika_short_id) return null;
+    const hoshika = await getHoshikaAnimeById(identity.hoshika_short_id);
+    const anime = toHoshikaNormalisedAnime(hoshika, legacyId);
+    return anime ? { row, anime } : null;
+  }))).filter((item): item is { row: any; anime: NormalisedAnime } => item !== null);
+  // Avoid stale Jikan/MAL aired-count and dub caches for Hoshika catalog cards.
+  const cardMeta = new Map<number, AnimeCardMeta>();
   const layoutUser = currentUser
     ? { id: currentUser.id, username: currentUser.username, avatar_url: currentUser.avatar_url, role: currentUser.role }
     : null;
@@ -206,74 +174,16 @@ homeRoutes.get('/', async (c) => {
     requestUrl: c.req.url,
   });
 
-  // Hero slider slides. Curated admin banners are authoritative and are
-  // read directly from D1. Auto slides use the local D1 artwork libraries.
+  // Hero slides use verified Hoshika metadata plus the admin-supplied banner art.
   let heroPool: NormalisedAnime[] = [];
   let heroBanners: string[] = [];
   let heroLogos: string[] = [];
   let heroCovers: string[] = [];
-
-  if (curatedRows.length > 0) {
-    // Admin-selected hero rows are the source of truth. Build the slides
-    // directly from D1; do not hydrate curated heroes from MAL or another
-    // metadata table on the homepage.
-    const curatedIds = curatedRows.map((r) => Number(r.anime_id));
-    const curatedImageMap = await mal.getLocalAnimeImagesMany(curatedIds);
-    const snapshotAnime = [...topList, ...upcomingList];
-    const snapshotById = new Map(snapshotAnime.map((anime) => [anime.mal_id, anime]));
-
-    for (const r of curatedRows) {
-      const id = Number(r.anime_id);
-      const cover = curatedImageMap.get(id) || '';
-      let storedAnime: NormalisedAnime | null = null;
-      try {
-        const parsed = r.metadata_json ? JSON.parse(r.metadata_json) : null;
-        if (parsed && Number(parsed.mal_id) === id) storedAnime = parsed as NormalisedAnime;
-      } catch { /* malformed/legacy metadata — fall back below */ }
-
-      const cachedAnime = storedAnime || snapshotById.get(id);
-      const anime = cachedAnime
-        ? ({
-            ...cachedAnime,
-            title: cachedAnime.title || r.anime_title || `Anime #${id}`,
-            images: {
-              jpg: {
-                image_url: cover || cachedAnime.images?.jpg?.image_url || '',
-                large_image_url: cover || cachedAnime.images?.jpg?.large_image_url || '',
-              },
-            },
-          } as NormalisedAnime)
-        : ({
-            mal_id: id,
-            title: r.anime_title || `Anime #${id}`,
-            title_english: '',
-            title_japanese: '',
-            synopsis: '',
-            score: 0,
-            episodes: 0,
-            type: '',
-            status: '',
-            genres: [],
-            images: { jpg: { image_url: cover, large_image_url: cover } },
-          } as NormalisedAnime);
-      heroPool.push(anime);
-      heroBanners.push(r.banner_image_url || '');
-      heroLogos.push(r.logo_image_url || '');
-      heroCovers.push(cover);
-    }
-  }
-
-  if (heroPool.length === 0) {
-    heroPool = topList.slice(0, 6);
-    const heroIds = heroPool.map((a) => a.mal_id);
-    const [bannerMap, logoMap, imageMap] = await Promise.all([
-      mal.getLocalAnimeBannerInfoMany(heroIds),
-      mal.getLocalAnimeLogosMany(heroIds),
-      mal.getLocalAnimeImagesMany(heroIds),
-    ]);
-    heroBanners = heroPool.map((a) => bannerMap.get(a.mal_id)?.image_url || '');
-    heroLogos = heroPool.map((a) => logoMap.get(a.mal_id) || '');
-    heroCovers = heroPool.map((a) => imageMap.get(a.mal_id) || '');
+  for (const item of curatedHeroRows) {
+    heroPool.push(item.anime);
+    heroBanners.push(item.row.banner_image_url || '');
+    heroLogos.push(''); // Hoshika has no title-logo endpoint.
+    heroCovers.push(item.anime.images?.jpg?.large_image_url || '');
   }
   // Preload slide 0's LCP image so it starts downloading during <head> parsing.
   if (heroPool.length > 0) {
@@ -287,7 +197,8 @@ homeRoutes.get('/', async (c) => {
     ].join('\n');
     html = html.replace('<head>', '<head>\n' + pre);
   }
-  html += `
+  if (heroPool.length > 0) {
+    html += `
 <section id="hero">
   <div id="hero-slides">
     ${heroPool.map((a, i) => renderHeroSlide(a, i, siteUrl, heroBanners[i] || a.banner_image, heroCovers[i], heroLogos[i], cardMeta.get(a.mal_id))).join('')}
@@ -299,8 +210,17 @@ homeRoutes.get('/', async (c) => {
   <button class="hero-next" id="hero-next" aria-label="Next slide">${icon('chevron-right', 'icon-medium')}</button>
 </section>
 ${heroSliderScript(heroPool.length)}
-
-<div class="container">`;
+    `;
+  } else {
+    html += `
+<section class="container" style="padding:3.5rem 1rem 2rem;text-align:center">
+  <h1 style="font-size:clamp(2rem,5vw,3.25rem);margin:0 0 .75rem">Discover your next anime</h1>
+  <p class="text-muted" style="max-width:38rem;margin:0 auto 1.25rem">AniVault's catalog is switching to Hoshika. Search titles to explore the available catalog while curated homepage picks are being restored.</p>
+  <a href="${siteUrl}/browse" class="btn btn-primary">${icon('search', 'icon-small')} Search Anime</a>
+</section>
+    `;
+  }
+  html += `<div class="container">`;
 
   if (currentUser) {
     const stats = await AnimeTracker.getStats(db, currentUser.id);
@@ -314,17 +234,19 @@ ${heroSliderScript(heroPool.length)}
   }
 
   // ── Genre bar ────────────────────────────────────────────────────────────
-  const genreList = mal.getAnimeGenres().data;
-  html += `
+  const genreList: Array<{ mal_id: number; name: string }> = [];
+  if (genreList.length > 0) {
+    html += `
   <div class="genre-nav-wrap">
     <button class="btn btn-ghost btn-sm btn-icon genre-nav-btn prev" data-target="genre-bar" data-dir="prev" aria-label="Previous genres">${icon('chevron-left', 'icon-small')}</button>
     <div class="genre-bar" id="genre-bar">
       ${genreList.map((g) => `<a href="${siteUrl}/browse?genre=${g.mal_id}" class="genre-pill">${h(g.name)}</a>`).join('')}
     </div>
     <button class="btn btn-ghost btn-sm btn-icon genre-nav-btn next" data-target="genre-bar" data-dir="next" aria-label="Next genres">${icon('chevron-right', 'icon-small')}</button>
-  </div>
+  </div>`;
+  }
 
-  <div class="home-grid">
+  html += `<div class="home-grid">
     <div class="home-sections">`;
 
   // ── Continue Watching ──────────────────────────────────────────────────
@@ -359,11 +281,20 @@ ${heroSliderScript(heroPool.length)}
       </section>`;
   }
 
-  html += `
+  if (topList.length > 0) {
+    html += `
       <section class="content-section">
         ${sectionHeader('Most Popular', 'row-popular', `${siteUrl}/top`, 'View Full Rankings')}
         <div class="scroll-row" id="row-popular">${topList.map((a) => renderAnimeCard(a, siteUrl, userStatuses[a.mal_id] ?? null, cardMeta.get(a.mal_id), transformHomepageCardImage)).join('')}</div>
       </section>`;
+  } else {
+    html += `
+      <section class="content-section">
+        <h2 class="section-title">Most Popular</h2>
+        <p class="text-muted">Hoshika's popularity feed is not available yet. Search titles to explore the catalog.</p>
+        <a class="section-link" href="${siteUrl}/browse">Search Anime ${icon('arrow-right', 'icon-small')}</a>
+      </section>`;
+  }
 
   if (upcomingList.length > 0) {
     html += `
@@ -376,12 +307,12 @@ ${heroSliderScript(heroPool.length)}
   html += `
     </div>
 
-    <aside>
+    ${topList.length > 0 ? `<aside>
       <div class="sidebar-widget">
         <div class="sidebar-widget-header">${icon('trophy', 'icon-small')} Top 10 Ranked</div>
         ${topList.slice(0, 10).map((a, i) => renderSidebarItem(a, i + 1, siteUrl)).join('')}
       </div>
-    </aside>
+    </aside>` : ''}
   </div>`;
 
   html += `</div>`;

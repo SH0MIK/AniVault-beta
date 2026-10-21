@@ -14,10 +14,9 @@ import { Db } from '../lib/db';
 import { Session } from '../lib/session';
 import { Auth } from '../lib/auth';
 import { h } from '../lib/helpers';
-import { MalAPI } from '../lib/mal-api';
-import { EpisodeAir } from '../lib/episode-air';
+import { findIdentityByLegacyMalId } from '../lib/anime-identity';
+import { getHoshikaAnimeById, getHoshikaAnimeEpisodesById } from '../lib/hoshika-api';
 import { AnimeTracker } from '../lib/tracker';
-import { getEpisodeThumbnail } from '../lib/episode-thumb';
 
 export const scraperRoutes = new Hono<{ Bindings: Env }>();
 
@@ -303,8 +302,8 @@ scraperRoutes.get('/api/watchanimeworld_stream.php', async (c) => {
 // ── api/server_check.php ───────────────────────────────────────────────────
 const ERROR_PHRASES = ['episode not found', 'video not found', '404 not found', 'page not found', 'no video found', 'no sources found', 'no servers found', 'this episode is not available', 'something went wrong'];
 
-async function checkSenshiUp(base: string, malId: number, epNum: number): Promise<boolean> {
-  const { ok, data } = await fetchJson(`${base}/watch/senshi/mal-${malId}/${epNum}/sub`, 10000, c.env.SCRAPER_API_KEY || '');
+async function checkSenshiUp(base: string, malId: number, epNum: number, apiKey: string): Promise<boolean> {
+  const { ok, data } = await fetchJson(`${base}/watch/senshi/mal-${malId}/${epNum}/sub`, 10000, apiKey);
   if (!ok) return false;
   return !!(data?.hlsProxyUrl ?? data?.m3u8);
 }
@@ -346,7 +345,7 @@ scraperRoutes.get('/api/server_check.php', async (c) => {
   if (cached) { await session.save(c, lifetime); return c.json(cached); }
 
   const [volt, warp, ayame] = await Promise.all([
-    checkSenshiUp(base, malId, epNum),
+    checkSenshiUp(base, malId, epNum, c.env.SCRAPER_API_KEY || ''),
     checkEmbedUp(`https://tryembed.us.cc/embed/anime/${anilistId}/${epNum}/sub`),
     checkEmbedUp(`https://vidnest.fun/animepahe/${anilistId}/${epNum}/sub`),
   ]);
@@ -390,7 +389,7 @@ scraperRoutes.get('/api/server_check_stream.php', async (c) => {
 
       const results: Record<string, boolean> = {};
       const checks: [string, Promise<boolean>][] = [
-        ['volt', checkSenshiUp(base, malId, epNum)],
+        ['volt', checkSenshiUp(base, malId, epNum, c.env.SCRAPER_API_KEY || '')],
         ['warp', checkEmbedUp(`https://tryembed.us.cc/embed/anime/${anilistId}/${epNum}/sub`)],
         ['ayame', checkEmbedUp(`https://vidnest.fun/animepahe/${anilistId}/${epNum}/sub`)],
       ];
@@ -523,33 +522,27 @@ scraperRoutes.get('/api/embed.php', async (c) => {
   const epNum = parseInt(c.req.query('ep') ?? '0', 10) || 0;
   if (!animeId || !epNum) return c.text('Not found', 404);
 
-  const animeRes = await fetchJson(`https://api.jikan.moe/v4/anime/${animeId}`, 5000);
-  const title = animeRes.data?.data?.title ?? 'Anime';
-  const image = animeRes.data?.data?.images?.jpg?.image_url ?? '';
+  // This legacy URL still receives a MAL ID. Resolve it through the
+  // verified map; never pass it to Hoshika as though it were a shortId.
+  const db = new Db(c.env.DB);
+  const identity = await findIdentityByLegacyMalId(db, animeId).catch(() => null);
+  const hoshikaId = identity?.verified === 1 ? identity.hoshika_short_id : null;
+  const [animeData, episodes] = hoshikaId
+    ? await Promise.all([getHoshikaAnimeById(hoshikaId), getHoshikaAnimeEpisodesById(hoshikaId)])
+    : [null, null];
+  const title = animeData?.titleEnglish || animeData?.title || 'Anime';
+  const image = animeData?.poster || '';
+  const epTitle = episodes?.find((ep) => ep.number === epNum)?.title || `Episode ${epNum}`;
 
-  const epRes = await fetchJson(`https://api.jikan.moe/v4/anime/${animeId}/episodes`, 5000);
-  let epTitle = `Episode ${epNum}`;
-  for (const ep of epRes.data?.data ?? []) {
-    if (Number(ep.mal_id ?? 0) === epNum && ep.title && ep.title !== 'TBA') { epTitle = ep.title; break; }
-  }
-
-  // Priority: an admin-saved override wins (episode_overrides.image_url,
-  // set via the Episode Thumbnails admin panel), then a live lookup against
-  // our own scraper API (cached in D1), then the anime cover as last resort.
-  let ogImage = image;
+  // Admin overrides win; otherwise use the Hoshika episode still, then cover art.
+  let ogImage = episodes?.find((ep) => ep.number === epNum)?.thumbnail || image;
   try {
-    const db = new Db(c.env.DB);
     const row = await db.fetchOne<{ image_url: string | null }>(
       'SELECT image_url FROM episode_overrides WHERE anime_id = ? AND episode_num = ?',
       [animeId, epNum]
     );
-    if (row?.image_url) {
-      ogImage = row.image_url;
-    } else {
-      const scraped = await getEpisodeThumbnail(c.env, db, animeId, epNum, animeRes.data?.data?.status);
-      if (scraped) ogImage = scraped;
-    }
-  } catch { /* fall back to anime cover */ }
+    if (row?.image_url) ogImage = row.image_url;
+  } catch { /* fall back to Hoshika art */ }
 
   const watchUrl = `${siteUrl}/watch?anime=${animeId}&ep=${epNum}`;
   const html = `<!DOCTYPE html>
@@ -625,86 +618,72 @@ scraperRoutes.get('/api/anime_info.php', async (c) => {
 });
 
 // ── api/ep_count.php ────────────────────────────────────────────────────
-// Does the full scraper-API-then-Jikan lookup and writes through to
-// episode_air_cache (same as EpisodeAir.get) — this is the "slow" work.
-// anime.ts renders instantly off the cache (see EpisodeAir.getCachedAny)
-// and calls this from the client, in the background, only when that cache
-// was missing or stale, so a slow scraper response never blocks the page.
-// In practice anime.ts only ever triggers this for a currently-airing show
-// (see epsNeedsRefresh there) — finished/not-yet-aired shows already have
-// their final count straight from MAL and never need it. The status check
-// below is just a second line of defense (direct hits, stale clients, etc.)
-// so a finished/upcoming show can never end up writing to the cache either.
+// Legacy episode-count endpoint: only verified Hoshika mappings can resolve
+// a MAL-keyed request. Unmapped records return null rather than using another
+// anime provider or guessing from a title.
 scraperRoutes.get('/api/ep_count.php', async (c) => {
   const animeId = parseInt(c.req.query('anime_id') ?? '0', 10) || 0;
   if (!animeId) return c.json({ error: 'Missing anime_id' }, 400);
   const db = new Db(c.env.DB);
-  const mal = new MalAPI(c.env, c.env.API_CACHE, db);
 
-  const animeRes = await mal.getAnime(animeId).catch(() => null);
-  const status = animeRes?.data?.status;
-  if (status && status !== 'Currently Airing') {
-    const eps = animeRes?.data?.episodes ?? 0;
-    return c.json({ aired: eps || null, total: eps || null });
-  }
+  // Legacy page callers pass MAL IDs. Never treat those as Hoshika IDs or
+  // fall back to MAL/Jikan; only a verified identity can bridge the request.
+  const identity = await findIdentityByLegacyMalId(db, animeId).catch(() => null);
+  if (identity?.verified !== 1) return c.json({ aired: null, total: null });
 
-  const airedInfo = await EpisodeAir.get(db, c.env, mal, animeId);
-  return c.json({ aired: airedInfo?.aired ?? null, total: airedInfo?.total ?? null });
+  const [anime, episodes] = await Promise.all([
+    getHoshikaAnimeById(identity.hoshika_short_id),
+    getHoshikaAnimeEpisodesById(identity.hoshika_short_id),
+  ]);
+  const total = anime?.episodes ?? episodes?.length ?? null;
+  const aired = episodes?.length ?? null;
+  return c.json({ aired, total });
 });
 
 // ── api/anime_episodes.php ──────────────────────────────────────────────────
-// Same-origin replacement for anime-tail.ts's client-side lazy loader, which
-// used to fetch api.jikan.moe directly from the browser. Routes through
-// MalAPI.getAnimeEpisodes -- own scraper first, Jikan as a fallback -- so the
-// browser never talks to either backend directly and picks up whichever is
-// actually working without a client-side redeploy.
+// Legacy detail pages still pass MAL IDs. Episode metadata now comes only
+// from Hoshika after an explicit verified mapping; there is no MAL/Jikan or
+// title-based fallback. Unmapped legacy IDs return an empty list so the page
+// can still render numbered stubs for videos already stored in D1.
 scraperRoutes.get('/api/anime_episodes.php', async (c) => {
   const animeId = parseInt(c.req.query('anime') ?? '0', 10) || 0;
   const page = parseInt(c.req.query('page') ?? '1', 10) || 1;
   if (!animeId) return c.json({ error: 'Missing anime' }, 400);
   const db = new Db(c.env.DB);
-  const mal = new MalAPI(c.env, c.env.API_CACHE, db);
-  const result = await mal.getAnimeEpisodes(animeId, page);
-  return c.json(result);
+  const identity = await findIdentityByLegacyMalId(db, animeId).catch(() => null);
+  if (identity?.verified !== 1) {
+    return c.json({ data: [], pagination: { last_visible_page: 1, has_next_page: false } });
+  }
+  const episodes = await getHoshikaAnimeEpisodesById(identity.hoshika_short_id);
+  const data = (episodes ?? []).map((episode) => ({
+    mal_id: episode.number,
+    title: episode.title,
+    title_japanese: null,
+    aired: episode.aired,
+    filler: episode.filler,
+    recap: episode.recap,
+    images: { jpg: { image_url: episode.thumbnail } },
+    thumbnail: episode.thumbnail,
+  }));
+  return c.json({
+    data: page > 1 ? [] : data,
+    pagination: { last_visible_page: 1, has_next_page: false },
+  });
 });
 
-// ── api/anime_characters.php ────────────────────────────────────────────────
-// Same reasoning as anime_episodes.php above, for the character grid tab.
-scraperRoutes.get('/api/anime_characters.php', async (c) => {
-  const animeId = parseInt(c.req.query('anime') ?? '0', 10) || 0;
-  if (!animeId) return c.json({ error: 'Missing anime' }, 400);
-  const db = new Db(c.env.DB);
-  const mal = new MalAPI(c.env, c.env.API_CACHE, db);
-  const result = await mal.getAnimeCharacters(animeId);
-  return c.json(result);
-});
+// Hoshika's currently confirmed public API does not expose character, theme-song,
+// trailer, or picture-gallery endpoints. Return explicit unavailable states;
+// never substitute MAL/Jikan catalogue data.
+for (const [path, label] of [
+  ['/api/anime_characters.php', 'Character data'],
+  ['/api/anime_themes.php', 'Theme-song data'],
+  ['/api/anime_videos.php', 'Trailer data'],
+  ['/api/anime_pictures.php', 'Picture-gallery data'],
+] as const) {
+  scraperRoutes.get(path, (c) => {
+    const animeId = parseInt(c.req.query('anime') ?? '0', 10) || 0;
+    if (!animeId) return c.json({ error: 'Missing anime' }, 400);
+    return c.json({ data: [], unavailable: true, message: label + ' is not available from the confirmed Hoshika API.' }, 501);
+  });
+}
 
-// ── api/anime_themes.php, anime_videos.php, anime_pictures.php ─────────────
-// Same same-origin-proxy reasoning as the two routes above, for the new
-// trailer/theme-song/picture-gallery sections.
-scraperRoutes.get('/api/anime_themes.php', async (c) => {
-  const animeId = parseInt(c.req.query('anime') ?? '0', 10) || 0;
-  if (!animeId) return c.json({ error: 'Missing anime' }, 400);
-  const db = new Db(c.env.DB);
-  const mal = new MalAPI(c.env, c.env.API_CACHE, db);
-  const result = await mal.getAnimeThemes(animeId);
-  return c.json(result);
-});
-
-scraperRoutes.get('/api/anime_videos.php', async (c) => {
-  const animeId = parseInt(c.req.query('anime') ?? '0', 10) || 0;
-  if (!animeId) return c.json({ error: 'Missing anime' }, 400);
-  const db = new Db(c.env.DB);
-  const mal = new MalAPI(c.env, c.env.API_CACHE, db);
-  const result = await mal.getAnimeVideos(animeId);
-  return c.json(result);
-});
-
-scraperRoutes.get('/api/anime_pictures.php', async (c) => {
-  const animeId = parseInt(c.req.query('anime') ?? '0', 10) || 0;
-  if (!animeId) return c.json({ error: 'Missing anime' }, 400);
-  const db = new Db(c.env.DB);
-  const mal = new MalAPI(c.env, c.env.API_CACHE, db);
-  const result = await mal.getAnimePictures(animeId);
-  return c.json(result);
-});

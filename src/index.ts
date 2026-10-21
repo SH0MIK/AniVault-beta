@@ -59,6 +59,8 @@ import { apiAnimeCommentsRoutes } from './routes/api-anime-comments';
 import { pointsRoutes } from './routes/points';
 import { bugReportRoutes } from './routes/bug-reports';
 import { healthRoutes } from './routes/health';
+import { hoshikaApiRoutes } from './routes/api-hoshika';
+import { hoshikaAnimeRoutes } from './routes/anime-hoshika';
 
 export interface Env {
   DB: D1Database;
@@ -94,6 +96,8 @@ export interface Env {
 const app = new Hono<{ Bindings: Env }>();
 
 app.route('/', healthRoutes);
+app.route('/', hoshikaApiRoutes);
+app.route('/', hoshikaAnimeRoutes);
 app.route('/', authRoutes);
 app.route('/', mobileAuthRoutes);
 app.route('/', mobileHomeRoutes);
