@@ -642,17 +642,19 @@ scraperRoutes.get('/api/ep_count.php', async (c) => {
   const animeId = parseInt(c.req.query('anime_id') ?? '0', 10) || 0;
   if (!animeId) return c.json({ error: 'Missing anime_id' }, 400);
   const db = new Db(c.env.DB);
-  const mal = new MalAPI(c.env, c.env.API_CACHE, db);
 
-  const animeRes = await mal.getAnime(animeId).catch(() => null);
-  const status = animeRes?.data?.status;
-  if (status && status !== 'Currently Airing') {
-    const eps = animeRes?.data?.episodes ?? 0;
-    return c.json({ aired: eps || null, total: eps || null });
-  }
+  // Legacy page callers pass MAL IDs. Never treat those as Hoshika IDs or
+  // fall back to MAL/Jikan; only a verified identity can bridge the request.
+  const identity = await findIdentityByLegacyMalId(db, animeId).catch(() => null);
+  if (identity?.verified !== 1) return c.json({ aired: null, total: null });
 
-  const airedInfo = await EpisodeAir.get(db, c.env, mal, animeId);
-  return c.json({ aired: airedInfo?.aired ?? null, total: airedInfo?.total ?? null });
+  const [anime, episodes] = await Promise.all([
+    getHoshikaAnimeById(identity.hoshika_short_id),
+    getHoshikaAnimeEpisodesById(identity.hoshika_short_id),
+  ]);
+  const total = anime?.episodes ?? episodes?.length ?? null;
+  const aired = episodes?.length ?? null;
+  return c.json({ aired, total });
 });
 
 // ── api/anime_episodes.php ──────────────────────────────────────────────────
