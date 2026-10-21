@@ -17,6 +17,7 @@ import { h } from '../lib/helpers';
 import { findIdentityByLegacyMalId } from '../lib/anime-identity';
 import { getHoshikaAnimeById, getHoshikaAnimeEpisodesById } from '../lib/hoshika-api';
 import { AnimeTracker } from '../lib/tracker';
+import { resolveAnimeHeavenMp4 } from '../lib/scrapers/animeheaven';
 
 export const scraperRoutes = new Hono<{ Bindings: Env }>();
 
@@ -49,25 +50,31 @@ async function fetchJson(url: string, timeoutMs = 12000, apiKey = ''): Promise<{
 }
 
 // ── api/animeheaven_stream.php ─────────────────────────────────────────────
-// Read-only proxy — doesn't set/change anything, so it doesn't touch the
-// session at all. The watch page fires this alongside several Anikoto
-// probes at once; every one of those used to do a D1 read+write against
-// the SAME session row, and concurrent writes to one row queue up in D1
-// instead of running in parallel. That's what was causing the whole
-// "Finding the best server..." probe burst to crawl even though each
-// request is fast in isolation.
+// AnimeHeaven now runs inside this Worker. Hoshika remains the canonical
+// catalog; a verified legacy MAL mapping is used only to look up its title.
 scraperRoutes.get('/api/animeheaven_stream.php', async (c) => {
   const animeId = parseInt(c.req.query('anime') ?? '0', 10) || 0;
   const epNum = parseInt(c.req.query('ep') ?? '0', 10) || 0;
   if (!animeId || !epNum) return c.json({ error: 'Missing anime or ep' }, 400);
-  const base = getScraperBase(c.env);
-  if (!base) return c.json({ error: 'Scraper API not configured' }, 500);
 
-  const { ok, code, data } = await fetchJson(`${base}/api/watch/animeheaven/mal-${animeId}/${epNum}/sub`, 20000, c.env.SCRAPER_API_KEY || '');
-  if (!ok) return c.json({ error: data?.error ?? `Scraper API error HTTP ${code}` });
-  const mp4 = data?.mp4ProxyUrl ?? data?.streamUrl ?? data?.mp4 ?? null;
-  if (!mp4) return c.json({ error: 'No stream URL in response', raw: data });
-  return c.json({ mp4, playbackMode: 'mp4' });
+  const db = new Db(c.env.DB);
+  const identity = await findIdentityByLegacyMalId(db, animeId).catch(() => null);
+  if (!identity || identity.verified !== 1 || identity.legacy_mal_id !== animeId) {
+    return c.json({ error: 'No verified Hoshika mapping for this anime' }, 404);
+  }
+
+  const anime = await getHoshikaAnimeById(identity.hoshika_short_id);
+  const title = anime?.titleEnglish || anime?.titleRomaji || anime?.title || identity.title;
+  if (!title) return c.json({ error: 'Could not resolve anime title from Hoshika' }, 404);
+
+  try {
+    const mp4 = await resolveAnimeHeavenMp4(title, epNum);
+    if (!mp4) return c.json({ error: 'AnimeHeaven has no playable MP4 for this episode' }, 404);
+    return c.json({ mp4, playbackMode: 'mp4', source: 'animeheaven' });
+  } catch (error) {
+    console.error('[AnimeHeaven] Worker scraper failed:', error instanceof Error ? error.message : String(error));
+    return c.json({ error: 'AnimeHeaven could not be reached right now' }, 502);
+  }
 });
 
 // ── api/anikoto_stream.php ─────────────────────────────────────────────────
