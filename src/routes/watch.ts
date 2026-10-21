@@ -111,13 +111,10 @@ async function getEpisodeOgImage(
 // Matches the user-agents link-preview crawlers send (Facebook, Discord,
 // Twitter/X, Slack, Telegram, WhatsApp, LinkedIn, iMessage/Applebot, etc).
 // These never render JS or need the player -- they just read <head> meta
-// tags and move on. The full handler below does ~6 sequential external
-// calls (MAL/Jikan/scraper for anime, episodes, characters, AniList id
-// mapping, episode thumbnail) plus an anonymous-visitor auto-register DB
-// write, since crawlers send no session cookie. That easily adds up past a
-// crawler's own timeout (this is why Facebook's Sharing Debugger was
-// reporting "Curl Timeout" / no OG tags even though the page itself loads
-// fine for a real browser). This fast path skips all of that: one cached
+// tags and move on. The full handler does additional Hoshika and database
+// lookups plus an anonymous-visitor auto-register DB write, since crawlers
+// send no session cookie. This fast path skips the player and nonessential
+// page work so link previews can return quickly: one cached
 // anime lookup, no auth/account creation, no watch-history write, no
 // episode/character/AniList calls.
 const PREVIEW_BOT_RE = /facebookexternalhit|Facebot|Twitterbot|Discordbot|Slackbot|TelegramBot|WhatsApp|LinkedInBot|Pinterest|SkypeUriPreview|vkShare|redditbot|Applebot|Google-InspectionTool|W3C_Validator/i;
