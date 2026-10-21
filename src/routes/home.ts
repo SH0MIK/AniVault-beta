@@ -245,7 +245,7 @@ ${heroSliderScript(heroPool.length)}
     html += `
 <section class="container" style="padding:3.5rem 1rem 2rem;text-align:center">
   <h1 style="font-size:clamp(2rem,5vw,3.25rem);margin:0 0 .75rem">Discover your next anime</h1>
-  <p class="text-muted" style="max-width:38rem;margin:0 auto 1.25rem">AniVault's catalog is switching to Hoshika. Search titles to explore the available catalog while curated homepage picks are being restored.</p>
+  <p class="text-muted" style="max-width:38rem;margin:0 auto 1.25rem">Explore Hoshika's anime catalog, browse the latest titles, or search for a series to get started.</p>
   <a href="${siteUrl}/browse" class="btn btn-primary">${icon('search', 'icon-small')} Search Anime</a>
 </section>
     `;
