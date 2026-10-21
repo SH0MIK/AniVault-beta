@@ -621,41 +621,12 @@ async function lazyLoadPictures() {
 
 // ── Fetch and render related/recommendations ───────────────────
 async function lazyLoadRelated() {
-  const animeId = window.__animeId;
-  const grid    = document.getElementById('related-grid-js');
+  const grid = document.getElementById('related-grid-js');
   const loading = document.getElementById('related-grid-loading');
-  if (!grid) return;
-  try {
-    const res  = await fetch(\`https://api.jikan.moe/v4/anime/\${animeId}/recommendations\`);
-    const data = await res.json();
-    const recs = (data.data || []).slice(0, 8);
-    if (loading) loading.style.display = 'none';
-    if (!recs.length) {
-      grid.style.display = 'block';
-      grid.innerHTML = '<p class="text-muted text-center">No recommendations available.</p>';
-      return;
-    }
-    recs.forEach(r => {
-      const a      = r.entry || {};
-      const aid    = a.mal_id || 0;
-      const atitle = a.title  || '';
-      const aimg   = a.images?.jpg?.image_url || '';
-      const div = document.createElement('div');
-      div.className = 'anime-card';
-      div.style.cursor = 'pointer';
-      div.onclick = () => { window.location.href = window.__siteUrl + '/anime?id=' + aid; };
-      div.innerHTML = \`
-        <div class="anime-card-poster">
-          \${aimg ? \`<img src="\${aimg}" alt="\${atitle.replace(/"/g,'&quot;')}" loading="lazy">\` : ''}
-        </div>
-        <div class="anime-card-info">
-          <div class="anime-card-title">\${atitle.replace(/</g,'&lt;')}</div>
-        </div>\`;
-      grid.appendChild(div);
-    });
-    grid.style.display = '';
-  } catch(e) {
-    if (loading) loading.innerHTML = '<p class="text-muted">Failed to load recommendations. <button class="btn btn-ghost btn-sm" onclick="lazyLoadRelated()">Retry</button></p>';
+  if (loading) loading.style.display = 'none';
+  if (grid) {
+    grid.style.display = 'block';
+    grid.innerHTML = '<p class="text-muted text-center">Recommendations are unavailable while the catalog is migrating to Hoshika.</p>';
   }
 }
 
