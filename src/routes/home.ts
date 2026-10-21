@@ -102,7 +102,7 @@ homeRoutes.get('/', async (c) => {
 
   // Homepage feeds come directly from Hoshika. No MAL/Jikan/AniList fallback.
   const hoshikaHome = await getHoshikaHomeSections();
-  const topList: NormalisedAnime[] = hoshikaHome.trending.map(toHoshikaHomeAnime);
+  const topList: NormalisedAnime[] = (hoshikaHome.trending.length ? hoshikaHome.trending : hoshikaHome.top).map(toHoshikaHomeAnime);
   const upcomingList: NormalisedAnime[] = hoshikaHome.seasonal.map(toHoshikaHomeAnime);
   const recentList: NormalisedAnime[] = hoshikaHome.recent.map(toHoshikaHomeAnime);
 
@@ -207,7 +207,7 @@ homeRoutes.get('/', async (c) => {
   // When no admin-curated legacy banner has a verified Hoshika mapping, keep
   // the original hero carousel UI alive using Hoshika's own trending feed.
   if (heroPool.length === 0) {
-    for (const [index, anime] of hoshikaHome.trending.slice(0, 6).entries()) {
+    for (const [index, anime] of (hoshikaHome.trending.length ? hoshikaHome.trending : hoshikaHome.top).slice(0, 6).entries()) {
       const mapped = toHoshikaHomeAnime(anime, index);
       heroPool.push(mapped);
       heroBanners.push(anime.cover || '');
