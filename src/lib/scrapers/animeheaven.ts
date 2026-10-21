@@ -28,7 +28,7 @@ function plainText(value: string): string {
 }
 
 function attr(tag: string, name: string): string {
-  const attributes = tag.matchAll(/([^\\s=/>]+)\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))/g);
+  const attributes = tag.matchAll(/([^\s=/>]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/g);
   for (const match of attributes) {
     if (match[1]?.toLowerCase() === name.toLowerCase()) {
       return decodeHtml(match[2] ?? match[3] ?? match[4] ?? '');
@@ -41,7 +41,7 @@ function captureCookies(response: Response, jar: CookieJar): void {
   const raw = response.headers.get('set-cookie') ?? '';
   // Cloudflare may combine Set-Cookie values; only extract cookie name/value
   // pairs, ignoring attributes such as Expires, Path, Secure and SameSite.
-  const pattern = /(?:^|,\\s*)([!#$%&'*+.^_`|~\\w-]+)=([^;,]*)/g;
+  const pattern = /(?:^|,\s*)([!#$%&'*+.^_`|~\w-]+)=([^;,]*)/g;
   let match: RegExpExecArray | null;
   while ((match = pattern.exec(raw))) {
     const name = match[1]?.trim();
