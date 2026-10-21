@@ -156,7 +156,7 @@ function renderGrid() {
         let statusClass = '';
         if (hasSaved)          { statusLabel = '✓ Saved';  statusClass = 'saved'; }
         else if (ep.found_thumb){ statusLabel = '⬇ Found'; statusClass = 'found'; }
-        else if (ep.hoshika_thumb){statusLabel='AL';       statusClass = 'found'; }
+        else if (ep.hoshika_thumb){statusLabel='H';       statusClass = 'found'; }
         else if (ep.status==='error'){ statusLabel='Error'; statusClass='error';}
         else if (ep.status==='searching'){ statusLabel='…';statusClass='none';}
 
@@ -257,78 +257,18 @@ async function autoSearchAll() {
 
 /* ── External thumbnail search: tries multiple free sources ── */
 // TMDB key — output from PHP so it's never exposed in source as a hardcoded string
-const TMDB_KEY = ${JSON.stringify(tmdbKey)};
-
-/* ── TMDB: called directly from browser (no CORS issues) ── */
-async function tmdbEpisodeStills(animeTitle, epNum, listMode = false) {
-    if (!TMDB_KEY) return [];
-    const thumbs = [];
-    try {
-        const sq = encodeURIComponent(animeTitle);
-        const sr = await fetch(\`https://api.themoviedb.org/3/search/tv?api_key=\${TMDB_KEY}&query=\${sq}&language=en-US\`);
-        if (!sr.ok) return [];
-        const sj      = await sr.json();
-        const results = sj.results || [];
-
-        for (const show of results.slice(0, 3)) {
-            for (const season of [1, 2]) {
-                try {
-                    const er = await fetch(\`https://api.themoviedb.org/3/tv/\${show.id}/season/\${season}/episode/\${epNum}?api_key=\${TMDB_KEY}\`);
-                    if (!er.ok) continue;
-                    const ej    = await er.json();
-                    const still = ej.still_path;
-                    if (still) {
-                        thumbs.push(\`https://image.tmdb.org/t/p/w780\${still}\`);
-                        if (listMode) thumbs.push(\`https://image.tmdb.org/t/p/original\${still}\`);
-                        return thumbs; // found — stop
-                    }
-                } catch(e) {}
-            }
-        }
-    } catch(e) {}
-    return thumbs;
-}
-
-/* ── Auto search (one best thumb per episode) ── */
+/* Hoshika-only thumbnail candidates; other metadata providers are intentionally disabled. */
 async function searchThumbsForEp(animeTitle, epNum) {
     const ep = _episodes.find(e => e.num === epNum);
-
-    // 1. TMDB from browser (works even when server can't reach it)
-    const tmdbThumbs = await tmdbEpisodeStills(animeTitle, epNum, false);
-    if (tmdbThumbs.length) return tmdbThumbs;
-
-    // 2. PHP proxy (Kitsu / Hoshika / Jikan)
-    try {
-        const url = \`${siteUrl}/api/thumb_search.php?mode=auto\`
-            + \`&anime=\${encodeURIComponent(animeTitle)}&ep=\${epNum}&mal_id=\${_animeId}\`;
-        const j = await fetch(url).then(r => r.json());
-        if (j.thumb) return [j.thumb];
-    } catch(e) {}
-
-    // 3. Hoshika thumb already loaded
-    return ep?.hoshika_thumb ? [ep.hoshika_thumb] : [];
+    return ep && ep.hoshika_thumb ? [ep.hoshika_thumb] : [];
 }
 
-/* ── Picker: multiple candidates ── */
 async function searchThumbsListForEp(animeTitle, epNum) {
-    const ep     = _episodes.find(e => e.num === epNum);
+    const ep = _episodes.find(e => e.num === epNum);
     const thumbs = [];
-    if (ep?.existing_thumb) thumbs.push(ep.existing_thumb);
-    if (ep?.found_thumb   && !thumbs.includes(ep.found_thumb))    thumbs.push(ep.found_thumb);
-    if (ep?.hoshika_thumb && !thumbs.includes(ep.hoshika_thumb))  thumbs.push(ep.hoshika_thumb);
-
-    // TMDB from browser
-    const tmdbThumbs = await tmdbEpisodeStills(animeTitle, epNum, true);
-    for (const u of tmdbThumbs) if (!thumbs.includes(u)) thumbs.push(u);
-
-    // PHP proxy
-    try {
-        const url = \`${siteUrl}/api/thumb_search.php?mode=list\`
-            + \`&anime=\${encodeURIComponent(animeTitle)}&ep=\${epNum}&mal_id=\${_animeId}\`;
-        const j = await fetch(url).then(r => r.json());
-        for (const u of (j.thumbs || [])) if (!thumbs.includes(u)) thumbs.push(u);
-    } catch(e) {}
-
+    if (ep && ep.existing_thumb) thumbs.push(ep.existing_thumb);
+    if (ep && ep.found_thumb && !thumbs.includes(ep.found_thumb)) thumbs.push(ep.found_thumb);
+    if (ep && ep.hoshika_thumb && !thumbs.includes(ep.hoshika_thumb)) thumbs.push(ep.hoshika_thumb);
     return thumbs;
 }
 
@@ -488,24 +428,16 @@ async function saveAllFound() {
     showToast(msg, failed > 0 ? 'error' : 'success');
 }
 
-/* ═══════════════════════════════════════════════════════════════
-   Debug — calls ?mode=debug and shows full server log
-═══════════════════════════════════════════════════════════════ */
+/* Debug reports only the selected Hoshika record and loaded episode data. */
 async function runDebug() {
     const out = document.getElementById('debug-out');
     out.style.display = 'block';
-    out.textContent   = 'Running debug for episode 1…';
-    try {
-        const url = \`${siteUrl}/api/thumb_search.php?mode=debug\`
-            + \`&anime=\${encodeURIComponent(_animeTitle)}\`
-            + \`&ep=1\`
-            + \`&mal_id=\${_animeId}\`;
-        const r = await fetch(url);
-        const j = await r.json();
-        out.textContent = JSON.stringify(j, null, 2);
-    } catch(e) {
-        out.textContent = 'Debug request failed: ' + e.message;
-    }
+    out.textContent = JSON.stringify({
+        hoshikaId: _hoshikaId || null,
+        verifiedLegacyId: _animeId || null,
+        loadedEpisodes: _episodes.length,
+        episodesWithHoshikaThumbnails: _episodes.filter(e => !!e.hoshika_thumb).length
+    }, null, 2);
 }
 
 async function saveThumbToServer(animeId, epNum, imageUrl) {
