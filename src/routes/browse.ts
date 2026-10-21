@@ -4,6 +4,7 @@ import { Db } from '../lib/db';
 import { Session } from '../lib/session';
 import { Auth } from '../lib/auth';
 import { MalAPI } from '../lib/mal-api';
+import { searchHoshikaAnime } from '../lib/hoshika-api';
 import { Notification } from '../lib/notification';
 import { getUserAnimeStatuses } from '../lib/user-list';
 import { icon } from '../lib/icons';
@@ -35,20 +36,23 @@ browseRoutes.get('/browse', async (c) => {
   }
 
   let result: { data: any[]; pagination: any };
+  let hoshikaSearchItems: Awaited<ReturnType<typeof searchHoshikaAnime>> = [];
   if (q) {
-    result = await mal.searchAnime(q, page, type, status);
+    // All title search is Hoshika-only; no MAL/Jikan fallback on errors or empty results.
+    hoshikaSearchItems = await searchHoshikaAnime(q, 50);
+    result = { data: [], pagination: { items: { total: hoshikaSearchItems.length }, last_visible_page: 1 } };
   } else if (genres.length > 0) {
     result = await mal.getAnimeByGenres(genres, page);
   } else {
     result = await mal.getTopAnime('bypopularity', page);
   }
 
-  const items = result.data ?? [];
-  // Browse posters/covers are Hoshika-only; clear any MAL/scraper art fallback.
-  await mal.prefetchHoshikaArtForCards(items);
+  const items = q ? hoshikaSearchItems : (result.data ?? []);
+  // Legacy catalog enrichment must not run on Hoshika-native records.
+  if (!q) await mal.prefetchHoshikaArtForCards(items);
   const pagination = result.pagination ?? {};
   const totalPages = pagination.last_visible_page ?? 1;
-  const cardMeta = await buildCardMetaMap(db, items);
+  const cardMeta = q ? new Map() : await buildCardMetaMap(db, items);
   const genreList = mal.getAnimeGenres().data;
 
   const currentUser = auth.check() ? await auth.getCurrentUser() : null;
@@ -161,7 +165,7 @@ browseRoutes.get('/browse', async (c) => {
         <p class="text-muted">No results found. Try a different search.</p>
       </div>` : `
       <div class="anime-grid">
-        ${items.map((a) => renderAnimeCard(a, siteUrl, userStatuses[a.mal_id] ?? null, cardMeta.get(a.mal_id))).join('')}
+        ${q ? items.map((a: any) => renderHoshikaSearchCard(a)).join('') : items.map((a: any) => renderAnimeCard(a, siteUrl, userStatuses[a.mal_id] ?? null, cardMeta.get(a.mal_id))).join('')}
       </div>
       ${totalPages > 1 ? renderPagination(q, type, status, genres, page, totalPages) : ''}`}
     </div>
@@ -270,6 +274,20 @@ browseRoutes.get('/api/search_suggest.php', async (c) => {
     return c.json([], 200, { 'Cache-Control': 'no-store' });
   }
 });
+
+function renderHoshikaSearchCard(a: any): string {
+  const id = encodeURIComponent(String(a.shortId ?? ''));
+  const title = h(a.title ?? 'Untitled anime');
+  const image = h(a.poster || a.cover || '');
+  const meta = [a.type, a.year, a.episodes ? String(a.episodes) + ' eps' : ''].filter(Boolean).map((v) => h(String(v))).join(' · ');
+  const score = a.score !== null && a.score !== undefined ? Number(a.score).toFixed(1) : '';
+  return `<a class="anime-card" href="/anime/hoshika?id=${id}">
+    <div class="anime-card-poster">${image ? `<img src="${image}" alt="" loading="lazy">` : '<div class="anime-card-placeholder"></div>'}
+      ${score ? `<span class="anime-card-score">★ ${h(score)}</span>` : ''}
+    </div>
+    <div class="anime-card-info"><div class="anime-card-title">${title}</div>${meta ? `<div class="anime-card-meta">${meta}</div>` : ''}</div>
+  </a>`;
+}
 
 export function renderPagination(q: string, type: string, status: string, genres: number[], page: number, totalPages: number): string {
   const qs = new URLSearchParams();
