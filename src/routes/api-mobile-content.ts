@@ -4,7 +4,7 @@ import { Db } from '../lib/db';
 import { Session } from '../lib/session';
 import { Auth } from '../lib/auth';
 import { searchHoshikaAnime, getHoshikaAnimeById, getHoshikaAnimeEpisodesById } from '../lib/hoshika-api';
-import { findIdentityByLegacyMalId } from '../lib/anime-identity';
+import { findIdentityByLegacyMalId, findIdentityByHoshikaId } from '../lib/anime-identity';
 import { getUserAnimeStatuses } from '../lib/user-list';
 
 export const mobileContentRoutes = new Hono<{ Bindings: Env }>();
@@ -40,25 +40,34 @@ mobileContentRoutes.get('/api/mobile/browse', async (c) => {
 
 mobileContentRoutes.get('/api/mobile/anime/:id', async (c) => {
   const { db, auth } = await buildCtx(c);
-  const id = parseInt(c.req.param('id'), 10) || 0;
-  if (!id) return c.json({ success: false, message: 'Invalid legacy anime id.' }, 400);
-  const identity = await findIdentityByLegacyMalId(db, id).catch(() => null);
-  if (identity?.verified !== 1 || !identity.hoshika_short_id) {
+  const requestedId = c.req.param('id').trim();
+  if (!requestedId) return c.json({ success: false, message: 'Invalid anime id.' }, 400);
+  // Search returns Hoshika short IDs. Older app links may still pass a numeric
+  // legacy ID, which is accepted only through a verified mapping.
+  const isLegacyId = /^\\d+$/.test(requestedId);
+  const legacyId = isLegacyId ? Number(requestedId) : null;
+  const identity = isLegacyId
+    ? await findIdentityByLegacyMalId(db, legacyId!).catch(() => null)
+    : await findIdentityByHoshikaId(db, requestedId).catch(() => null);
+  if (isLegacyId && (identity?.verified !== 1 || !identity.hoshika_short_id)) {
     return c.json({ success: false, message: 'This legacy anime ID has no verified Hoshika mapping.', source: 'hoshika' }, 404, { 'Cache-Control': 'no-store' });
   }
-  const anime = await getHoshikaAnimeById(identity.hoshika_short_id);
+  const shortId = isLegacyId ? identity!.hoshika_short_id : requestedId;
+  const anime = await getHoshikaAnimeById(shortId);
   if (!anime) return c.json({ success: false, message: 'Anime not found in Hoshika.', source: 'hoshika' }, 404, { 'Cache-Control': 'no-store' });
+  const mappedLegacyId = identity?.verified === 1 && identity.legacy_mal_id ? Number(identity.legacy_mal_id) : legacyId;
   const currentUser = auth.check() ? await auth.getCurrentUser() : null;
   let userEntry = null; let isFavorite = false;
-  if (currentUser) {
+  if (currentUser && mappedLegacyId) {
     const { AnimeTracker } = await import('../lib/tracker');
-    userEntry = await AnimeTracker.getUserEntry(db, currentUser.id, id);
-    isFavorite = await AnimeTracker.isFavorite(db, currentUser.id, id);
+    userEntry = await AnimeTracker.getUserEntry(db, currentUser.id, mappedLegacyId);
+    isFavorite = await AnimeTracker.isFavorite(db, currentUser.id, mappedLegacyId);
   }
   return c.json({
     success: true,
     anime: {
-      id, shortId: anime.shortId, title: anime.title,
+      id: mappedLegacyId ?? anime.shortId, legacyId: mappedLegacyId,
+      shortId: anime.shortId, title: anime.title,
       titleJapanese: anime.titleJapanese || null, image: anime.poster,
       cover: anime.cover, synopsis: anime.synopsis, score: anime.score,
       status: anime.status, type: anime.type,
@@ -73,13 +82,17 @@ mobileContentRoutes.get('/api/mobile/anime/:id', async (c) => {
 
 mobileContentRoutes.get('/api/mobile/anime/:id/episodes', async (c) => {
   const { db } = await buildCtx(c);
-  const id = parseInt(c.req.param('id'), 10) || 0;
-  if (!id) return c.json({ success: false, message: 'Invalid legacy anime id.' }, 400);
-  const identity = await findIdentityByLegacyMalId(db, id).catch(() => null);
-  if (identity?.verified !== 1 || !identity.hoshika_short_id) {
+  const requestedId = c.req.param('id').trim();
+  if (!requestedId) return c.json({ success: false, message: 'Invalid anime id.' }, 400);
+  const isLegacyId = /^\\d+$/.test(requestedId);
+  const identity = isLegacyId
+    ? await findIdentityByLegacyMalId(db, Number(requestedId)).catch(() => null)
+    : await findIdentityByHoshikaId(db, requestedId).catch(() => null);
+  if (isLegacyId && (identity?.verified !== 1 || !identity.hoshika_short_id)) {
     return c.json({ success: false, message: 'This legacy anime ID has no verified Hoshika mapping.', source: 'hoshika' }, 404, { 'Cache-Control': 'no-store' });
   }
-  const episodes = await getHoshikaAnimeEpisodesById(identity.hoshika_short_id);
+  const shortId = isLegacyId ? identity!.hoshika_short_id : requestedId;
+  const episodes = await getHoshikaAnimeEpisodesById(shortId);
   if (!episodes) return c.json({ success: false, message: 'Episode data unavailable from Hoshika.', source: 'hoshika' }, 502, { 'Cache-Control': 'no-store' });
   const data = episodes.map((ep) => ({
     mal_id: ep.number, episode: ep.number, title: ep.title,
