@@ -1974,7 +1974,7 @@ async function epedSave() {
       html += `<div class="search-sugg-section-label">Anime</div>`;
       html += animeItems.map(a => {
         const meta = [a.type, a.year].filter(Boolean).join(' · ');
-        return `<a class="search-sugg-item" href="/pages/anime.php?id=${a.mal_id}">
+        return `<a class="search-sugg-item" href="/anime/hoshika?id=${encodeURIComponent(a.shortId)}">
           <img class="search-sugg-img" src="${a.image}" alt="" loading="lazy">
           <div class="search-sugg-info">
             <div class="search-sugg-title">${a.title}</div>
