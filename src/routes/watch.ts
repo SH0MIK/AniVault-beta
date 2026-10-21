@@ -31,8 +31,8 @@ import { DubStatus, DUB_LANGUAGES } from '../lib/dub-status';
 import { SUB_PROVIDERS, DUB_PROVIDERS, HINDI_PROVIDERS, fixedServerBtn } from '../lib/stream-sources';
 import { renderWatchComments } from '../render/watch-comments';
 
-interface TurboVidServerRow { id:number; anime_id:number; episode_num:number; audio_group:string; language:string; label:string; embed_url:string; is_active:number; }
-interface LuluStreamServerRow { id:number; anime_id:number; episode_num:number; label:string; embed_url:string; audio_tracks:string; is_active:number; }
+interface TurboVidServerRow { [key: string]: unknown; id:number; anime_id:number; episode_num:number; audio_group:string; language:string; label:string; embed_url:string; is_active:number; }
+interface LuluStreamServerRow { [key: string]: unknown; id:number; anime_id:number; episode_num:number; label:string; embed_url:string; audio_tracks:string; is_active:number; }
 
 export const watchRoutes = new Hono<{ Bindings: Env }>();
 function luluTrackGroup(track: any): 'sub'|'dub'|'hindi'|'multi' {
@@ -345,8 +345,7 @@ watchRoutes.get('/watch', async (c) => {
     ? { id: currentUser.id, username: currentUser.username, avatar_url: currentUser.avatar_url, role: currentUser.role }
     : null;
 
-  const bannerInfo = await mal.getLocalAnimeBannerInfo(animeId).catch(() => null);
-  const ogImage = await getEpisodeOgImage(db, animeId, epNum, bannerInfo?.image_url || image);
+  const ogImage = await getEpisodeOgImage(db, animeId, epNum, image);
 
   const __banner = await getBannerData(db);
   let html = renderHeader({
