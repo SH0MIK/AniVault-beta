@@ -89,9 +89,8 @@ adminHomeBannersRoutes.on(['GET', 'POST'], '/admin/home_banners.php', async (c) 
         // Step 1: add the anime to the carousel, no image required yet —
         // it lands at the bottom of the order with placeholder slots for
         // Banner/Logo to be filled in on the row itself. Title and logo
-        // are auto-filled if left blank: title from the MAL API, logo from
-        // getAnimeArt() (scraper clear-logo, same source home.ts's auto
-        // pool uses).
+        // are auto-filled if left blank: title from Hoshika via a verified
+        // legacy-ID mapping. Hoshika has no logo endpoint, so logo stays blank.
         const animeId = parseInt((formData.get('anime_id') as string) ?? '0', 10) || 0;
         let title = ((formData.get('anime_title') as string) ?? '').trim();
         if (!animeId) throw new Error('Enter a valid Anime ID.');
@@ -111,7 +110,7 @@ adminHomeBannersRoutes.on(['GET', 'POST'], '/admin/home_banners.php', async (c) 
           `INSERT INTO home_hero_banners (anime_id, anime_title, logo_image_url, metadata_json, display_order, source) VALUES (?,?,?,?,?,?)`,
           [animeId, title || null, logoUrl || null, JSON.stringify(fetched), order, 'url']
         );
-        session.setFlash('success', 'Anime added — now add its banner below (logo auto-filled from TMDB if available).');
+        session.setFlash('success', 'Anime added — now add its banner below. Logo remains blank until the separate artwork phase.');
       } else if (action === 'sync_metadata') {
         const rows = await db.fetchAll<any>(
           'SELECT id, anime_id FROM home_hero_banners WHERE metadata_json IS NULL OR metadata_json = ?',
