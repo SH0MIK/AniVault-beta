@@ -107,18 +107,49 @@ mobileContentRoutes.get('/api/mobile/user/:username', async (c) => {
 });
 
 mobileContentRoutes.get('/api/mobile/home', async (c) => {
-  const { db, auth, mal } = await buildCtx(c); const [seasonal, topAnime, upcoming] = await Promise.all([mal.getAniListSeasonNow(), mal.getTopAnime('bypopularity', 1), mal.getSeasonUpcoming()]);
-  const toCard = (a: any) => ({ id: a.mal_id, title: a.title_english && a.title_english !== a.title ? a.title_english : a.title, image: a.images?.jpg?.large_image_url ?? a.images?.jpg?.image_url ?? '', score: a.score ?? null, type: a.type ?? '', episodes: a.episodes ?? 0 });
-  let watchNowList: any[] = []; try { const rows = await db.fetchAll<{ anime_id: number }>('SELECT DISTINCT anime_id FROM episode_videos WHERE is_active = 1 ORDER BY updated_at DESC LIMIT 12'); const results = await Promise.all(rows.map((r) => mal.getAnime(r.anime_id, true))); watchNowList = results.map((r) => r.data).filter(Boolean).map(toCard); } catch { watchNowList = []; }
-  const currentUser = auth.check() ? await auth.getCurrentUser() : null; let continueWatching: any[] = [];
-  if (currentUser) { try { const rows = await db.fetchAll<any>('SELECT anime_id, anime_title, anime_image, episode_num, ep_title, ep_thumb, watched_at, watch_time, episode_duration FROM watch_history WHERE user_id = ? ORDER BY watched_at DESC LIMIT 8', [currentUser.id]); continueWatching = rows.map((r) => ({ animeId: r.anime_id, title: r.anime_title, image: r.anime_image, episodeNum: r.episode_num, epTitle: r.ep_title, epThumb: r.ep_thumb, watchTime: r.watch_time, episodeDuration: r.episode_duration })); } catch { continueWatching = []; } }
-  return c.json({ success: true, seasonal: (seasonal.data ?? []).slice(0, 12).map(toCard), top: (topAnime.data ?? []).slice(0, 12).map(toCard), upcoming: (upcoming.data ?? []).slice(0, 8).map(toCard), watchNow: watchNowList, continueWatching });
+  const { db, auth } = await buildCtx(c);
+  // Hoshika currently has no seasonal/top/upcoming listing endpoints. Keep
+  // watch-now cards only when the old MAL key has a verified Hoshika mapping.
+  let watchNow: any[] = [];
+  try {
+    const rows = await db.fetchAll<{ anime_id: number }>('SELECT DISTINCT anime_id FROM episode_videos WHERE is_active = 1 ORDER BY updated_at DESC LIMIT 12');
+    watchNow = (await Promise.all(rows.map(async (row) => {
+      const identity = await findIdentityByLegacyMalId(db, row.anime_id).catch(() => null);
+      if (identity?.verified !== 1 || !identity.hoshika_short_id) return null;
+      const anime = await getHoshikaAnimeById(identity.hoshika_short_id);
+      if (!anime) return null;
+      return { id: anime.shortId, shortId: anime.shortId, legacyId: row.anime_id, title: anime.title, image: anime.poster, score: anime.score, type: anime.type, episodes: anime.episodes ?? 0, source: 'hoshika' };
+    }))).filter(Boolean);
+  } catch { watchNow = []; }
+  const currentUser = auth.check() ? await auth.getCurrentUser() : null;
+  let continueWatching: any[] = [];
+  if (currentUser) {
+    try {
+      const rows = await db.fetchAll<any>('SELECT anime_id, anime_title, anime_image, episode_num, ep_title, ep_thumb, watched_at, watch_time, episode_duration FROM watch_history WHERE user_id = ? ORDER BY watched_at DESC LIMIT 8', [currentUser.id]);
+      continueWatching = rows.map((r) => ({ animeId: r.anime_id, title: r.anime_title, image: r.anime_image, episodeNum: r.episode_num, epTitle: r.ep_title, epThumb: r.ep_thumb, watchTime: r.watch_time, episodeDuration: r.episode_duration }));
+    } catch { continueWatching = []; }
+  }
+  return c.json({
+    success: true, source: 'hoshika', seasonal: [], top: [], upcoming: [],
+    watchNow, continueWatching,
+    message: 'Seasonal, top, and upcoming feeds are waiting for Hoshika-native listing endpoints.',
+  }, 200, { 'Cache-Control': 'no-store' });
 });
 
 mobileContentRoutes.get('/api/mobile/watch-now', async (c) => {
-  const { db, mal } = await buildCtx(c); const perPage = 24; const page = Math.max(1, parseInt(c.req.query('page') ?? '1', 10) || 1); const offset = (page - 1) * perPage;
-  const total = await db.count('SELECT COUNT(DISTINCT anime_id) as cnt FROM episode_videos WHERE is_active = 1'); const rows = await db.fetchAll<{ anime_id: number }>('SELECT DISTINCT anime_id FROM episode_videos WHERE is_active = 1 ORDER BY updated_at DESC LIMIT ? OFFSET ?', [perPage, offset]); const results = await Promise.all(rows.map((r) => mal.getAnime(r.anime_id, true))); const animeList = results.map((r) => r.data).filter(Boolean) as any[];
-  return c.json({ success: true, data: animeList.map((a) => ({ id: a.mal_id, title: a.title_english && a.title_english !== a.title ? a.title_english : a.title, image: a.images?.jpg?.large_image_url ?? '', score: a.score ?? null, type: a.type ?? '', episodes: a.episodes ?? 0 })), page, totalPages: total > 0 ? Math.ceil(total / perPage) : 1 });
+  const { db } = await buildCtx(c);
+  const perPage = 24;
+  const page = Math.max(1, parseInt(c.req.query('page') ?? '1', 10) || 1);
+  const offset = (page - 1) * perPage;
+  const rows = await db.fetchAll<{ anime_id: number }>('SELECT DISTINCT anime_id FROM episode_videos WHERE is_active = 1 ORDER BY updated_at DESC LIMIT ? OFFSET ?', [perPage, offset]);
+  const data = (await Promise.all(rows.map(async (row) => {
+    const identity = await findIdentityByLegacyMalId(db, row.anime_id).catch(() => null);
+    if (identity?.verified !== 1 || !identity.hoshika_short_id) return null;
+    const anime = await getHoshikaAnimeById(identity.hoshika_short_id);
+    if (!anime) return null;
+    return { id: anime.shortId, shortId: anime.shortId, legacyId: row.anime_id, title: anime.title, image: anime.poster, score: anime.score, type: anime.type, episodes: anime.episodes ?? 0, source: 'hoshika' };
+  }))).filter(Boolean);
+  return c.json({ success: true, source: 'hoshika', data, page, totalPages: 1 }, 200, { 'Cache-Control': 'no-store' });
 });
 
 mobileContentRoutes.get('/api/mobile/history', async (c) => {
@@ -131,14 +162,14 @@ mobileContentRoutes.get('/api/mobile/announcements', async (c) => {
   const { db } = await buildCtx(c); const rows = await db.fetchAll<any>('SELECT * FROM announcements WHERE is_active=1 ORDER BY created_at DESC'); return c.json({ success: true, data: rows.map((a) => ({ id: a.id, title: a.title, content: a.content, imageUrl: a.image_url ?? null, createdAt: a.created_at })) });
 });
 
-mobileContentRoutes.get('/api/mobile/character/:id', async (c) => {
-  const { mal } = await buildCtx(c); const charId = parseInt(c.req.param('id'), 10) || 0; if (!charId) return c.json({ success: false, message: 'Invalid character id.' }, 400);
-  const { character: charData, animeography: charAnimeData, voices: charVoicesData } = await mal.getCharacterFull(charId); const char = charData?.data; if (!char) return c.json({ success: false, message: 'Character not found.' }, 404);
-  return c.json({ success: true, character: { id: charId, name: char.name ?? 'Unknown Character', nameKanji: char.name_kanji ?? null, nicknames: char.nicknames ?? [], about: char.about ?? null, favorites: char.favorites ?? 0, image: char.images?.jpg?.image_url ?? '' }, animeography: (charAnimeData?.data ?? []).slice(0, 12).map((a: any) => ({ animeId: a.anime?.mal_id, title: a.anime?.title, image: a.anime?.images?.jpg?.image_url, role: a.role })), voices: (charVoicesData?.data ?? []).map((v: any) => ({ name: v.person?.name, image: v.person?.image_url, language: v.language })) });
-});
+mobileContentRoutes.get('/api/mobile/character/:id', async (c) => c.json({
+  success: false, source: 'hoshika',
+  message: 'Character catalogue is not available from the current Hoshika API.',
+}, 501, { 'Cache-Control': 'no-store' }));
 
-mobileContentRoutes.get('/api/mobile/anime/:id/characters', async (c) => {
-  const { mal } = await buildCtx(c); const id = parseInt(c.req.param('id'), 10) || 0; if (!id) return c.json({ success: false, message: 'Invalid anime id.' }, 400); const result = await mal.getAnimeCharacters(id); const data = (result?.data ?? []).slice(0, 20).map((r: any) => ({ id: r.character?.mal_id, name: r.character?.name, image: r.character?.images?.jpg?.image_url, role: r.role })); return c.json({ success: true, data });
-});
+mobileContentRoutes.get('/api/mobile/anime/:id/characters', async (c) => c.json({
+  success: false, source: 'hoshika',
+  message: 'Anime character data is not available from the current Hoshika API.',
+}, 501, { 'Cache-Control': 'no-store' }));
 
 export { mobileContentRoutes as default };
