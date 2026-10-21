@@ -498,7 +498,7 @@ function renderSidebarItem(a: NormalisedAnime, rank: number, siteUrl: string): s
   return `
 <a class="sidebar-item" href="${aurl}">
   <span class="sidebar-rank">#${rank}</span>
-  ${img ? `<img class="sidebar-thumb" src="${h(img)}" alt="${h(title)}" loading="lazy">` : ''}
+  ${img ? `<img class="sidebar-thumb" src="${h(img)}" alt="${h(title)}" loading="lazy">` : '<span class="sidebar-thumb" aria-hidden="true"></span>'}
   <div>
     <div class="sidebar-title">${h(title)}</div>
     <div class="sidebar-meta">${a.score ? `${icon('star', 'icon-small')} ${a.score.toFixed(1)}` : ''}${a.type ? ` · ${h(a.type)}` : ''}</div>
