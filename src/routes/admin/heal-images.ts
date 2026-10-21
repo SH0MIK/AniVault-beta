@@ -178,7 +178,7 @@ async function healRow(row) {
   status.textContent = '✓ Healed';
   status.classList.add('ok');
   const localUrl = saved.image_url || imageUrl;
-  preview.innerHTML = `<img src="${localUrl.replaceAll('"', '&quot;')}" alt="">`;
+  preview.innerHTML = \`<img src="\${localUrl.replaceAll('"', '&quot;')}" alt="">\`;
 }
 function nextBatchUrl(failedIds) {
   const params  = new URLSearchParams(window.location.search);
