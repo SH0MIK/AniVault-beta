@@ -1607,20 +1607,10 @@ function getStreamingKey(url) {
   return null;
 }
 
-const _animeInfoCache = {};
-
-async function getAnimeInfo(malId) {
-  if (_animeInfoCache[malId]) return _animeInfoCache[malId];
-  try {
-    const streaming = await fetch(`https://api.jikan.moe/v4/anime/${malId}/streaming`)
-      .then(r => r.ok ? r.json() : null);
-    const streamingLinks = (streaming?.data || [])
-      .filter(s => getStreamingKey(s.url))
-      .map(s => ({ service: getStreamingKey(s.url), url: s.url }));
-    const result = { streamingLinks };
-    _animeInfoCache[malId] = result;
-    return result;
-  } catch(e) { return { streamingLinks: [] }; }
+// Anime metadata and streaming-service links must not be fetched from Jikan.
+// The modal uses only locally configured overrides and the site's own API.
+async function getAnimeInfo() {
+  return { streamingLinks: [] };
 }
 
 document.addEventListener('click', async function(e) {
@@ -1677,19 +1667,18 @@ document.addEventListener('click', async function(e) {
     // episode_override.php now resolves the thumbnail itself (admin override,
     // else our scraper's D1 cache -- see api-episode-override.ts), so there's
     // no separate direct-to-AniList call needed here anymore.
-    const [animeInfo, overrideRes, jikanRes] = await Promise.all([
-      getAnimeInfo(animeId),
+    const [animeInfo, overrideRes] = await Promise.all([
+      getAnimeInfo(),
       fetch(`/api/episode_override.php?anime_id=${animeId}&ep=${epNum}`).then(r => r.ok ? r.json() : null),
-      fetch(`https://api.jikan.moe/v4/anime/${animeId}/episodes/${epNum}`).then(r => r.ok ? r.json() : null),
     ]);
 
     const override      = overrideRes?.override || null;
     const jikanSynop    = jikanRes?.data?.synopsis || '';
     const overrideSynop = override?.synopsis || '';
-    const synopsis      = overrideSynop || jikanSynop;
+    const synopsis      = overrideSynop;
 
     // Thumbnail: admin override > scraper-cached (via episode_override.php) > cached > anime cover fallback
-    const thumb = override?.image_url || overrideRes?.thumbnail || _epCache[cacheKey]?.thumb || '';
+    const thumb = override?.image_url || overrideRes?.thumbnail || '';
 
     // Watch links: override takes priority, then Jikan streaming
     const overrideLinks = override ? (JSON.parse(override.watch_links || '[]') || []) : [];
