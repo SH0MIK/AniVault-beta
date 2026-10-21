@@ -6,6 +6,7 @@ import { Db } from './db';
  * from a title and never rewrites user-owned rows.
  */
 export interface AnimeIdentity {
+  [key: string]: unknown;
   hoshika_short_id: string;
   legacy_mal_id: number | null;
   hoshika_uuid: string | null;
