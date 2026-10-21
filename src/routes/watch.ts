@@ -345,7 +345,8 @@ watchRoutes.get('/watch', async (c) => {
     ? { id: currentUser.id, username: currentUser.username, avatar_url: currentUser.avatar_url, role: currentUser.role }
     : null;
 
-  const ogImage = await getEpisodeOgImage(db, animeId, epNum, image);
+  const episodeStill = hoshikaEpisodes?.find((ep) => ep.number === epNum)?.thumbnail || image;
+  const ogImage = await getEpisodeOgImage(db, animeId, epNum, episodeStill);
 
   const __banner = await getBannerData(db);
   let html = renderHeader({
