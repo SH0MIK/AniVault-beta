@@ -317,3 +317,114 @@ export async function getHoshikaAnimeMetadata(
     return null;
   }
 }
+
+
+/**
+ * Hoshika-native catalog record. Hoshika shortId is the canonical AniVault
+ * catalog ID during the migration; it must never be interpreted as a MAL ID.
+ */
+export interface HoshikaCatalogAnime {
+  id: string;
+  shortId: string;
+  slug: string;
+  title: string;
+  titleEnglish: string;
+  titleRomaji: string;
+  titleJapanese: string;
+  synopsis: string;
+  poster: string;
+  cover: string;
+  episodes: number | null;
+  score: number | null;
+  status: string;
+  type: string;
+  year: number | null;
+  genres: string[];
+  raw: any;
+}
+
+function firstText(...values: any[]): string {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return '';
+}
+
+function numberOrNull(value: any): number | null {
+  if (value === null || value === undefined || value === '') return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function normaliseHoshikaAnime(item: any): HoshikaCatalogAnime | null {
+  const x = obj(item);
+  const shortId = shortIdFrom(x);
+  if (!shortId) return null;
+  const titleEnglish = firstText(x.titleEnglish, x.title_english, x.titles?.english);
+  const titleRomaji = firstText(x.titleRomaji, x.title_romaji, x.titles?.romaji);
+  const titleJapanese = firstText(x.titleJapanese, x.title_japanese, x.titles?.japanese);
+  const title = firstText(x.title, titleEnglish, titleRomaji, titleJapanese, x.slug);
+  const rawGenres = Array.isArray(x.genres) ? x.genres : [];
+  const genres = rawGenres.map((g: any) => typeof g === 'string' ? g : firstText(g?.name, g?.title)).filter(Boolean);
+  const rawYear = x.year ?? x.seasonYear ?? x.startYear ?? x.start_date?.year;
+  return {
+    id: String(x.id ?? shortId),
+    shortId,
+    slug: typeof x.slug === 'string' ? x.slug : '',
+    title,
+    titleEnglish,
+    titleRomaji,
+    titleJapanese,
+    synopsis: firstText(x.synopsis, x.description, x.overview),
+    poster: posterFrom(x),
+    cover: coverFrom(x),
+    episodes: episodeCountFrom(x),
+    score: numberOrNull(x.score ?? x.rating ?? x.mean),
+    status: firstText(x.status, x.airingStatus),
+    type: firstText(x.type, x.format, x.mediaType),
+    year: numberOrNull(rawYear),
+    genres,
+    raw: x,
+  };
+}
+
+/** Search only Hoshika. No MAL/Jikan/AniList fallback and no KV cache. */
+export async function searchHoshikaAnime(query: string, limit = 20): Promise<HoshikaCatalogAnime[]> {
+  const q = query.trim();
+  if (!q) return [];
+  try {
+    const url = new URL('https://hoshika.app/api/v1/search');
+    url.searchParams.set('q', q);
+    const response = await fetch(url.toString(), { headers: { Accept: 'application/json' } });
+    if (!response.ok) return [];
+    const payload: any = await response.json();
+    if (payload?.ok === false) return [];
+    return resultsFrom(payload)
+      .map(normaliseHoshikaAnime)
+      .filter((anime): anime is HoshikaCatalogAnime => !!anime)
+      .slice(0, Math.max(1, Math.min(50, Math.trunc(limit))));
+  } catch (error) {
+    console.warn('[hoshika] Search failed:', String(error));
+    return [];
+  }
+}
+
+/** Fetch one catalog record using Hoshika's canonical shortId. */
+export async function getHoshikaAnimeById(shortId: string | number): Promise<HoshikaCatalogAnime | null> {
+  const id = String(shortId ?? '').trim();
+  if (!id) return null;
+  try {
+    const response = await fetch(
+      `https://hoshika.app/api/v1/anime/${encodeURIComponent(id)}`,
+      { headers: { Accept: 'application/json' } },
+    );
+    if (!response.ok) return null;
+    const payload: any = await response.json();
+    if (payload?.ok === false) return null;
+    const record = normaliseHoshikaAnime(unwrap(payload));
+    return record?.shortId ? record : null;
+  } catch (error) {
+    console.warn('[hoshika] Detail lookup failed:', String(error));
+    return null;
+  }
+}
