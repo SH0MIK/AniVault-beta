@@ -300,10 +300,11 @@ function metadataFrom(item: any): HoshikaAnimeMetadata {
 }
 
 /**
- * Resolve a MAL ID against Hoshika's public catalog. Search is one request in
- * the common case; detail is only fetched for a single-title/detail request
- * when search results do not include the requested fields. Legacy KV caches
- * are deliberately bypassed during migration so only live Hoshika responses are used.
+ * Temporary compatibility bridge for existing MAL-keyed callers: use an
+ * exact normalized title match to obtain Hoshika metadata. The MAL ID is only
+ * a legacy-call guard; it is never sent to Hoshika and is NOT treated as a
+ * Hoshika ID. New/migrated code should call getHoshikaAnimeById() directly.
+ * No KV cache is read or written here.
  */
 export async function getHoshikaAnimeMetadata(
   malId: number,
