@@ -18,6 +18,7 @@ import { findIdentityByHoshikaId, findIdentityByLegacyMalId } from '../lib/anime
 import { getHoshikaAnimeById, getHoshikaAnimeEpisodesById } from '../lib/hoshika-api';
 import { AnimeTracker } from '../lib/tracker';
 import { resolveAnimeHeavenMp4 } from '../lib/scrapers/animeheaven';
+import { getReanimeEpisodes, getReanimeServers, getReanimeStream } from '../lib/scrapers/reanime';
 
 export const scraperRoutes = new Hono<{ Bindings: Env }>();
 
@@ -159,33 +160,60 @@ scraperRoutes.get('/api/desidub_stream.php', async (c) => {
 });
 
 // ── api/reanime_stream.php ───────────────────────────────────────────────
-// English-dub-only source. Same shape and reasoning as anikoto_stream.php
-// above — a single request lists servers (via /watch's availableServers,
-// no `server=` param) or resolves one specific server (with `server=`).
+// ReAnime now resolves directly in the Worker; no external scraper API call.
 scraperRoutes.get('/api/reanime_stream.php', async (c) => {
   const animeId = parseInt(c.req.query('anime') ?? '0', 10) || 0;
   const epNum = parseInt(c.req.query('ep') ?? '0', 10) || 0;
   const audio = ['sub', 'dub', 'raw'].includes(c.req.query('audio') ?? '') ? c.req.query('audio')! : 'sub';
   const server = (c.req.query('server') ?? '').trim();
   if (!animeId || !epNum) return c.json({ error: 'Missing anime or ep' }, 400);
-  const base = getScraperBase(c.env);
-  if (!base) return c.json({ error: 'Scraper API not configured' }, 500);
 
-  let watchUrl = `${base}/api/watch/reanime/mal-${animeId}/${epNum}/${audio}`;
-  if (server !== '') watchUrl += `?server=${encodeURIComponent(server)}`;
+  try {
+    const db = new Db(c.env.DB);
+    let title = '';
+    const direct = await getHoshikaAnimeById(String(animeId)).catch(() => null);
+    if (direct) title = direct.titleEnglish || direct.titleRomaji || direct.title || '';
+    if (!title) {
+      const identity = await findIdentityByLegacyMalId(db, animeId).catch(() => null);
+      if (identity?.verified === 1 && identity.legacy_mal_id === animeId) {
+        const anime = await getHoshikaAnimeById(identity.hoshika_short_id).catch(() => null);
+        title = anime?.titleEnglish || anime?.titleRomaji || anime?.title || identity.title || '';
+      }
+    }
+    if (!title) return c.json({ error: 'Could not resolve anime title for ReAnime' }, 404);
 
-  const { ok, code, data } = await fetchJson(watchUrl, 23000, c.env.SCRAPER_API_KEY || '');
-  if (!ok) return c.json({ error: data?.error ?? `ReAnime fetch failed HTTP ${code}` });
+    const episodes = await getReanimeEpisodes({ malId: animeId, title, altTitle: title });
+    const episode = episodes.find((item) => item.num === epNum);
+    if (!episode) return c.json({ error: 'ReAnime episode not found' }, 404);
+    const available = await getReanimeServers(episode.id);
+    const servers = available.map((item) => ({ name: item.name, type: item.type }));
+    if (!server) return c.json({ servers });
 
-  const servers = (data?.availableServers ?? []).map((s: string) => ({ name: s, type: audio }));
-  const m3u8 = data?.hlsProxyUrl ?? data?.m3u8 ?? null;
-  const mp4 = data?.mp4ProxyUrl ?? data?.mp4 ?? null;
-  const qualities = Array.isArray(data?.qualities) ? data.qualities : [];
+    const selected = available.find((item) =>
+      item.name.toLowerCase() === server.toLowerCase() &&
+      (item.type === audio || audio === 'raw')
+    );
+    if (!selected) return c.json({ error: 'ReAnime server not found', servers }, 404);
 
-  if (data?.iframeOnly) return c.json({ servers, embedUrl: data.embedUrl ?? '', iframeOnly: true, server: data.server ?? server });
-  if (m3u8) return c.json({ servers, m3u8, server: data.server ?? server, subtitles: data.subtitles ?? [], qualities });
-  if (mp4) return c.json({ servers, mp4, server: data.server ?? server, qualities });
-  return c.json({ error: 'No stream URL in response' });
+    const stream = await getReanimeStream(selected.sourceId);
+    if (stream.type === 'iframe' || !stream.m3u8) {
+      return c.json({ servers, embedUrl: stream.embedUrl, iframeOnly: true, server: stream.serverName });
+    }
+    return c.json({
+      servers,
+      m3u8: stream.m3u8,
+      server: stream.serverName,
+      subtitles: stream.subtitles,
+      qualities: stream.qualities,
+      audioTracks: stream.audioTracks,
+      selectedAudioLang: stream.selectedAudioLang,
+      playlistKey: stream.playlistKey,
+      referer: stream.referer,
+    });
+  } catch (error) {
+    console.error('[ReAnime] Worker resolver failed:', error instanceof Error ? error.message : String(error));
+    return c.json({ error: 'ReAnime could not resolve this episode right now' }, 502);
+  }
 });
 
 // ── api/animenosub_stream.php ────────────────────────────────────────────
