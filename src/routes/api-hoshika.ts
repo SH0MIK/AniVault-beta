@@ -1,5 +1,7 @@
 import { Hono } from 'hono';
 import type { Env } from '../index';
+import { Db } from '../lib/db';
+import { findIdentityByHoshikaId } from '../lib/anime-identity';
 import {
   getHoshikaAnimeById,
   getHoshikaAnimeEpisodesById,
