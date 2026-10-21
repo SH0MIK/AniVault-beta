@@ -1,28 +1,7 @@
-// Admin page for bulk-importing episode thumbnails AND metadata (title,
-// aired, filler/recap) straight into D1 -- episode_thumb_cache for
-// thumbnails (lib/episode-thumb.ts) and the same table's epinfo_all_* rows
-// for metadata (lib/episode-info.ts) -- from raw JSON, instead of waiting
-// on a live scraper lookup. Paste (or upload a .json file containing) the
-// exact shape the scraper's own GET /api/episode?malId=X returns:
-//
-//   { "malId": 1, "episodes": [ { "episode": 1, "title": "...",
-//     "aired": "...", "filler": false, "recap": false,
-//     "thumbnail": "https://…" }, … ] }
-//
-// The info half is only cached if EVERY pasted episode has both a title and
-// an aired date (same all-or-nothing rule the live fetch path uses) --
-// otherwise the info cache is left untouched so a later live fetch can fill
-// it in properly instead of baking in a partial import. The uploaded file isn't stored anywhere separately --
-// it's just read client-side and dropped into the same raw-JSON field the
-// paste box uses, so it goes through the exact same save path and the exact
-// same episode_thumb_cache table as a manual paste. Pick Finished/Ongoing
-// and it writes both cache shapes (the bulk `epthumbs_all_X` row and a
-// per-episode `epthumb_X_N` row for each one), both permanent -- see
-// importAnimeEpisodeThumbnails in lib/episode-thumb.ts for what Finished vs
-// Ongoing actually changes (whether the site ever checks for a new episode
-// past what was imported).
-// Every page that reads through getEpisodeThumbnail/getAnimeEpisodeThumbnails
-// (anime detail, watch, home, lists, embed) picks this up immediately.
+// Legacy episode-cache administration page retained for reference only.
+// During the Hoshika migration it is read-only: POST import/clear actions are
+// rejected, existing rows are left untouched, and user-facing Hoshika episode
+// flows do not read or repopulate the old scraper thumbnail cache.
 import { Hono } from 'hono';
 import type { Env } from '../../index';
 import { buildAdminCtx } from '../../lib/admin-ctx';
