@@ -12,7 +12,9 @@ import type { Env } from '../index';
 import { Db } from '../lib/db';
 import { Session } from '../lib/session';
 import { Auth, AUTO_SESSION_LIFETIME_SECONDS } from '../lib/auth';
-import { MalAPI, NormalisedAnime } from '../lib/mal-api';
+import type { NormalisedAnime } from '../lib/mal-api';
+import { getHoshikaAnimeById, getHoshikaAnimeEpisodesById } from '../lib/hoshika-api';
+import { findIdentityByLegacyMalId } from '../lib/anime-identity';
 import { Notification } from '../lib/notification';
 import { h, getAnimeTitle } from '../lib/helpers';
 import { icon } from '../lib/icons';
@@ -25,7 +27,6 @@ import { playerScript } from '../render/player-script';
 import { playerBody } from '../render/player-body';
 import { getBannerData, Settings } from '../lib/settings';
 import { AnimeTracker } from '../lib/tracker';
-import { EpisodeAir, AiredInfo } from '../lib/episode-air';
 import { DubStatus, DUB_LANGUAGES } from '../lib/dub-status';
 import { getEpisodeThumbnail } from '../lib/episode-thumb';
 import { SUB_PROVIDERS, DUB_PROVIDERS, HINDI_PROVIDERS, fixedServerBtn } from '../lib/stream-sources';
@@ -164,6 +165,48 @@ async function getEpisodeOgImage(
 // episode/character/AniList calls.
 const PREVIEW_BOT_RE = /facebookexternalhit|Facebot|Twitterbot|Discordbot|Slackbot|TelegramBot|WhatsApp|LinkedInBot|Pinterest|SkypeUriPreview|vkShare|redditbot|Applebot|Google-InspectionTool|W3C_Validator/i;
 
+async function getMappedWatchAnime(db: Db, legacyMalId: number): Promise<{ anime: NormalisedAnime; shortId: string } | null> {
+  const identity = await findIdentityByLegacyMalId(db, legacyMalId).catch(() => null);
+  if (!identity || identity.verified !== 1 || !identity.hoshika_short_id) return null;
+  const hoshika = await getHoshikaAnimeById(identity.hoshika_short_id);
+  if (!hoshika) return null;
+  const poster = hoshika.poster || '';
+  const status = /airing|ongoing|currently/i.test(hoshika.status) ? 'Currently Airing'
+    : /upcoming|not.?yet/i.test(hoshika.status) ? 'Not yet aired'
+    : hoshika.status ? hoshika.status : 'Unknown';
+  const anime = {
+    mal_id: legacyMalId,
+    title: hoshika.title || identity.title || 'Unknown anime',
+    title_english: hoshika.titleEnglish || '',
+    title_japanese: hoshika.titleJapanese || '',
+    images: { jpg: { image_url: poster, large_image_url: poster } },
+    synopsis: hoshika.synopsis || '',
+    background: '',
+    score: hoshika.score,
+    scored_by: null,
+    rank: null,
+    popularity: null,
+    episodes: hoshika.episodes ?? 0,
+    status,
+    type: hoshika.type || '',
+    rating: '',
+    source: '',
+    duration: null,
+    aired: { string: null },
+    start_date: null,
+    genres: hoshika.genres.map((name, index) => ({ mal_id: -(index + 1), name })),
+    studios: [],
+    related_anime: [],
+    recommendations: [],
+    trailer: [],
+    themes: [],
+    members: 0,
+    broadcast: { day: null, time: null },
+    duration_mins: null,
+  } as NormalisedAnime;
+  return { anime, shortId: identity.hoshika_short_id };
+}
+
 watchRoutes.get('/watch', async (c) => {
   const siteUrl = c.env.SITE_URL;
   const animeId = parseInt(c.req.query('anime') ?? '0', 10) || 0;
@@ -173,15 +216,11 @@ watchRoutes.get('/watch', async (c) => {
   const ua = c.req.header('user-agent') ?? '';
   if (PREVIEW_BOT_RE.test(ua)) {
     const db = new Db(c.env.DB);
-    const mal = new MalAPI(c.env, c.env.API_CACHE, db);
-    const result = await mal.getAnime(animeId);
-    const anime = result.data;
-    if (!anime) return c.html('', 404);
-
+    const mapped = await getMappedWatchAnime(db, animeId);
+    if (!mapped) return c.redirect(siteUrl + '/anime?id=' + animeId);
+    const anime = mapped.anime;
     const title = getAnimeTitle(anime);
-    const cover = anime.images?.jpg?.large_image_url ?? '';
-    const bannerInfo = await mal.getLocalAnimeBannerInfo(animeId).catch(() => null);
-    const coverFallback = bannerInfo?.image_url || cover;
+    const coverFallback = anime.images?.jpg?.large_image_url ?? '';
     const image = await getEpisodeOgImage(db, c.env, animeId, epNum, coverFallback, anime.status);
     const __banner = await getBannerData(db);
     const html = renderHeader({
@@ -202,7 +241,11 @@ watchRoutes.get('/watch', async (c) => {
   const lifetime = Number(c.env.SESSION_LIFETIME_SECONDS ?? 86400);
   const session = await Session.load(c, db, lifetime);
   const auth = new Auth(db, session, c.env as any, c.req.header('cf-connecting-ip') ?? 'unknown');
-  const mal = new MalAPI(c.env, c.env.API_CACHE, db);
+  // Legacy watch URLs are accepted only when the identity map has a verified
+  // MAL-to-Hoshika match. The numeric legacy ID is never sent to Hoshika.
+  const mapped = await getMappedWatchAnime(db, animeId);
+  if (!mapped) return c.redirect(siteUrl + '/anime?id=' + animeId);
+  const anime = mapped.anime;
 
   // No more login wall on the watch page: a signed-out visitor gets a real
   // account (random username/password) created transparently right here, so
@@ -215,10 +258,6 @@ watchRoutes.get('/watch', async (c) => {
       justAutoCreated = { username: reg.username, password: reg.password };
     }
   }
-
-  const result = await mal.getAnime(animeId);
-  const anime = result.data;
-  if (!anime) return c.html(`<script>location.replace(${JSON.stringify(siteUrl + '/')});</script>`);
 
   const title = getAnimeTitle(anime);
   const image = anime.images?.jpg?.large_image_url ?? '';
@@ -235,16 +274,8 @@ watchRoutes.get('/watch', async (c) => {
   // Finished and not-yet-aired shows skip all of that and use anime.episodes
   // straight from MAL — that field is already accurate once a show isn't
   // actively airing, so there's nothing for the cache to correct.
-  const isAiring = anime.status === 'Currently Airing';
-  let airedInfo: AiredInfo | null = null;
-  if (isAiring) {
-    const cached = await EpisodeAir.getCachedAny(db, animeId);
-    airedInfo = cached.info;
-    if (!cached.isFresh) {
-      c.executionCtx?.waitUntil?.(EpisodeAir.get(db, c.env, mal, animeId).catch(() => {}));
-    }
-  }
-  const totalEps = isAiring ? (airedInfo?.total ?? anime.episodes ?? 0) : (anime.episodes ?? 0);
+  const hoshikaEpisodes = await getHoshikaAnimeEpisodesById(mapped.shortId);
+  const totalEps = Math.max(anime.episodes ?? 0, hoshikaEpisodes?.length ?? 0);
   const dubbedLangs = await DubStatus.getFor(db, animeId);
 
   let epDurationSec = parseDurationSeconds(anime.duration);
@@ -264,16 +295,22 @@ watchRoutes.get('/watch', async (c) => {
     : [];
   const lulustreamServers = await db.fetchAll<LuluStreamServerRow>('SELECT id,anime_id,episode_num,label,embed_url,audio_tracks,is_active FROM lulustream_servers WHERE anime_id=? AND episode_num=? AND is_active=1 ORDER BY id',[animeId,epNum]);
 
-  const anilistId = await getAnilistIdFromMal(db, animeId, c.env);
+  const anilistId = 0;
 
   const allVideos = await db.fetchAll<{ episode_num: number; title: string | null }>(
     'SELECT episode_num, title FROM episode_videos WHERE anime_id=? AND is_active=1 ORDER BY episode_num ASC',
     [animeId]
   );
-  const epData = await mal.getAnimeEpisodes(animeId);
-  const allEps: any[] = epData?.data ?? [];
-  const charData = await mal.getAnimeCharacters(animeId);
-  const chars: any[] = (charData?.data ?? []).slice(0, 16);
+  // Episode navigation and titles are sourced only from Hoshika. Character
+  // data is not available in the confirmed public Hoshika API.
+  const allEps: any[] = (hoshikaEpisodes ?? []).map((ep) => ({
+    mal_id: ep.number,
+    title: ep.title || 'TBA',
+    synopsis: '',
+    aired: ep.aired,
+    images: { jpg: { image_url: ep.thumbnail, large_image_url: ep.thumbnail } },
+  }));
+  const chars: any[] = [];
 
   const videoEpNumSet = new Set(allVideos.map((v) => v.episode_num));
 
