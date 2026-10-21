@@ -3,7 +3,7 @@ import type { Env } from '../index';
 import { Db } from '../lib/db';
 import { Session } from '../lib/session';
 import { Auth } from '../lib/auth';
-import { searchHoshikaAnime } from '../lib/hoshika-api';
+import { searchHoshikaAnime, getHoshikaCatalog, getHoshikaGenres } from '../lib/hoshika-api';
 import { Notification } from '../lib/notification';
 import { getUserAnimeStatuses } from '../lib/user-list';
 import { icon } from '../lib/icons';
@@ -23,32 +23,28 @@ browseRoutes.get('/browse', async (c) => {
   const q = (c.req.query('q') ?? '').trim();
   const type = c.req.query('type') ?? '';
   const status = c.req.query('status') ?? '';
+  const sort = (c.req.query('sort') ?? 'popular').trim();
+  const year = Math.max(0, Number.parseInt(c.req.query('year') ?? '', 10) || 0);
   const page = Math.max(1, parseInt(c.req.query('page') ?? '1', 10) || 1);
+  const hoshikaGenres = await getHoshikaGenres();
+  const genreList: Array<{ mal_id: number; slug: string; name: string }> = hoshikaGenres.map((g, index) => ({ mal_id: index + 1, slug: g.slug, name: g.name }));
 
-  // genres[] query params, with BC support for old single ?genre=
-  let genres = c.req.queries('genres[]')?.map((g) => parseInt(g, 10)).filter((n) => !Number.isNaN(n)) ?? [];
-  if (genres.length === 0 && c.req.query('genre')) {
-    const g = parseInt(c.req.query('genre')!, 10);
-    if (!Number.isNaN(g)) genres = [g];
+  let genres = c.req.queries('genres[]')?.map((g) => parseInt(g, 10)).filter((n) => Number.isInteger(n) && n > 0) ?? [];
+  const singleGenre = (c.req.query('genre') ?? '').trim();
+  if (genres.length === 0 && singleGenre) {
+    const numericGenre = Number.parseInt(singleGenre, 10);
+    if (Number.isInteger(numericGenre) && String(numericGenre) === singleGenre) genres = [numericGenre];
+    else { const matched = genreList.find((g) => g.slug.toLowerCase() === singleGenre.toLowerCase()); if (matched) genres = [matched.mal_id]; }
   }
-
-  let result: { data: any[]; pagination: any };
+  const selectedGenre = genreList.find((g) => genres.includes(g.mal_id))?.slug ?? '';
   let hoshikaSearchItems: Awaited<ReturnType<typeof searchHoshikaAnime>> = [];
-  if (q) {
-    // All title search is Hoshika-only; no MAL/Jikan fallback on errors or empty results.
-    hoshikaSearchItems = await searchHoshikaAnime(q, 50);
-    result = { data: [], pagination: { items: { total: hoshikaSearchItems.length }, last_visible_page: 1 } };
-  } else {
-    // Hoshika currently exposes search/details/episodes, not a verified
-    // popularity or genre catalogue. Never fill these sections from MAL/Jikan.
-    result = { data: [], pagination: { items: { total: 0 }, last_visible_page: 1 } };
-  }
-
-  const items = q ? hoshikaSearchItems : [];
-  const pagination = result.pagination ?? {};
-  const totalPages = pagination.last_visible_page ?? 1;
+  let catalogResult: Awaited<ReturnType<typeof getHoshikaCatalog>> = { items: [], total: 0, totalPages: 1 };
+  if (q) hoshikaSearchItems = await searchHoshikaAnime(q, 50);
+  else catalogResult = await getHoshikaCatalog({ genre: selectedGenre, year: year || undefined, sort, page, type: type || undefined });
+  const items = q ? hoshikaSearchItems : catalogResult.items;
+  const totalCount = q ? hoshikaSearchItems.length : catalogResult.total;
+  const totalPages = q ? 1 : catalogResult.totalPages;
   const cardMeta = new Map();
-  const genreList: Array<{ mal_id: number; name: string }> = [];
 
   const currentUser = auth.check() ? await auth.getCurrentUser() : null;
   const unreadCount = currentUser ? await Notification.unreadCount(db, currentUser.id) : 0;
@@ -64,9 +60,8 @@ browseRoutes.get('/browse', async (c) => {
   });
 
   const heading = q ? `🔍 Results for "${h(q)}"` : '🌐 Browse Anime';
-  const totalCount = pagination.items?.total ?? items.length;
 
-  const activeFilterCount = (type ? 1 : 0) + (status ? 1 : 0) + genres.length + (q ? 1 : 0);
+  const activeFilterCount = (type ? 1 : 0) + (status ? 1 : 0) + (sort !== 'popular' ? 1 : 0) + (year ? 1 : 0) + genres.length + (q ? 1 : 0);
   const hasAnyFilter = activeFilterCount > 0;
 
   // Each chip links to the same filter set minus that one filter, so a
@@ -76,6 +71,8 @@ browseRoutes.get('/browse', async (c) => {
     if (q && !opts.dropQ) qs.set('q', q);
     if (type && !opts.dropType) qs.set('type', type);
     if (status && !opts.dropStatus) qs.set('status', status);
+    if (sort !== 'popular') qs.set('sort', sort);
+    if (year) qs.set('year', String(year));
     for (const g of genres) if (g !== opts.dropGenre) qs.append('genres[]', String(g));
     const s = qs.toString();
     return `/browse${s ? `?${s}` : ''}`;
@@ -113,6 +110,20 @@ browseRoutes.get('/browse', async (c) => {
           </div>
         </div>
         <form method="GET" action="" id="browse-form">
+          <div class="filter-section">
+            <div class="filter-section-label">Sort</div>
+            <select class="form-control" name="sort">
+              <option value="popular" ${sort === "popular" ? "selected" : ""}>Popular</option>
+              <option value="trending" ${sort === "trending" ? "selected" : ""}>Trending</option>
+              <option value="recent" ${sort === "recent" ? "selected" : ""}>Recently Added</option>
+              <option value="top" ${sort === "top" ? "selected" : ""}>Top Rated</option>
+              <option value="revelation" ${sort === "revelation" ? "selected" : ""}>Revelation</option>
+            </select>
+          </div>
+          <div class="filter-section">
+            <div class="filter-section-label">Year</div>
+            <input class="form-control" type="number" name="year" min="1960" max="2100" value="${year || ""}" placeholder="Any year">
+          </div>
           <div class="filter-section">
             <div class="filter-section-label">Search</div>
             <div class="filter-search-wrap">
@@ -157,12 +168,12 @@ browseRoutes.get('/browse', async (c) => {
       ${items.length === 0 ? `
       <div class="flex-center" style="padding:4rem;flex-direction:column;gap:1rem;">
         <span style="font-size:3rem;">🔍</span>
-        <p class="text-muted">${q ? 'No Hoshika results found. Try a different title.' : 'Hoshika catalog listings and genre filters are not available yet. Use the title search above; no MAL/Jikan fallback is used.'}</p>
+        <p class="text-muted">${q ? 'No Hoshika results found. Try a different title.' : 'No anime matched these filters. Try another genre, year, or sort option.'}</p>
       </div>` : `
       <div class="anime-grid">
-        ${q ? items.map((a: any) => renderHoshikaSearchCard(a)).join('') : ''}
+        ${items.map((a: any) => renderHoshikaSearchCard(a)).join('')}
       </div>
-      ${totalPages > 1 ? renderPagination(q, type, status, genres, page, totalPages) : ''}`}
+      ${totalPages > 1 ? renderPagination(q, type, status, genres, page, totalPages, sort, year) : ''}`}
     </div>
   </div>
 </div>
@@ -275,7 +286,7 @@ function renderHoshikaSearchCard(a: any): string {
   const image = h(a.poster || a.cover || '');
   const meta = [a.type, a.year, a.episodes ? String(a.episodes) + ' eps' : ''].filter(Boolean).map((v) => h(String(v))).join(' · ');
   const score = a.score !== null && a.score !== undefined ? Number(a.score).toFixed(1) : '';
-  return `<a class="anime-card" href="/anime/hoshika?id=${id}">
+  return `<a class="anime-card" href="/anime?id=${id}">
     <div class="anime-card-poster">${image ? `<img src="${image}" alt="" loading="lazy">` : '<div class="anime-card-placeholder"></div>'}
       ${score ? `<span class="anime-card-score">★ ${h(score)}</span>` : ''}
     </div>
@@ -283,11 +294,13 @@ function renderHoshikaSearchCard(a: any): string {
   </a>`;
 }
 
-export function renderPagination(q: string, type: string, status: string, genres: number[], page: number, totalPages: number): string {
+export function renderPagination(q: string, type: string, status: string, genres: number[], page: number, totalPages: number, sort = 'popular', year = 0): string {
   const qs = new URLSearchParams();
   if (q) qs.set('q', q);
   if (type) qs.set('type', type);
   if (status) qs.set('status', status);
+  if (sort !== 'popular') qs.set('sort', sort);
+  if (year) qs.set('year', String(year));
   let base = `/browse?${qs.toString()}`;
   for (const g of genres) base += `&genres[]=${g}`;
   const baseUrl = base + '&page=';
