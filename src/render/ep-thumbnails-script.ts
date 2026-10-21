@@ -46,12 +46,12 @@ async function hoshikaSearch(q) {
             } catch (_) {}
             const title = a.title || a.titleEnglish || a.titleRomaji || '';
             const img = a.poster || '';
-            if (!identity || !identity.mapped || !identity.data || !identity.data.legacyMalId) {
+            if (!identity || identity.verified !== true || !identity.legacyMalId) {
                 return '<div class="ta-result" style="opacity:.65;cursor:not-allowed;" title="Needs a verified legacy mapping">' +
                     (img ? '<img src="' + eh(img) + '" alt="" onerror="this.style.display=\'none\'">' : '') +
                     '<div><div style="font-weight:600;">' + eh(title) + '</div><div style="font-size:.73rem;color:var(--text-muted);">Hoshika ID: ' + eh(shortId) + ' · No verified legacy mapping</div></div></div>';
             }
-            const legacyId = Number(identity.data.legacyMalId);
+            const legacyId = Number(identity.legacyMalId);
             _cache[legacyId] = { id: legacyId, shortId: shortId, title: title, img: img, episodes: Number(a.episodes || 0) };
             return '<div class="ta-result" onclick="selectAnime(' + legacyId + ')">' +
                 (img ? '<img src="' + eh(img) + '" alt="" onerror="this.style.display=\'none\'">' : '') +
