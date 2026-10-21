@@ -221,18 +221,24 @@ scraperRoutes.get('/api/reanime_stream.php', async (c) => {
   try {
     const db = new Db(c.env.DB);
     let title = '';
+    let reanimeMalId: number | undefined;
     const direct = await getHoshikaAnimeById(String(animeId)).catch(() => null);
-    if (direct) title = direct.titleEnglish || direct.titleRomaji || direct.title || '';
+    if (direct) {
+      // The player normally sends a Hoshika ID, not a MAL ID.
+      // Use the title for ReAnime lookup unless a verified MAL mapping is known.
+      title = direct.titleEnglish || direct.titleRomaji || direct.title || '';
+    }
     if (!title) {
       const identity = await findIdentityByLegacyMalId(db, animeId).catch(() => null);
       if (identity?.verified === 1 && identity.legacy_mal_id === animeId) {
         const anime = await getHoshikaAnimeById(identity.hoshika_short_id).catch(() => null);
         title = anime?.titleEnglish || anime?.titleRomaji || anime?.title || identity.title || '';
+        reanimeMalId = identity.legacy_mal_id;
       }
     }
     if (!title) return c.json({ error: 'Could not resolve anime title for ReAnime' }, 404);
 
-    const episodes = await getReanimeEpisodes({ malId: animeId, title, altTitle: title });
+    const episodes = await getReanimeEpisodes({ malId: reanimeMalId, title, altTitle: title });
     const episode = episodes.find((item) => item.num === epNum);
     if (!episode) return c.json({ error: 'ReAnime episode not found' }, 404);
     const available = await getReanimeServers(episode.id);
