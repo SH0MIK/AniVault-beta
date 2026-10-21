@@ -203,7 +203,8 @@ function buildEpCard(ep, animeId, cover, thumbMap, banner) {
   const thumb = (thumbMap && thumbMap[parseInt(epNum)]) || ep.thumbnail || banner || cover;
 
   const div = document.createElement('a');
-  div.href      = (window.__siteUrl || '') + '/watch?anime=' + animeId + '&ep=' + epNum;
+  const playbackId = window.__legacyAnimeId || animeId;
+  div.href      = (window.__siteUrl || '') + '/watch?anime=' + playbackId + '&ep=' + epNum;
   div.className = 'ep-card' + (hasVid ? ' has-video-ep' : '');
   div.dataset.title    = epTitle;
   div.dataset.meta     = meta;
