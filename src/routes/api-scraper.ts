@@ -14,6 +14,8 @@ import { Db } from '../lib/db';
 import { Session } from '../lib/session';
 import { Auth } from '../lib/auth';
 import { h } from '../lib/helpers';
+import { findIdentityByLegacyMalId } from '../lib/anime-identity';
+import { getHoshikaAnimeById, getHoshikaAnimeEpisodesById } from '../lib/hoshika-api';
 import { MalAPI } from '../lib/mal-api';
 import { EpisodeAir } from '../lib/episode-air';
 import { AnimeTracker } from '../lib/tracker';
@@ -523,22 +525,23 @@ scraperRoutes.get('/api/embed.php', async (c) => {
   const epNum = parseInt(c.req.query('ep') ?? '0', 10) || 0;
   if (!animeId || !epNum) return c.text('Not found', 404);
 
-  const animeRes = await fetchJson(`https://api.jikan.moe/v4/anime/${animeId}`, 5000);
-  const title = animeRes.data?.data?.title ?? 'Anime';
-  const image = animeRes.data?.data?.images?.jpg?.image_url ?? '';
-
-  const epRes = await fetchJson(`https://api.jikan.moe/v4/anime/${animeId}/episodes`, 5000);
-  let epTitle = `Episode ${epNum}`;
-  for (const ep of epRes.data?.data ?? []) {
-    if (Number(ep.mal_id ?? 0) === epNum && ep.title && ep.title !== 'TBA') { epTitle = ep.title; break; }
-  }
+  // This legacy URL still receives a MAL ID. Resolve it through the
+  // verified map; never pass it to Hoshika as though it were a shortId.
+  const db = new Db(c.env.DB);
+  const identity = await findIdentityByLegacyMalId(db, animeId).catch(() => null);
+  const hoshikaId = identity?.verified === 1 ? identity.hoshika_short_id : null;
+  const [animeData, episodes] = hoshikaId
+    ? await Promise.all([getHoshikaAnimeById(hoshikaId), getHoshikaAnimeEpisodesById(hoshikaId)])
+    : [null, null];
+  const title = animeData?.titleEnglish || animeData?.title || 'Anime';
+  const image = animeData?.poster || '';
+  const epTitle = episodes?.find((ep) => ep.number === epNum)?.title || `Episode ${epNum}`;
 
   // Priority: an admin-saved override wins (episode_overrides.image_url,
   // set via the Episode Thumbnails admin panel), then a live lookup against
   // our own scraper API (cached in D1), then the anime cover as last resort.
   let ogImage = image;
   try {
-    const db = new Db(c.env.DB);
     const row = await db.fetchOne<{ image_url: string | null }>(
       'SELECT image_url FROM episode_overrides WHERE anime_id = ? AND episode_num = ?',
       [animeId, epNum]
@@ -546,7 +549,7 @@ scraperRoutes.get('/api/embed.php', async (c) => {
     if (row?.image_url) {
       ogImage = row.image_url;
     } else {
-      const scraped = await getEpisodeThumbnail(c.env, db, animeId, epNum, animeRes.data?.data?.status);
+      const scraped = await getEpisodeThumbnail(c.env, db, animeId, epNum);
       if (scraped) ogImage = scraped;
     }
   } catch { /* fall back to anime cover */ }
