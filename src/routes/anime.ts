@@ -201,11 +201,11 @@ animeRoutes.get('/anime', async (c) => {
 
       ${(anime.genres?.length ?? 0) > 0 ? `
       <div class="ih-genres">
-        ${anime.genres.filter(Boolean).map((g) => `<a href="${siteUrl}/browse?genre=${encodeURIComponent(g?.slug ?? g?.name ?? '')}" class="ih-genre-tag">${h(g?.name ?? '')}</a>`).join('')}
+        ${anime.genres.filter(Boolean).map((g: any) => `<a href="${siteUrl}/browse?genre=${encodeURIComponent(g?.slug ?? g?.name ?? '')}" class="ih-genre-tag">${h(g?.name ?? '')}</a>`).join('')}
       </div>` : ''}
 
       <div class="ih-infoline">
-        <span>Studio: <strong>${h((anime.studios ?? []).filter(Boolean).map((s) => s?.name ?? '').filter(Boolean).join(', ') || '—')}</strong></span>
+        <span>Studio: <strong>${h((anime.studios ?? []).filter(Boolean).map((s: any) => s?.name ?? '').filter(Boolean).join(', ') || '—')}</strong></span>
         <span>Source: <strong>${h(anime.source || '—')}</strong></span>
       </div>
 
@@ -262,7 +262,7 @@ animeRoutes.get('/anime', async (c) => {
           ${infoStatRow('Aired', anime.aired?.string || '—')}
           ${infoStatRow('Duration', anime.duration || '—')}
           ${infoStatRow('Rating', anime.rating || '—')}
-          ${infoStatRow('Studio', (anime.studios ?? []).filter(Boolean).map((s) => s?.name ?? '').filter(Boolean).join(', ') || '—')}
+          ${infoStatRow('Studio', (anime.studios ?? []).filter(Boolean).map((s: any) => s?.name ?? '').filter(Boolean).join(', ') || '—')}
           ${infoStatRow('Source', anime.source || '—')}
         </div>
       </div>
