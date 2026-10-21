@@ -186,7 +186,7 @@ homeRoutes.get('/', async (c) => {
   // cache-only cardMeta lookup as everything else, instead of a second
   // query later that the hero slides were silently missing out on.
   const curatedRows = await db
-    .fetchAll<any>('SELECT anime_id, anime_title, banner_image_url, logo_image_url, metadata_json FROM home_hero_banners ORDER BY display_order ASC LIMIT 8')
+    .fetchAll<any>('SELECT anime_id, anime_title, banner_image_url, metadata_json FROM home_hero_banners ORDER BY display_order ASC LIMIT 8')
     .catch(() => []);
   const cardMeta = await buildCardMetaMap(db, [...watchNowList, ...topList, ...upcomingList, ...curatedRows.map((r) => ({ mal_id: r.anime_id } as NormalisedAnime))]);
 
