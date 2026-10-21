@@ -199,7 +199,7 @@ export async function getHoshikaAnimeEpisodes(
 
     const match = resultsFrom(searchPayload)
       .map((item) => ({ item, score: titleMatchScore(item, title) }))
-      .filter((entry) => entry.score >= 80)
+      .filter((entry) => entry.score === 100)
       .sort((a, b) => b.score - a.score)[0]?.item;
     const shortId = shortIdFrom(match);
     if (!match || !shortId) return null;
