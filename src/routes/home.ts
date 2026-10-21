@@ -371,9 +371,13 @@ ${heroSliderScript(heroPool.length)}
 
 function renderContinueWatchingCard(hRow: WatchHistoryRow, siteUrl: string, episodeThumbOverrides: Record<string, string>): string {
   const watchUrl = `${siteUrl}/watch?anime=${hRow.anime_id}&ep=${hRow.episode_num}`;
-  // Only an admin-saved override shows here now -- the legacy ep_thumb
-  // column (populated by old client-side auto-fetch code) is ignored.
-  const thumbSrc = episodeThumbOverrides[`${hRow.anime_id}:${hRow.episode_num}`] || '';
+  // Prefer admin-saved episode artwork, then retain existing episode/anime
+  // artwork already stored in watch_history. This avoids blank cards for
+  // history created before the Hoshika migration.
+  const thumbSrc = episodeThumbOverrides[`${hRow.anime_id}:${hRow.episode_num}`]
+    || hRow.ep_thumb
+    || hRow.anime_image
+    || '';
   const epNum = hRow.episode_num;
   const animeTitle = h(hRow.anime_title || `Anime #${hRow.anime_id}`);
   const epTitle = hRow.ep_title ? h(hRow.ep_title) : `Episode ${epNum}`;
