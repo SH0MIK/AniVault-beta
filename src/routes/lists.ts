@@ -140,9 +140,8 @@ listRoutes.on(['GET', 'POST'], '/mylist', async (c) => {
           const ji = JSON.stringify(item.anime_image ?? '');
           const meta = cardMeta.get(item.anime_id);
           const airedInfo = meta?.airedInfo;
-          // Prefer the Jikan-derived aired-so-far total when we have it
-          // cached — the stored anime_episodes snapshot can lag behind for
-          // airing shows, same issue as the card grids.
+          // Use the user's saved episode-count snapshot during migration;
+          // do not consult legacy Jikan/scraper aired-count caches.
           const eps = (airedInfo?.total ?? item.anime_episodes) ?? 0;
           const dubbed = meta?.dubbedLangs ?? [];
           const dubCodes = dubbed.map((l) => LANG_CODE[l] ?? l.slice(0, 2).toUpperCase());
