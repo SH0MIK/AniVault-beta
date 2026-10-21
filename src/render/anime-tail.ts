@@ -343,7 +343,7 @@ async function lazyLoadEpisodes() {
     // are consulted only when this Hoshika ID has a verified legacy mapping.
     const [thumbMap, response] = await Promise.all([
       fetchEpisodeThumbnails(animeId),
-      fetch(`${window.__siteUrl || ''}/api/hoshika/anime/${encodeURIComponent(animeId)}/episodes`).then(r => r.ok ? r.json() : null),
+      fetch((window.__siteUrl || '') + '/api/hoshika/anime/' + encodeURIComponent(animeId) + '/episodes').then(r => r.ok ? r.json() : null),
     ]);
     const hoshikaEpisodes = Array.isArray(response?.data) ? response.data : [];
     const episodes = hoshikaEpisodes.map(ep => ({
