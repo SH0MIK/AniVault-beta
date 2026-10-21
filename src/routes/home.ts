@@ -242,7 +242,7 @@ ${heroSliderScript(heroPool.length)}
 </section>
     `;
   }
-  html += `<div class="container">;
+  html += `<div class="container">`;
 
   if (currentUser) {
     const stats = await AnimeTracker.getStats(db, currentUser.id);
