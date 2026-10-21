@@ -26,7 +26,8 @@ import type { Env } from '../../index';
 import { buildAdminCtx } from '../../lib/admin-ctx';
 import { h } from '../../lib/helpers';
 import { renderAdminHeader, renderAdminFooter } from '../../render/admin-layout';
-import { MalAPI } from '../../lib/mal-api';
+import { getHoshikaAnimeById } from '../../lib/hoshika-api';
+import { findIdentityByLegacyMalId } from '../../lib/anime-identity';
 
 export const adminHomeBannersRoutes = new Hono<{ Bindings: Env }>();
 
@@ -98,16 +99,17 @@ adminHomeBannersRoutes.on(['GET', 'POST'], '/admin/home_banners.php', async (c) 
         const existing = await db.fetchOne<any>('SELECT id FROM home_hero_banners WHERE anime_id=?', [animeId]);
         if (existing) throw new Error('That anime is already in the hero carousel.');
 
-        const mal = new MalAPI(c.env, c.env.API_CACHE, db);
-        const fetched = await mal.getAnime(animeId);
-        if (!fetched.data) throw new Error(`No anime found for ID ${animeId}.`);
-        if (!title) title = fetched.data.title_english || fetched.data.title || '';
-        const logoUrl = fetched.data.logo_image || '';
+        const identity = await findIdentityByLegacyMalId(db, animeId);
+        if (!identity || identity.verified !== 1 || !identity.hoshika_short_id) throw new Error('This legacy ID has no verified Hoshika mapping yet. Search for the title in Browse and map it before adding a hero slide.');
+        const fetched = await getHoshikaAnimeById(identity.hoshika_short_id);
+        if (!fetched) throw new Error(`Hoshika details are unavailable for ID ${animeId}.`);
+        if (!title) title = fetched.titleEnglish || fetched.title || identity.title || '';
+        const logoUrl = '';
 
         const order = await nextDisplayOrder(db);
         await db.query(
           `INSERT INTO home_hero_banners (anime_id, anime_title, logo_image_url, metadata_json, display_order, source) VALUES (?,?,?,?,?,?)`,
-          [animeId, title || null, logoUrl || null, JSON.stringify(fetched.data), order, 'url']
+          [animeId, title || null, logoUrl || null, JSON.stringify(fetched), order, 'url']
         );
         session.setFlash('success', 'Anime added — now add its banner below (logo auto-filled from TMDB if available).');
       } else if (action === 'sync_metadata') {
@@ -116,19 +118,21 @@ adminHomeBannersRoutes.on(['GET', 'POST'], '/admin/home_banners.php', async (c) 
           ['']
         );
         if (rows.length > 0) {
-          const mal = new MalAPI(c.env, c.env.API_CACHE, db);
           let synced = 0;
+          let skipped = 0;
           for (const row of rows) {
-            const fetched = await mal.getAnime(Number(row.anime_id));
-            if (!fetched.data) continue;
-            const title = fetched.data.title_english || fetched.data.title || null;
+            const identity = await findIdentityByLegacyMalId(db, Number(row.anime_id));
+            if (!identity || identity.verified !== 1 || !identity.hoshika_short_id) { skipped++; continue; }
+            const fetched = await getHoshikaAnimeById(identity.hoshika_short_id);
+            if (!fetched) { skipped++; continue; }
+            const title = fetched.titleEnglish || fetched.title || identity.title || null;
             await db.query(
               "UPDATE home_hero_banners SET anime_title = COALESCE(anime_title, ?), metadata_json = ?, updated_at=datetime('now') WHERE id = ?",
-              [title, JSON.stringify(fetched.data), row.id]
+              [title, JSON.stringify(fetched), row.id]
             );
             synced++;
           }
-          session.setFlash('success', synced ? `Hero metadata synced for ${synced} slide(s).` : 'No hero metadata could be synced.');
+          session.setFlash('success', `Hero metadata synced for ${synced} slide(s); ${skipped} unmapped/unavailable slide(s) left unchanged.`);
         } else {
           session.setFlash('success', 'All hero slides already have metadata.');
         }
