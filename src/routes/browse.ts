@@ -160,7 +160,7 @@ browseRoutes.get('/browse', async (c) => {
         <p class="text-muted">${q ? 'No Hoshika results found. Try a different title.' : 'Hoshika catalog listings and genre filters are not available yet. Use the title search above; no MAL/Jikan fallback is used.'}</p>
       </div>` : `
       <div class="anime-grid">
-        ${q ? items.map((a: any) => renderHoshikaSearchCard(a)).join('') : items.map((a: any) => renderAnimeCard(a, siteUrl, userStatuses[a.mal_id] ?? null, cardMeta.get(a.mal_id))).join('')}
+        ${q ? items.map((a: any) => renderHoshikaSearchCard(a)).join('') : ''}
       </div>
       ${totalPages > 1 ? renderPagination(q, type, status, genres, page, totalPages) : ''}`}
     </div>
