@@ -137,7 +137,7 @@ export const AnimeTracker = {
       );
       await recordWatchActivity(db, userId, Math.max(0, watched - Number((existing as any).episodes_watched || 0)));
     } else {
-      const genresJson = await this.fetchGenresJson(mal, animeId);
+      const genresJson = await this.fetchGenresJson(db, animeId);
       const startedAt = ['watching', 'completed'].includes(status) ? new Date().toISOString().split('T')[0] : null;
       await db.insert(
         `INSERT INTO anime_list (user_id, anime_id, anime_title, anime_image, anime_episodes,
