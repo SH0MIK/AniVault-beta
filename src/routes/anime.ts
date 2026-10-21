@@ -30,7 +30,7 @@ animeRoutes.get('/anime', async (c) => {
 
   // Public anime IDs are Hoshika shortIds. Never pass them to a legacy MAL-keyed table.
   const id = (c.req.query('id') ?? '').trim();
-  if (!/^\\d+$/.test(id)) return c.redirect(siteUrl + '/browse');
+  if (!/^\d+$/.test(id)) return c.redirect(siteUrl + '/browse');
   const [record, identity] = await Promise.all([
     getHoshikaAnimeById(id),
     findIdentityByHoshikaId(db, id).catch(() => null),
