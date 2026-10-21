@@ -315,9 +315,15 @@ listRoutes.get('/history', async (c) => {
   const historyPosters: Record<number, string> = {};
   await Promise.all(history.map(async (row: any) => {
     try {
-      const identity = await findIdentityByLegacyMalId(db, Number(row.anime_id));
-      if (!identity?.hoshika_short_id) return;
-      const anime = await getHoshikaAnimeById(identity.hoshika_short_id);
+      // New watch-history rows may already use Hoshika IDs, so try the
+      // current catalog ID directly before consulting the legacy-ID mapping.
+      let anime = await getHoshikaAnimeById(String(row.anime_id)).catch(() => null);
+      if (!anime) {
+        const identity = await findIdentityByLegacyMalId(db, Number(row.anime_id));
+        if (identity?.hoshika_short_id) {
+          anime = await getHoshikaAnimeById(identity.hoshika_short_id).catch(() => null);
+        }
+      }
       if (anime?.poster) historyPosters[Number(row.anime_id)] = anime.poster;
     } catch { /* keep a neutral placeholder if Hoshika has no poster */ }
   }));
@@ -411,7 +417,7 @@ export function renderHistoryCard(hRow: any, siteUrl: string, episodeThumbOverri
   // Prefer admin-saved episode art, then existing episode art, then the
   // anime cover saved with the watch-history entry.
   const thumb = episodeThumbOverrides[`${hRow.anime_id}:${epNum}`] || hRow.ep_thumb || '';
-  const cover = animePoster;
+  const cover = animePoster || hRow.anime_image || '';
   const date = hRow.watched_at ? new Date(hRow.watched_at.replace(' ', 'T') + 'Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }) : '';
 
   const watchTime = hRow.watch_time ?? 0;
