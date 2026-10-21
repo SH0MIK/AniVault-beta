@@ -20,6 +20,8 @@ import { continueWatchingScript, heroSliderScript, rowNavScript } from '../rende
 import type { NormalisedAnime } from '../lib/mal-api';
 import { getBannerData } from '../lib/settings';
 import { getAnimeEpisodeThumbnails } from '../lib/episode-thumb';
+import { getHoshikaAnimeById } from '../lib/hoshika-api';
+import { findIdentityByLegacyMalId } from '../lib/anime-identity';
 
 export const homeRoutes = new Hono<{ Bindings: Env }>();
 
@@ -52,6 +54,22 @@ interface WatchHistoryRow {
   episode_duration: number;
 }
 
+function toHoshikaNormalisedAnime(anime: Awaited<ReturnType<typeof getHoshikaAnimeById>>, legacyId: number): NormalisedAnime | null {
+  if (!anime) return null;
+  const poster = anime.poster || '';
+  return {
+    mal_id: legacyId, title: anime.title || 'Unknown anime',
+    title_english: anime.titleEnglish || '', title_japanese: anime.titleJapanese || '',
+    images: { jpg: { image_url: poster, large_image_url: poster } },
+    synopsis: anime.synopsis || '', background: '', score: anime.score ?? 0,
+    scored_by: null, rank: null, popularity: null, episodes: anime.episodes ?? 0,
+    status: anime.status || 'Unknown', type: anime.type || '', rating: '', source: '',
+    duration: null, aired: { string: null }, start_date: null,
+    genres: anime.genres.map((name, index) => ({ mal_id: -(index + 1), name })),
+    studios: [], related_anime: [], recommendations: [], trailer: [], themes: [],
+    members: 0, broadcast: { day: null, time: null }, duration_mins: null,
+  } as NormalisedAnime;
+}
 homeRoutes.get('/', async (c) => {
   const db = new Db(c.env.DB);
   const lifetime = Number(c.env.SESSION_LIFETIME_SECONDS ?? 86400);
@@ -72,24 +90,22 @@ homeRoutes.get('/', async (c) => {
   const topList: NormalisedAnime[] = [];
   const upcomingList: NormalisedAnime[] = [];
 
-  // Watch Now — anime that have episodes available in episode_videos
-  let watchNowList: any[] = [];
+  // Watch Now — only display rows whose legacy IDs have verified Hoshika mappings.
+  let watchNowList: NormalisedAnime[] = [];
   try {
     const rows = await db.fetchAll<{ anime_id: number }>(
-      'SELECT DISTINCT anime_id FROM episode_videos WHERE is_active = 1 ORDER BY updated_at DESC LIMIT 12'
+      'SELECT anime_id FROM episode_videos WHERE is_active = 1 GROUP BY anime_id ORDER BY MAX(updated_at) DESC LIMIT 12'
     );
-    // Watch Now remains keyed by legacy IDs; until a verified Hoshika identity
-    // exists in the rendered feed, do not guess a catalog card from numeric IDs.
-    const snapshotAnime = [...topList, ...upcomingList];
-    const snapshotById = new Map(snapshotAnime.map((anime) => [anime.mal_id, anime]));
-    watchNowList = rows
-      .map((r) => snapshotById.get(r.anime_id))
-      .filter(Boolean) as NormalisedAnime[];
-    // Only resolve TMDB art for cards we can render from the D1/MAL snapshot.
+    const resolved = await Promise.all(rows.map(async ({ anime_id }) => {
+      const identity = await findIdentityByLegacyMalId(db, anime_id).catch(() => null);
+      if (!identity || identity.verified !== 1 || !identity.hoshika_short_id) return null;
+      const anime = await getHoshikaAnimeById(identity.hoshika_short_id);
+      return toHoshikaNormalisedAnime(anime, anime_id);
+    }));
+    watchNowList = resolved.filter((anime): anime is NormalisedAnime => anime !== null);
   } catch {
     watchNowList = [];
   }
-
   // Watch history (logged-in users only) — the PHP version's CREATE TABLE /
   // ALTER TABLE self-healing runs on every home page load; that schema
   // migration dance isn't needed here since watch_history already exists
