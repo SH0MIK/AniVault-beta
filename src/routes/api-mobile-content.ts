@@ -44,7 +44,7 @@ mobileContentRoutes.get('/api/mobile/anime/:id', async (c) => {
   if (!requestedId) return c.json({ success: false, message: 'Invalid anime id.' }, 400);
   // Search returns Hoshika short IDs. Older app links may still pass a numeric
   // legacy ID, which is accepted only through a verified mapping.
-  const isLegacyId = /^\\d+$/.test(requestedId);
+  const isLegacyId = /^\d+$/.test(requestedId);
   const legacyId = isLegacyId ? Number(requestedId) : null;
   const identity = isLegacyId
     ? await findIdentityByLegacyMalId(db, legacyId!).catch(() => null)
@@ -84,7 +84,7 @@ mobileContentRoutes.get('/api/mobile/anime/:id/episodes', async (c) => {
   const { db } = await buildCtx(c);
   const requestedId = c.req.param('id').trim();
   if (!requestedId) return c.json({ success: false, message: 'Invalid anime id.' }, 400);
-  const isLegacyId = /^\\d+$/.test(requestedId);
+  const isLegacyId = /^\d+$/.test(requestedId);
   const identity = isLegacyId
     ? await findIdentityByLegacyMalId(db, Number(requestedId)).catch(() => null)
     : await findIdentityByHoshikaId(db, requestedId).catch(() => null);
