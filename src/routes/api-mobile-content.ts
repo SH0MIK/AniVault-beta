@@ -52,7 +52,7 @@ mobileContentRoutes.get('/api/mobile/anime/:id', async (c) => {
   if (isLegacyId && (identity?.verified !== 1 || !identity.hoshika_short_id)) {
     return c.json({ success: false, message: 'This legacy anime ID has no verified Hoshika mapping.', source: 'hoshika' }, 404, { 'Cache-Control': 'no-store' });
   }
-  const shortId = isLegacyId ? identity!.hoshika_short_id : requestedId;
+  const shortId = isLegacyId ? identity!.hoshika_short_id! : requestedId;
   const anime = await getHoshikaAnimeById(shortId);
   if (!anime) return c.json({ success: false, message: 'Anime not found in Hoshika.', source: 'hoshika' }, 404, { 'Cache-Control': 'no-store' });
   const mappedLegacyId = identity?.verified === 1 && identity.legacy_mal_id ? Number(identity.legacy_mal_id) : legacyId;
