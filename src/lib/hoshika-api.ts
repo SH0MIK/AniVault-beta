@@ -248,6 +248,48 @@ export async function getHoshikaAnimeEpisodes(
   }
 }
 
+/**
+ * Fetch episodes directly by Hoshika shortId. This is the preferred API for
+ * migrated pages; it avoids title matching and never interprets IDs as MAL.
+ */
+export async function getHoshikaAnimeEpisodesById(shortIdValue: string | number): Promise<HoshikaEpisode[] | null> {
+  const shortId = String(shortIdValue ?? '').trim();
+  if (!shortId) return null;
+  const episodes: HoshikaEpisode[] = [];
+  let after: string | null = null;
+  try {
+    for (let page = 0; page < 10; page++) {
+      const url = new URL(`https://hoshika.app/api/v1/anime/${encodeURIComponent(shortId)}/episodes`);
+      url.searchParams.set('locale', 'en');
+      url.searchParams.set('limit', '100');
+      if (after) url.searchParams.set('after', after);
+      const response = await fetch(url.toString(), { headers: { Accept: 'application/json' } });
+      if (!response.ok) return episodes.length ? episodes : null;
+      const payload: any = await response.json();
+      if (payload?.ok === false || !Array.isArray(payload?.items)) return episodes.length ? episodes : null;
+      for (const item of payload.items) {
+        const number = Number(item?.number);
+        if (!Number.isInteger(number) || number < 1) continue;
+        episodes.push({
+          number,
+          title: typeof item?.title === 'string' && item.title.trim() ? item.title : `Episode ${number}`,
+          aired: typeof item?.aired === 'string' ? item.aired : null,
+          thumbnail: episodeThumbnailFrom(item),
+          filler: !!item?.filler,
+          recap: !!item?.recap,
+        });
+      }
+      after = typeof payload.nextAfter === 'string' && payload.nextAfter ? payload.nextAfter : null;
+      if (!after || payload.items.length === 0) break;
+    }
+    episodes.sort((a, b) => a.number - b.number);
+    return episodes.length ? episodes : null;
+  } catch (error) {
+    console.warn('[hoshika] Episode lookup by ID failed:', String(error));
+    return episodes.length ? episodes : null;
+  }
+}
+
 function metadataFrom(item: any): HoshikaAnimeMetadata {
   return {
     poster: posterFrom(item),
