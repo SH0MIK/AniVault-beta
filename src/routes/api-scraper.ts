@@ -279,7 +279,15 @@ scraperRoutes.get('/api/reanime_stream.php', async (c) => {
       server: stream.serverName,
       subtitles: proxiedSubtitles,
       qualities: proxiedQualities,
-      audioTracks: stream.audioTracks,
+      audioTracks: await Promise.all((stream.audioTracks ?? []).map(async (track: any) => ({
+        ...track,
+        url: track.url ? await storeReanimeResource(c.env.API_CACHE, {
+          url: track.url,
+          playlistKey: stream.playlistKey ?? null,
+          referer: stream.referer || 'https://flixcloud.cc/',
+          kind: reanimeResourceKind(track.url),
+        }) : track.url,
+      }))),
       selectedAudioLang: stream.selectedAudioLang,
     });
   } catch (error) {
