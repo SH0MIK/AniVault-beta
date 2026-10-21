@@ -131,6 +131,7 @@ homeRoutes.get('/', async (c) => {
   // with the right shape from the D1 migration.
   let watchHistory: WatchHistoryRow[] = [];
   let episodeThumbOverrides: Record<string, string> = {};
+  const historyPosters: Record<number, string> = {};
   const currentUser = auth.check() ? await auth.getCurrentUser() : null;
   if (currentUser) {
     try {
@@ -145,7 +146,6 @@ homeRoutes.get('/', async (c) => {
     // Resolve portrait posters from Hoshika for history cards. The legacy
     // anime_image field may contain a landscape banner, so never use it as a
     // poster fallback.
-    const historyPosters: Record<number, string> = {};
     await Promise.all(watchHistory.map(async (row) => {
       try {
         const identity = await findIdentityByLegacyMalId(db, row.anime_id);
