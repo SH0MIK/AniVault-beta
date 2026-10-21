@@ -7,7 +7,6 @@ import { Auth } from '../lib/auth';
 import { findIdentityByLegacyMalId } from '../lib/anime-identity';
 import { getHoshikaAnimeById, getHoshikaAnimeEpisodesById } from '../lib/hoshika-api';
 import { Logger } from '../lib/logger';
-import { getAnimeEpisodeThumbnails, getEpisodeThumbnail } from '../lib/episode-thumb';
 
 export const episodeOverrideRoutes = new Hono<{ Bindings: Env }>();
 
@@ -41,8 +40,8 @@ episodeOverrideRoutes.on(['GET', 'POST'], '/api/episode_override.php', async (c)
         : [null, null];
       const totalEps = hoshikaEpisodes?.length || animeData?.episodes || 0;
 
-      // Preserve admin overrides; prefer Hoshika stills for verified mappings,
-      // then fill any remaining gaps from the existing scraper thumbnail cache.
+      // Preserve admin overrides and fill only from Hoshika episode stills.
+      // Do not read/write the legacy scraper thumbnail cache during migration.
       const overriddenEps = new Set(rows.map((r) => Number(r.episode_num)));
       const combined = [...rows];
       for (const ep of hoshikaEpisodes ?? []) {
@@ -50,11 +49,6 @@ episodeOverrideRoutes.on(['GET', 'POST'], '/api/episode_override.php', async (c)
           combined.push({ anime_id: animeId, episode_num: ep.number, image_url: ep.thumbnail });
           overriddenEps.add(ep.number);
         }
-      }
-      const scraped = await getAnimeEpisodeThumbnails(c.env, db, animeId, undefined, totalEps);
-      for (const [epNumStr, image_url] of Object.entries(scraped)) {
-        const epNum = Number(epNumStr);
-        if (!overriddenEps.has(epNum)) combined.push({ anime_id: animeId, episode_num: epNum, image_url });
       }
 
       await session.save(c, lifetime);
@@ -69,22 +63,15 @@ episodeOverrideRoutes.on(['GET', 'POST'], '/api/episode_override.php', async (c)
     let watchLinks: any[] = [];
     if (row?.watch_links) { try { watchLinks = JSON.parse(row.watch_links); } catch { /* ignore */ } }
 
-    // Same fallback as the ?all=1 branch above, just for one episode: an
-    // admin override wins, otherwise fall back to our own scraper's D1
-    // cache (getEpisodeThumbnail already checks the per-episode row, then
-    // the per-anime bulk row, before ever hitting the scraper live). This
-    // used to be missing entirely here, which is why the episode modal on
-    // the anime detail page had its own separate direct-to-AniList call --
-    // that's no longer needed now that this endpoint resolves it too.
+    // An admin override wins. Otherwise use Hoshika episode data only when
+    // the legacy ID has an explicitly verified mapping; no scraper-cache fallback.
     let thumbnail: string | null = row?.image_url ?? null;
     if (!thumbnail) {
-      // Never interpret a MAL ID as a Hoshika ID; require a verified mapping.
       const identity = await findIdentityByLegacyMalId(db, animeId).catch(() => null);
       if (identity?.verified === 1) {
         const episodes = await getHoshikaAnimeEpisodesById(identity.hoshika_short_id);
         thumbnail = episodes?.find((ep) => ep.number === epNum)?.thumbnail || null;
       }
-      if (!thumbnail) thumbnail = await getEpisodeThumbnail(c.env, db, animeId, epNum);
     }
 
     await session.save(c, lifetime);
