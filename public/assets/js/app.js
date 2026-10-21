@@ -1664,7 +1664,6 @@ document.addEventListener('click', async function(e) {
     const overrideRes = await fetch(`/api/episode_override.php?anime_id=${animeId}&ep=${epNum}`).then(r => r.ok ? r.json() : null);
 
     const override      = overrideRes?.override || null;
-    const jikanSynop    = jikanRes?.data?.synopsis || '';
     const overrideSynop = override?.synopsis || '';
     const synopsis      = overrideSynop;
 
