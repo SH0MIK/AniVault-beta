@@ -330,31 +330,11 @@ export class MalAPI {
   // only falls back to a live AniList call / then MAL if the cache is
   // somehow cold (e.g. right after first deploy, before the cron has run).
   async getAniListSeasonNow(): Promise<{ data: NormalisedAnime[] }> {
-    const cacheKey = this.seasonCacheKey();
-    if (this.kv && this.cacheEnabled()) {
-      const cached = await this.safeKvGet(cacheKey, 'json') as { data: NormalisedAnime[] } | null;
-      if (cached) return cached;
-    }
-
-    const data = await this.fetchAniListSeasonLive();
-    if (!data || data.length === 0) return this.getSeasonNowFallback();
-
-    // Trending is rendered on every homepage request, so the cached payload
-    // should already contain the same TMDB poster art used by normal MAL
-    // cards. Resolve the first 12 cards once while refreshing the cache;
-    // normal page requests then only read this KV payload and never call
-    // AniList/TMDB/scraper for the Trending row.
-    await this.enrichTrendingArt(data);
-
-    const result = { data };
-    if (this.kv && this.cacheEnabled()) {
-      // Generous TTL as a safety net — the cron is what actually keeps this
-      // fresh minute-to-minute; this just stops a cold cache from forcing
-      // every single request to call AniList live.
-      await this.safeKvPut(cacheKey, JSON.stringify(result), { expirationTtl: Math.max(this.cacheTtl(), 7200) });
-    }
-    return result;
+    // Deprecated legacy name retained for callers; AniList is not a catalog
+    // fallback during the Hoshika-only migration.
+    return { data: [] };
   }
+
 
   // Called by the scheduled cron handler — always hits AniList live (via
   // our own scraper, see fetchAniListSeasonLive) and overwrites the cache
@@ -363,20 +343,10 @@ export class MalAPI {
   // scheduled.ts) since routing through the scraper sidesteps AniList's
   // block on Cloudflare Workers IPs — no external relay needed.
   async refreshAniListSeasonCache(): Promise<boolean> {
-    const data = await this.fetchAniListSeasonLive();
-    if (!data || data.length === 0) return false;
-
-    // Build the complete Trending card payload in the background. This is
-    // where the TMDB-backed poster is resolved; visitors only consume the
-    // finished KV object, so the homepage has no synchronous AniList/TMDB
-    // dependency for Trending.
-    await this.enrichTrendingArt(data);
-
-    if (this.kv && this.cacheEnabled()) {
-      await this.safeKvPut(this.seasonCacheKey(), JSON.stringify({ data }), { expirationTtl: 7200 });
-    }
-    return true;
+    // Do not repopulate the old AniList season cache with non-Hoshika records.
+    return false;
   }
+
 
   private async enrichTrendingArt(data: NormalisedAnime[]): Promise<void> {
     const targets = data.filter((a) => a.mal_id).slice(0, 12);
