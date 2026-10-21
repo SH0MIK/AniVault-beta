@@ -545,10 +545,23 @@ function normalizeCatalogArray(items: any[]): HoshikaCatalogAnime[] {
 export async function getHoshikaHomeSections(): Promise<HoshikaHomeSections> {
   const payload = await fetchHoshikaJson('home?locale=en');
   const root = unwrap(payload ?? {});
-  const trending = normalizeCatalogArray(findCatalogArray(root, ['trending', 'popular', 'trendingAnime']));
-  const recent = normalizeCatalogArray(findCatalogArray(root, ['recentlyAdded', 'recently_added', 'recent', 'latest', 'recentAnime']));
-  const top = normalizeCatalogArray(findCatalogArray(root, ['top', 'topRated', 'top_rated', 'highestRated', 'popular']));
-  const seasonal = normalizeCatalogArray(findCatalogArray(root, ['seasonal', 'currentSeason', 'current_season', 'season']));
+  let trending = normalizeCatalogArray(findCatalogArray(root, ['trending', 'trendingAnime']));
+  let recent = normalizeCatalogArray(findCatalogArray(root, ['recentlyAdded', 'recently_added', 'recent', 'latest', 'recentAnime']));
+  let top = normalizeCatalogArray(findCatalogArray(root, ['top', 'topRated', 'top_rated', 'highestRated']));
+  let seasonal = normalizeCatalogArray(findCatalogArray(root, ['seasonal', 'currentSeason', 'current_season', 'season']));
+
+  // Some Hoshika deployments expose the individual feeds but omit one or more
+  // sections from /home. Fill only those missing sections from Hoshika itself.
+  const [trendingPayload, recentPayload, topPayload, seasonPayload] = await Promise.all([
+    trending.length ? Promise.resolve(null) : fetchHoshikaJson('browse?type=anime&sort=trending'),
+    recent.length ? Promise.resolve(null) : fetchHoshikaJson('browse?type=anime&sort=recent'),
+    top.length ? Promise.resolve(null) : fetchHoshikaJson('browse?type=anime&sort=top'),
+    seasonal.length ? Promise.resolve(null) : fetchHoshikaJson('season?locale=en'),
+  ]);
+  if (!trending.length) trending = normalizeCatalogArray(resultsFrom(trendingPayload ?? {}));
+  if (!recent.length) recent = normalizeCatalogArray(resultsFrom(recentPayload ?? {}));
+  if (!top.length) top = normalizeCatalogArray(resultsFrom(topPayload ?? {}));
+  if (!seasonal.length) seasonal = normalizeCatalogArray(resultsFrom(seasonPayload ?? {}));
   return { trending, recent, top: top.length ? top : trending, seasonal };
 }
 
