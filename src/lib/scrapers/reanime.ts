@@ -1,5 +1,5 @@
 // Cloudflare Worker adapter for the original ReAnime resolver. No Node.js APIs or external scraper service.
-const crypto = globalThis.crypto;
+const crypto = self.crypto;
 const enc = new TextEncoder();
 const dec = new TextDecoder();
 
@@ -809,7 +809,7 @@ async function enrichHls(m3u8: string | null, subtitles: ReanimeSubtitle[], play
       headers: { ...HEADERS, Accept: '*/*', Referer: `${FLIX}/` },
       timeout: 12000,
       responseType: 'text',
-      transformResponse: [(data) => data],
+      transformResponse: [(data: unknown) => data],
     });
     const parsed = parseHlsMaster(decodeFlixPlaylist(String(res.data), playlistKey), m3u8);
     return {
@@ -834,7 +834,7 @@ async function fetchEpisodeLinks(lookup: ReanimeEpisodeLookup, ep: number): Prom
     })
     : await resolveReanimeSeriesByTitle(title || altTitle || 'Unknown', altTitle, malId);
   const [watchRes, flixRes] = await Promise.allSettled([
-    axios.get(`${BASE}/api/watch/${encodeURIComponent(series.animeId)}/${ep}`, { headers: HEADERS, timeout: 15000 }).then((res) => res.data),
+    axios.get(`${BASE}/api/watch/${encodeURIComponent(series.animeId)}/${ep}`, { headers: HEADERS, timeout: 15000 }).then((res: any) => res.data),
     alId != null && Number.isFinite(alId)
       ? axios.get(`${BASE}/api/flix/${alId}/${ep}`, { headers: HEADERS, timeout: 15000 }).then((res) => res.data)
       : Promise.resolve(null),
