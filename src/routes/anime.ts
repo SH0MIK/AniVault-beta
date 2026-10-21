@@ -13,6 +13,7 @@ import { icon } from '../lib/icons';
 import { renderHeader, renderFooter, CurrentUser } from '../render/layout';
 import { animeTailScript } from '../render/anime-tail';
 import { getBannerData } from '../lib/settings';
+import { DubStatus } from '../lib/dub-status';
 import { rowNavScript } from '../render/home-js';
 
 
@@ -127,7 +128,7 @@ animeRoutes.get('/anime', async (c) => {
   // their final number straight from MAL above.
   const epsUnknown = totalEps === 0;
   const epsNeedsRefresh = false;
-  const dubbedLangs = legacyId ? await (async () => { try { return await import('../lib/dub-status').then(({ DubStatus }) => DubStatus.getFor(db, legacyId)); } catch { return []; } })() : [];
+  const dubbedLangs = legacyId ? await DubStatus.getFor(db, legacyId) : [];
 
   // Logo + cover both come pre-resolved on `anime` itself -- getAnime()
   // already ran them through getAnimeArt() (scraper poster/cover/logo,
