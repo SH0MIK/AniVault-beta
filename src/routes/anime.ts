@@ -9,6 +9,7 @@ import { Db } from '../lib/db';
 import { Session } from '../lib/session';
 import { Auth } from '../lib/auth';
 import { MalAPI } from '../lib/mal-api';
+import { findIdentityByLegacyMalId } from '../lib/anime-identity';
 import { AnimeTracker } from '../lib/tracker';
 import { Notification } from '../lib/notification';
 import { h, statusBadge } from '../lib/helpers';
@@ -35,7 +36,27 @@ animeRoutes.get('/anime', async (c) => {
   const id = parseInt(c.req.query('id') ?? '0', 10) || 0;
   if (!id) return c.redirect(siteUrl + '/');
 
-  // Detail pages use the current scraper/TMDB art; saved uploads remain stored untouched as fallbacks/admin data.
+  // Legacy URLs are MAL-keyed. Resolve them only through the explicit verified
+  // identity map; never treat the number as a Hoshika shortId or fetch MAL/Jikan.
+  const identity = await findIdentityByLegacyMalId(db, id).catch(() => null);
+  if (identity?.verified === 1 && identity.hoshika_short_id) {
+    await session.save(c, lifetime);
+    return c.redirect(`${siteUrl}/anime/hoshika?id=${encodeURIComponent(identity.hoshika_short_id)}`, 302);
+  }
+
+  const notice = renderHeader({
+    siteUrl, siteName: c.env.SITE_NAME, pageTitle: 'Anime mapping required',
+    currentPage: 'browse', requestUrl: c.req.url,
+  }) + `<main class="container section">
+      <h1>Anime mapping required</h1>
+      <p class="text-muted">This older AniVault link uses a legacy ID that has not been verified against Hoshika yet. We won't guess the mapping because it could open the wrong anime or streaming links.</p>
+      <p><a class="btn btn-primary" href="${siteUrl}/browse">Search the Hoshika catalog</a></p>
+    </main>` + renderFooter({ siteUrl });
+  await session.save(c, lifetime);
+  return c.html(notice, 200);
+
+  // The old implementation below is retained temporarily for the next cleanup
+  // pass, but the route now exits above and never calls MAL/Jikan at runtime.
   const result = await mal.getAnime(id, false, true);
   const anime = result.data;
   if (!anime) {
