@@ -8,6 +8,8 @@ import { Settings } from './settings';
 import { getAnimeEpisodeInfo } from './episode-info';
 import { getHoshikaAnimeMetadata, getHoshikaAnimeEpisodes } from './hoshika-api';
 import { importAnimeEpisodeThumbnails } from './episode-thumb';
+import { findIdentityByLegacyMalId } from './anime-identity';
+import { getHoshikaAnimeById, searchHoshikaAnime } from './hoshika-api';
 
 const MAL_API_BASE = 'https://api.myanimelist.net/v2';
 const LIST_FIELDS = 'id,title,alternative_titles,main_picture,synopsis,mean,rank,popularity,num_episodes,status,genres,start_date,rating,media_type,nsfw,num_list_users,broadcast,average_episode_duration';
@@ -1084,14 +1086,41 @@ export class MalAPI {
   // ── Public API (same shapes as the old Jikan-backed version) ─────────────
 
   async searchAnime(query: string, page = 1, type = '', status = ''): Promise<{ data: NormalisedAnime[]; pagination: any }> {
-    const offset = (page - 1) * 20;
-    const params: Record<string, string | number> = { q: query, limit: 20, offset, fields: LIST_FIELDS, nsfw: 'false' };
-    if (type) params.media_type = type.toLowerCase();
-    if (status) params.status = status;
-    const raw = await this.get('/anime', params);
-    await this.prefetchAnimeArt((raw.data ?? []).map((n: any) => Number(n.node?.id ?? 0)), false);
-    const data = await Promise.all((raw.data ?? []).map((n: any) => this.normalise(n.node, true)));
-    return { data, pagination: { last_visible_page: Math.max(1, raw.paging?.next ? page + 5 : page), items: { total: data.length } } };
+    // Catalog search is Hoshika-only. This legacy-shaped method intentionally
+    // returns only entries with an explicitly verified legacy ID, because its
+    // callers still store and route by MAL IDs. Native Hoshika search pages
+    // use searchHoshikaAnime directly and do not need this compatibility shape.
+    const items = await searchHoshikaAnime(query, 50);
+    const mapped = await Promise.all(items.map(async (item) => {
+      const identity = await findIdentityByLegacyMalId(this.db, Number.NaN).catch(() => null);
+      return { item, identity };
+    }));
+    const data: NormalisedAnime[] = [];
+    for (const { item } of mapped) {
+      const identity = await this.db.fetchOne<any>(
+        'SELECT legacy_mal_id, verified FROM anime_identity_map WHERE hoshika_short_id = ?',
+        [item.shortId],
+      ).catch(() => null);
+      if (identity?.verified !== 1 || !Number.isSafeInteger(Number(identity.legacy_mal_id))) continue;
+      if (type && item.type && item.type.toLowerCase() !== type.toLowerCase()) continue;
+      if (status && item.status && !item.status.toLowerCase().includes(status.toLowerCase())) continue;
+      const poster = item.poster || '';
+      data.push({
+        mal_id: Number(identity.legacy_mal_id), title: item.title,
+        title_english: item.titleEnglish, title_japanese: item.titleJapanese,
+        images: { jpg: { image_url: poster, large_image_url: poster } },
+        synopsis: item.synopsis, background: '', score: item.score, scored_by: null,
+        rank: null, popularity: null, episodes: item.episodes ?? 0, status: item.status,
+        type: item.type, rating: '', source: '', duration: null, aired: { string: item.year ? String(item.year) : null },
+        start_date: item.year ? String(item.year) : null,
+        genres: item.genres.map((name, i) => ({ mal_id: i + 1, name })),
+        studios: [], related_anime: [], recommendations: [], trailer: [], themes: [],
+        members: 0, broadcast: { day: null, time: null }, duration_mins: null,
+      });
+    }
+    const perPage = 20;
+    const start = (Math.max(1, page) - 1) * perPage;
+    return { data: data.slice(start, start + perPage), pagination: { last_visible_page: 1, items: { total: data.length } } };
   }
 
   // `isList = true` for callers using this in a grid/row context (e.g. the
@@ -1102,58 +1131,35 @@ export class MalAPI {
   // normalise() and its per-title D1/KV artwork lookups, related-anime images,
   // and recommendations. It reuses the same cached MAL detail response.
   async getAnimeAdminSummary(id: number): Promise<{ data: any | null }> {
-    if (!Number.isFinite(id) || id <= 0) return { data: null };
-    const raw = await this.get(`/anime/${id}`, { fields: DETAIL_FIELDS });
-    if (!raw || raw.error) return { data: null };
-    const picture = raw.main_picture ?? {};
-    return {
-      data: {
-        title: raw.title || '',
-        images: {
-          jpg: {
-            image_url: picture.medium || picture.large || '',
-            large_image_url: picture.large || picture.medium || '',
-          },
-        },
-        episodes: Number(raw.num_episodes || 0),
-        status: raw.status || '',
-        type: raw.media_type || '',
-      },
-    };
+    const result = await this.getAnime(id);
+    const anime = result.data;
+    if (!anime) return { data: null };
+    return { data: { title: anime.title, images: anime.images, episodes: anime.episodes, status: anime.status, type: anime.type } };
   }
 
-  async getAnime(id: number, isList = false, preferFreshScraperArt = false): Promise<{ data: NormalisedAnime | null }> {
-    const raw = await this.get(`/anime/${id}`, { fields: DETAIL_FIELDS });
-    if (raw.error) return { data: null };
-
-    const anime = await this.normalise(raw, isList);
-
-    // Detail pages explicitly use the current scraper result for automatic
-    // poster/cover/logo art. This bypasses stale scraper_art D1/KV entries
-    // and the global saved-art priority setting, while leaving all
-    // admin-uploaded anime_images/anime_banners/anime_logos rows untouched.
-    if (preferFreshScraperArt && id) {
-      const fresh = await this.getTmdbArtForCard(anime);
-      if (fresh.poster) {
-        anime.images = { jpg: { image_url: fresh.poster, large_image_url: fresh.poster } };
-      }
-      if (fresh.cover) anime.cover_image = fresh.cover;
-      if (fresh.logo) anime.logo_image = fresh.logo;
-    }
-
-    // Detail pages may force-refresh scraper art above. Re-apply public
-    // Hoshika catalog fields last so the scraper/TMDB result cannot overwrite
-    // Hoshika's poster or episode count.
-    if (id) {
-      const hoshika = await getHoshikaAnimeMetadata(id, anime.title, this.kv, true);
-      if (hoshika?.poster) {
-        anime.images = { jpg: { image_url: hoshika.poster, large_image_url: hoshika.poster } };
-      }
-      if (hoshika?.cover) anime.cover_image = hoshika.cover;
-      if (hoshika?.episodes !== null && hoshika?.episodes !== undefined) anime.episodes = hoshika.episodes;
-    }
-
-    return { data: anime };
+  async getAnime(id: number, _isList = false, _preferFreshScraperArt = false): Promise<{ data: NormalisedAnime | null }> {
+    // This compatibility method accepts a legacy numeric ID. It must never
+    // pass that ID to Hoshika as if it were a shortId or fetch MAL/Jikan data.
+    if (!Number.isSafeInteger(id) || id <= 0) return { data: null };
+    const identity = await findIdentityByLegacyMalId(this.db, id).catch(() => null);
+    if (identity?.verified !== 1 || !identity.hoshika_short_id) return { data: null };
+    const item = await getHoshikaAnimeById(identity.hoshika_short_id);
+    if (!item) return { data: null };
+    const poster = item.poster || '';
+    return { data: {
+      mal_id: id, title: item.title, title_english: item.titleEnglish,
+      title_japanese: item.titleJapanese,
+      images: { jpg: { image_url: poster, large_image_url: poster } },
+      synopsis: item.synopsis, background: '', score: item.score, scored_by: null,
+      rank: null, popularity: null, episodes: item.episodes ?? 0, status: item.status,
+      type: item.type, rating: '', source: '', duration: null,
+      aired: { string: item.year ? String(item.year) : null },
+      start_date: item.year ? String(item.year) : null,
+      genres: item.genres.map((name, i) => ({ mal_id: i + 1, name })),
+      studios: [], related_anime: [], recommendations: [], trailer: [], themes: [],
+      members: 0, broadcast: { day: null, time: null }, duration_mins: null,
+      cover_image: item.cover || undefined, logo_image: undefined,
+    } };
   }
 
   // Replaces getCharacter + getCharacterAnime + getCharacterVoices (3
