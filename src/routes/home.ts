@@ -18,7 +18,7 @@ import { CONTINUE_WATCHING_CSS } from '../render/home-css';
 import { continueWatchingScript, heroSliderScript, rowNavScript } from '../render/home-js';
 import type { NormalisedAnime } from '../lib/mal-api';
 import { getBannerData } from '../lib/settings';
-import { getHoshikaAnimeById } from '../lib/hoshika-api';
+import { getHoshikaAnimeById, getHoshikaHomeSections, getHoshikaGenres, type HoshikaCatalogAnime } from '../lib/hoshika-api';
 import { findIdentityByLegacyMalId } from '../lib/anime-identity';
 
 export const homeRoutes = new Hono<{ Bindings: Env }>();
@@ -68,6 +68,25 @@ function toHoshikaNormalisedAnime(anime: Awaited<ReturnType<typeof getHoshikaAni
     members: 0, broadcast: { day: null, time: null }, duration_mins: null,
   } as NormalisedAnime;
 }
+function toHoshikaHomeAnime(anime: HoshikaCatalogAnime, index = 0): NormalisedAnime {
+  const numericId = Number(anime.shortId);
+  const legacyShape = toHoshikaNormalisedAnime(anime as Awaited<ReturnType<typeof getHoshikaAnimeById>>, Number.isSafeInteger(numericId) && numericId > 0 ? -numericId : -(index + 1))!;
+  return Object.assign(legacyShape, { hoshika_short_id: anime.shortId, hoshika_slug: anime.slug });
+}
+
+function renderHoshikaHomeCard(a: NormalisedAnime, siteUrl: string): string {
+  const item = a as NormalisedAnime & { hoshika_short_id?: string };
+  const title = a.title_english && a.title_english !== a.title ? a.title_english : (a.title || 'Unknown anime');
+  const poster = a.images?.jpg?.image_url || a.images?.jpg?.large_image_url || '';
+  const href = item.hoshika_short_id ? `${siteUrl}/anime?id=${encodeURIComponent(item.hoshika_short_id)}` : `${siteUrl}/anime?id=${a.mal_id}`;
+  return `<a class="anime-card" href="${href}">
+    <div class="anime-card-poster">${poster ? `<img src="${h(transformHomepageCardImage(poster, 240))}" alt="" loading="lazy">` : '<div class="anime-card-placeholder"></div>'}
+      ${a.score ? `<span class="anime-card-score">★ ${a.score.toFixed(1)}</span>` : ''}
+    </div>
+    <div class="anime-card-info"><div class="anime-card-title">${h(title)}</div><div class="anime-card-meta">${[a.type, a.episodes ? `${a.episodes} eps` : '', a.aired?.string].filter(Boolean).map(v => h(String(v))).join(' · ')}</div></div>
+  </a>`;
+}
+
 homeRoutes.get('/', async (c) => {
   const db = new Db(c.env.DB);
   const lifetime = Number(c.env.SESSION_LIFETIME_SECONDS ?? 86400);
@@ -81,11 +100,10 @@ homeRoutes.get('/', async (c) => {
   const auth = new Auth(db, session, c.env as any, c.req.header('cf-connecting-ip') ?? 'unknown');
   const siteUrl = c.env.SITE_URL;
 
-  // Hoshika does not currently expose a verified popularity/upcoming feed.
-  // Do not reuse stale MAL/AniList homepage snapshots or fall back to them.
-  // Search and detail pages remain available through the Hoshika-only routes.
-  const topList: NormalisedAnime[] = [];
-  const upcomingList: NormalisedAnime[] = [];
+  // Homepage feeds come directly from Hoshika. No MAL/Jikan/AniList fallback.
+  const hoshikaHome = await getHoshikaHomeSections();
+  const topList: NormalisedAnime[] = hoshikaHome.trending.map(toHoshikaHomeAnime);
+  const upcomingList: NormalisedAnime[] = (hoshikaHome.seasonal.length ? hoshikaHome.seasonal : hoshikaHome.recent).map(toHoshikaHomeAnime);
 
   // Watch Now — only display rows whose legacy IDs have verified Hoshika mappings.
   let watchNowList: NormalisedAnime[] = [];
@@ -185,6 +203,17 @@ homeRoutes.get('/', async (c) => {
     heroLogos.push(''); // Hoshika has no title-logo endpoint.
     heroCovers.push(item.anime.images?.jpg?.large_image_url || '');
   }
+  // When no admin-curated legacy banner has a verified Hoshika mapping, keep
+  // the original hero carousel UI alive using Hoshika's own trending feed.
+  if (heroPool.length === 0) {
+    for (const [index, anime] of hoshikaHome.trending.slice(0, 6).entries()) {
+      const mapped = toHoshikaHomeAnime(anime, index);
+      heroPool.push(mapped);
+      heroBanners.push(anime.cover || '');
+      heroLogos.push('');
+      heroCovers.push(anime.poster || '');
+    }
+  }
   // Preload slide 0's LCP image so it starts downloading during <head> parsing.
   if (heroPool.length > 0) {
     const p0 = heroPool[0];
@@ -240,7 +269,7 @@ ${heroSliderScript(heroPool.length)}
   <div class="genre-nav-wrap">
     <button class="btn btn-ghost btn-sm btn-icon genre-nav-btn prev" data-target="genre-bar" data-dir="prev" aria-label="Previous genres">${icon('chevron-left', 'icon-small')}</button>
     <div class="genre-bar" id="genre-bar">
-      ${genreList.map((g) => `<a href="${siteUrl}/browse?genre=${g.mal_id}" class="genre-pill">${h(g.name)}</a>`).join('')}
+      ${genreList.map((g) => `<a href="${siteUrl}/browse?genre=${encodeURIComponent(g.slug)}" class="genre-pill">${h(g.name)}</a>`).join('')}
     </div>
     <button class="btn btn-ghost btn-sm btn-icon genre-nav-btn next" data-target="genre-bar" data-dir="next" aria-label="Next genres">${icon('chevron-right', 'icon-small')}</button>
   </div>`;
@@ -285,7 +314,7 @@ ${heroSliderScript(heroPool.length)}
     html += `
       <section class="content-section">
         ${sectionHeader('Most Popular', 'row-popular', `${siteUrl}/top`, 'View Full Rankings')}
-        <div class="scroll-row" id="row-popular">${topList.map((a) => renderAnimeCard(a, siteUrl, userStatuses[a.mal_id] ?? null, cardMeta.get(a.mal_id), transformHomepageCardImage)).join('')}</div>
+        <div class="scroll-row" id="row-popular">${topList.map((a) => renderHoshikaHomeCard(a, siteUrl)).join('')}</div>
       </section>`;
   } else {
     html += `
@@ -300,7 +329,7 @@ ${heroSliderScript(heroPool.length)}
     html += `
       <section class="content-section">
         ${sectionHeader('Coming Soon', 'row-upcoming')}
-        <div class="scroll-row" id="row-upcoming">${upcomingList.map((a) => renderAnimeCard(a, siteUrl, userStatuses[a.mal_id] ?? null, cardMeta.get(a.mal_id), transformHomepageCardImage)).join('')}</div>
+        <div class="scroll-row" id="row-upcoming">${upcomingList.map((a) => renderHoshikaHomeCard(a, siteUrl)).join('')}</div>
       </section>`;
   }
 
@@ -439,7 +468,7 @@ function renderHeroSlide(a: NormalisedAnime, i: number, siteUrl: string, banner?
         </div>
         <div class="hero-actions">
           <a href="${aurl}" class="btn btn-primary">${icon('play', 'icon-small')} View Details</a>
-          <button class="btn btn-ghost" onclick='event.stopPropagation(); addToList(${a.mal_id}, ${JSON.stringify(title)}, ${JSON.stringify(poster)}, ${Number(totalEps || 0)})'>${icon('plus', 'icon-small')} Add to List</button>
+          ${hoshikaId ? '' : `<button class="btn btn-ghost" onclick='event.stopPropagation(); addToList(${a.mal_id}, ${JSON.stringify(title)}, ${JSON.stringify(poster)}, ${Number(totalEps || 0)})'>${icon('plus', 'icon-small')} Add to List</button>`}
         </div>
       </div>
     </div>
