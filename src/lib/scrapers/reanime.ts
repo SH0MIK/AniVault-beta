@@ -836,7 +836,7 @@ async function fetchEpisodeLinks(lookup: ReanimeEpisodeLookup, ep: number): Prom
   const [watchRes, flixRes] = await Promise.allSettled([
     axios.get(`${BASE}/api/watch/${encodeURIComponent(series.animeId)}/${ep}`, { headers: HEADERS, timeout: 15000 }).then((res: any) => res.data),
     alId != null && Number.isFinite(alId)
-      ? axios.get(`${BASE}/api/flix/${alId}/${ep}`, { headers: HEADERS, timeout: 15000 }).then((res) => res.data)
+      ? axios.get(`${BASE}/api/flix/${alId}/${ep}`, { headers: HEADERS, timeout: 15000 }).then((res: any) => res.data)
       : Promise.resolve(null),
   ]);
   const watchData = watchRes.status === 'fulfilled' ? watchRes.value : null;
@@ -928,7 +928,7 @@ export async function getReanimeStream(sourceId: string): Promise<ReanimeStream>
     headers: { ...HEADERS, Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8', Referer: `${BASE}/` },
     timeout: 20000,
     responseType: 'text',
-    transformResponse: [(data) => data],
+    transformResponse: [(data: unknown) => data],
   });
   const decrypted = await decryptEmbed(String(embedRes.data));
   const m3u8 = decrypted.url || null;
