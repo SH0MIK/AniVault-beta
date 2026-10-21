@@ -28,9 +28,13 @@ function plainText(value: string): string {
 }
 
 function attr(tag: string, name: string): string {
-  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const match = tag.match(new RegExp('(?:^|\\s)' + escaped + '\\s*=\\s*(?:"([^"]*)"|\\'([^\\']*)\\'|([^\\s>]+))', 'i'));
-  return decodeHtml(match ? (match[1] ?? match[2] ?? match[3] ?? '') : '');
+  const attributes = tag.matchAll(/([^\\s=/>]+)\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))/g);
+  for (const match of attributes) {
+    if (match[1]?.toLowerCase() === name.toLowerCase()) {
+      return decodeHtml(match[2] ?? match[3] ?? match[4] ?? '');
+    }
+  }
+  return '';
 }
 
 function captureCookies(response: Response, jar: CookieJar): void {
