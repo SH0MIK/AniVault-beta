@@ -30,7 +30,7 @@ animeRoutes.get('/anime', async (c) => {
 
   // Public anime IDs are Hoshika shortIds. Never pass them to a legacy MAL-keyed table.
   const id = (c.req.query('id') ?? '').trim();
-  if (!id) return c.redirect(siteUrl + '/');
+  if (!/^\\d+$/.test(id)) return c.redirect(siteUrl + '/browse');
   const [record, identity] = await Promise.all([
     getHoshikaAnimeById(id),
     findIdentityByHoshikaId(db, id).catch(() => null),
@@ -390,7 +390,7 @@ ${rowNavScript()}
 <script>window.__tmdbKey = '';</script>
 <script>window.__legacyAnimeId = ${JSON.stringify(legacyId)};</script>
 <script>window.__videoEps  = ${JSON.stringify(videoEpSet)};</script>
-${epsNeedsRefresh ? epsLiveScript(id) : ''}
+${epsNeedsRefresh ? epsLiveScript(legacyId ?? 0) : ''}
 ${animeTailScript(animeDubConfirmed)}`;
 
   html += renderFooter({ siteUrl, currentUser: layoutUser });
