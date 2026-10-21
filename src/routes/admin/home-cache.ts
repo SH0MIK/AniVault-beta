@@ -5,7 +5,6 @@ import { h } from '../../lib/helpers';
 import { Logger } from '../../lib/logger';
 import { renderAdminHeader, renderAdminFooter } from '../../render/admin-layout';
 import { getHomepageRefreshMinutes, getHomepageSnapshot, refreshHomepageSnapshot } from '../../lib/home-cache';
-import { MalAPI } from '../../lib/mal-api';
 
 export const adminHomepageCacheRoutes = new Hono<{ Bindings: Env }>();
 
@@ -34,25 +33,12 @@ adminHomepageCacheRoutes.on(['GET', 'POST'], '/admin/home-cache.php', async (c) 
         await Logger.log(db, userId, 'homepage_cache_settings', 'Homepage cache auto-refresh set to ' + value + ' minutes');
         message = 'Auto-refresh interval saved.';
       } else if (action === 'clear_art_cache') {
-        // Only wipe the homepage snapshot. scraper_art_cache contains the
-        // full TMDB poster/cover/logo data used by anime detail pages and must
-        // never be deleted as part of a homepage-card refresh.
-        const homepageRows = await db.count('SELECT COUNT(*) as cnt FROM homepage_cache');
-        await db.query('DELETE FROM homepage_cache');
-
-        await Logger.log(
-          db,
-          userId,
-          'homepage_art_cache_clear',
-          `Cleared homepage cache only: ${homepageRows} snapshot rows; durable scraper artwork was preserved`
-        );
-        message = `Homepage cache cleared. Deleted ${homepageRows} homepage rows; full-page TMDB artwork was preserved. You can refresh now.`;
+        // Do not delete homepage_cache rows: this D1 may be shared with
+        // production, and legacy snapshots are already ignored by the app.
+        message = 'Legacy homepage snapshots are ignored during the Hoshika migration. Existing shared D1 rows were left untouched.';
       } else if (action === 'refresh_now') {
-        const mal = new MalAPI(c.env, c.env.API_CACHE, db);
-        const snapshot = await refreshHomepageSnapshot(db, mal);
-        if (!snapshot) throw new Error('Homepage cache refresh returned no data.');
-        await Logger.log(db, userId, 'homepage_cache_refresh', 'Manually refreshed Trending, Most Popular and Coming Soon homepage data');
-        message = 'Homepage data refreshed successfully.';
+        message = 'Refresh is paused because Hoshika does not currently expose a verified popularity, seasonal, or upcoming listing endpoint. No legacy catalogue API was called and no snapshot was written.';
+
       }
     } catch (e: any) {
       error = e?.message ?? 'Homepage cache action failed.';
@@ -71,7 +57,7 @@ adminHomepageCacheRoutes.on(['GET', 'POST'], '/admin/home-cache.php', async (c) 
   let html = renderAdminHeader({ siteUrl, pageTitle: 'Homepage Cache', adminPage: 'home_cache', isOwner, impersonating });
   html += `
 <div class="admin-header">
-  <div><h1>Homepage Data Cache</h1><p class="text-muted" style="font-size:.9rem;">D1-backed snapshots for the homepage's external API sections.</p></div>
+  <div><h1>Homepage Data Cache</h1><p class="text-muted" style="font-size:.9rem;">Legacy catalogue snapshots are ignored while AniVault migrates to Hoshika.</p></div>
 </div>
 
 ${message ? '<div class="alert alert-success mb-2">' + h(message) + '</div>' : ''}
@@ -89,11 +75,11 @@ ${error ? '<div class="alert alert-error mb-2">' + h(error) + '</div>' : ''}
     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:1rem;">
       <form method="POST" onsubmit="return confirm('Delete ALL homepage art cache data? This removes the homepage snapshot plus stored scraper artwork so the next refresh fetches fresh TMDB URLs.');">
         <input type="hidden" name="action" value="clear_art_cache">
-        <button class="btn btn-danger" type="submit">🗑️ Delete All Homepage Art Cache</button>
+        <button class="btn btn-danger" type="submit">Ignore Legacy Cache (No Delete)</button>
       </form>
       <form method="POST">
         <input type="hidden" name="action" value="refresh_now">
-        <button class="btn btn-primary" type="submit">🔄 Refresh Homepage Data Now</button>
+        <button class="btn btn-primary" type="submit">Check Hoshika Feed Status</button>
       </form>
     </div>
   </div>
@@ -114,12 +100,12 @@ ${error ? '<div class="alert alert-error mb-2">' + h(error) + '</div>' : ''}
 <div class="card card-body">
   <h2 class="mb-2">What is cached?</h2>
   <p class="text-muted" style="font-size:.88rem;line-height:1.6;">
-    Complete normalized card data is stored in D1, including titles, scores, episode counts,
-    genres, descriptions, and the resolved TMDB poster/cover/logo. The public homepage reads
-    these snapshots instead of calling AniList/MAL for these rows.
+    Legacy MAL/AniList snapshots may still exist in D1, but the public homepage no longer reads them.
+    Existing rows are intentionally left untouched because the database may be shared with production.
+    Hoshika-backed recommendations will be enabled when a supported listing endpoint is available.
   </p>
   <p class="text-muted" style="font-size:.8rem;margin-bottom:0;">
-    Default: 6 hours. Available: 1 hour → 30 days. Manual refresh always replaces the snapshot immediately.
+    Default: 6 hours. Available: 1 hour → 30 days. Refresh is paused until a supported Hoshika listing endpoint is available.
   </p>
 </div>
 `;
