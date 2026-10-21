@@ -1,7 +1,8 @@
 // Full port of includes/tracker.php (AnimeTracker class).
 import { Db } from './db';
 import { Logger } from './logger';
-import { MalAPI } from './mal-api';
+import { findIdentityByLegacyMalId } from './anime-identity';
+import { getHoshikaAnimeById } from './hoshika-api';
 
 export interface TrackerStats {
   watching: number;
@@ -89,20 +90,20 @@ export const AnimeTracker = {
     return stats;
   },
 
-  /** Lightweight genre fetch stored alongside a list entry (fetchGenresJson). */
-  async fetchGenresJson(mal: MalAPI, animeId: number): Promise<string | null> {
+  /** Save genres only from a verified Hoshika identity; never infer IDs. */
+  async fetchGenresJson(db: Db, animeId: number): Promise<string | null> {
     try {
-      const result = await mal.getAnime(animeId);
-      const genres = result.data?.genres ?? [];
-      if (genres.length === 0) return null;
-      const names = genres.map((g) => g.name).filter(Boolean);
+      const identity = await findIdentityByLegacyMalId(db, animeId);
+      if (!identity || identity.verified !== 1 || !identity.hoshika_short_id) return null;
+      const anime = await getHoshikaAnimeById(identity.hoshika_short_id);
+      const names = anime?.genres ?? [];
       return names.length ? JSON.stringify(names) : null;
     } catch {
       return null;
     }
   },
 
-  async addOrUpdate(db: Db, mal: MalAPI, userId: number, data: Record<string, any>): Promise<{ success: boolean; message: string }> {
+  async addOrUpdate(db: Db, userId: number, data: Record<string, any>): Promise<{ success: boolean; message: string }> {
     const animeId = parseInt(data.anime_id ?? '0', 10) || 0;
     if (!animeId) return { success: false, message: 'Invalid anime ID.' };
 
@@ -124,7 +125,7 @@ export const AnimeTracker = {
       let genresUpdate = '';
       const extraParams: unknown[] = [];
       if (!existing.genres) {
-        const genresJson = await this.fetchGenresJson(mal, animeId);
+        const genresJson = await this.fetchGenresJson(db, animeId);
         if (genresJson) { genresUpdate = ', genres=?'; extraParams.push(genresJson); }
       }
       const completedAtExpr = status === 'completed' ? "date('now')" : 'completed_at';
