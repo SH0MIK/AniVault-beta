@@ -28,6 +28,7 @@ import { h } from '../../lib/helpers';
 import { renderAdminHeader, renderAdminFooter } from '../../render/admin-layout';
 import { getHoshikaAnimeById } from '../../lib/hoshika-api';
 import { findIdentityByLegacyMalId } from '../../lib/anime-identity';
+import { Db } from '../../lib/db';
 
 export const adminHomeBannersRoutes = new Hono<{ Bindings: Env }>();
 
@@ -39,7 +40,7 @@ function isValidUrl(u: string): boolean {
   try { const parsed = new URL(u); return parsed.protocol === 'http:' || parsed.protocol === 'https:'; } catch { return false; }
 }
 
-async function nextDisplayOrder(db: any): Promise<number> {
+async function nextDisplayOrder(db: Db): Promise<number> {
   const row = await db.fetchOne<{ mx: number | null }>('SELECT MAX(display_order) as mx FROM home_hero_banners');
   return (row?.mx ?? 0) + 1;
 }
