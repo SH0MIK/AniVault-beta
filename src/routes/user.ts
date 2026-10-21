@@ -8,7 +8,6 @@ import { Db } from '../lib/db';
 import { Session } from '../lib/session';
 import { Auth } from '../lib/auth';
 import { AnimeTracker, ITEMS_PER_PAGE } from '../lib/tracker';
-import { MalAPI } from '../lib/mal-api';
 import { Badge } from '../lib/badges';
 import { Follow } from '../lib/follow';
 import { Notification } from '../lib/notification';
@@ -103,18 +102,8 @@ userRoutes.get('/u/:username', async (c) => {
   ).catch(() => []);
   const wrappedScored = wrappedEntries.filter((entry:any) => entry.score !== null && entry.score !== undefined && entry.score !== '');
   const wrappedTopAnime = [...wrappedScored].sort((a:any,b:any) => Number(b.score)-Number(a.score)).slice(0,5);
-  // Resolve each Wrapped poster through the existing anime-art pipeline, which
-  // prioritizes the configured TMDB artwork and returns a direct TMDB image URL.
-  const wrappedMal = new MalAPI(c.env, c.env.API_CACHE, db);
-  await Promise.all(wrappedTopAnime.map(async (entry:any) => {
-    try {
-      const result = await wrappedMal.getAnime(Number(entry.anime_id), false, true);
-      const directTmdbPoster = result.data?.images?.jpg?.large_image_url || '';
-      if (/^https:\/\/image\.tmdb\.org\/t\/p\//i.test(directTmdbPoster)) {
-        entry.wrapped_tmdb_image = directTmdbPoster.replace(/\/t\/p\/w\d+\//, '/t/p/w342/');
-      }
-    } catch { /* Keep the saved image as a fallback if TMDB art is unavailable. */ }
-  }));
+  // Wrapped uses the image already saved with each list entry. TMDB artwork
+  // enrichment is a separate future phase; do not query legacy catalog APIs here.
   const wrappedAverage = wrappedScored.length ? (wrappedScored.reduce((sum:number,entry:any)=>sum+Number(entry.score||0),0)/wrappedScored.length).toFixed(1) : '—';
   const wrappedCompleted = wrappedEntries.filter((entry:any)=>entry.status==='completed').length;
   const wrappedMinutes = Number((stats as any).total_episodes || 0) * 21;
