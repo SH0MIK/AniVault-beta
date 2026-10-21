@@ -1,8 +1,7 @@
-// Full port of includes/api.php's MalAPI class (aliased as JikanAPI in the old
-// codebase). Talks to the official MyAnimeList v2 API for most endpoints and
-// falls back to the public Jikan API for characters/episodes/streaming, which
-// MAL v2 doesn't expose -- exactly like the PHP version. File-based caching
-// (CACHE_DIR/mal_*.json) is replaced with Workers KV.
+// Legacy compatibility helpers retained while account/list integrations are
+// migrated. Catalog-facing methods below use Hoshika only; unsupported listing
+// feeds return empty results, and legacy numeric IDs require verified mappings.
+// Do not use MAL/Jikan/AniList as catalog fallbacks.
 import { Db } from './db';
 import { Settings } from './settings';
 import { getAnimeEpisodeInfo } from './episode-info';
@@ -1088,13 +1087,8 @@ export class MalAPI {
     return { data: pageData, pagination: { last_visible_page: pageData.length === perPage ? page + 1 : page, items: { total: data.length } } };
   }
 
-  // `isList = true` for callers using this in a grid/row context (e.g. the
-  // home page's Watch Now row, which calls this once per item) -- keeps
-  // art resolution cache-only for those calls instead of allowing a live
-  // scraper fetch per row on top of the MAL detail fetch itself.
-  // Lightweight metadata path for admin tables. Unlike getAnime(), this skips
-  // normalise() and its per-title D1/KV artwork lookups, related-anime images,
-  // and recommendations. It reuses the same cached MAL detail response.
+  // Legacy-shaped wrapper for admin tables. It delegates to getAnime(), which
+  // requires a verified identity and reads metadata from Hoshika.
   async getAnimeAdminSummary(id: number): Promise<{ data: any | null }> {
     const result = await this.getAnime(id);
     const anime = result.data;
