@@ -7,13 +7,12 @@ import type { Env } from '../index';
 import { Db } from '../lib/db';
 import { Session } from '../lib/session';
 import { Auth } from '../lib/auth';
-import { MalAPI } from '../lib/mal-api';
 import { AnimeTracker } from '../lib/tracker';
 import { Notification } from '../lib/notification';
 import { getUserAnimeStatuses } from '../lib/user-list';
 import { icon } from '../lib/icons';
 import { h } from '../lib/helpers';
-import { renderAnimeCard, buildCardMetaMap, AnimeCardMeta } from '../lib/anime-card';
+import { renderAnimeCard, AnimeCardMeta } from '../lib/anime-card';
 import { renderHeader, renderFooter } from '../render/layout';
 import { CONTINUE_WATCHING_CSS } from '../render/home-css';
 import { continueWatchingScript, heroSliderScript, rowNavScript } from '../render/home-js';
@@ -81,7 +80,6 @@ homeRoutes.get('/', async (c) => {
   }
   const session = await Session.load(c, db, lifetime);
   const auth = new Auth(db, session, c.env as any, c.req.header('cf-connecting-ip') ?? 'unknown');
-  const mal = new MalAPI(c.env, c.env.API_CACHE, db);
   const siteUrl = c.env.SITE_URL;
 
   // Hoshika does not currently expose a verified popularity/upcoming feed.
@@ -167,15 +165,21 @@ homeRoutes.get('/', async (c) => {
   const unreadCount = currentUser ? await Notification.unreadCount(db, currentUser.id) : 0;
   const userStatuses = currentUser ? await getUserAnimeStatuses(db, currentUser.id) : {};
 
-  // Curated hero banners need their episode counts too (see hero-slide
-  // section below) — fetch just the IDs now so they can go into the same
-  // cache-only cardMeta lookup as everything else, instead of a second
-  // query later that the hero slides were silently missing out on.
+  // Curated homepage banners are legacy-ID keyed. Resolve only verified mappings;
+  // never hydrate catalog details from the old metadata_json snapshot or MAL caches.
   const curatedRows = await db
-    .fetchAll<any>('SELECT anime_id, anime_title, banner_image_url, metadata_json FROM home_hero_banners ORDER BY display_order ASC LIMIT 8')
+    .fetchAll<any>('SELECT anime_id, anime_title, banner_image_url FROM home_hero_banners ORDER BY display_order ASC LIMIT 8')
     .catch(() => []);
-  const cardMeta = await buildCardMetaMap(db, [...watchNowList, ...topList, ...upcomingList, ...curatedRows.map((r) => ({ mal_id: r.anime_id } as NormalisedAnime))]);
-
+  const curatedHeroRows = (await Promise.all(curatedRows.map(async (row) => {
+    const legacyId = Number(row.anime_id);
+    const identity = await findIdentityByLegacyMalId(db, legacyId).catch(() => null);
+    if (!identity || identity.verified !== 1 || !identity.hoshika_short_id) return null;
+    const hoshika = await getHoshikaAnimeById(identity.hoshika_short_id);
+    const anime = toHoshikaNormalisedAnime(hoshika, legacyId);
+    return anime ? { row, anime } : null;
+  }))).filter((item): item is { row: any; anime: NormalisedAnime } => item !== null);
+  // Avoid stale Jikan/MAL aired-count and dub caches for Hoshika catalog cards.
+  const cardMeta = new Map<number, AnimeCardMeta>();
   const layoutUser = currentUser
     ? { id: currentUser.id, username: currentUser.username, avatar_url: currentUser.avatar_url, role: currentUser.role }
     : null;
@@ -192,79 +196,16 @@ homeRoutes.get('/', async (c) => {
     requestUrl: c.req.url,
   });
 
-  // Hero slider slides. Curated admin banners are authoritative and are
-  // read directly from D1. Auto slides use the local D1 artwork libraries.
+  // Hero slides use verified Hoshika metadata plus the admin-supplied banner art.
   let heroPool: NormalisedAnime[] = [];
   let heroBanners: string[] = [];
   let heroLogos: string[] = [];
   let heroCovers: string[] = [];
-
-  if (curatedRows.length > 0) {
-    // Admin-selected hero rows are the source of truth. Build the slides
-    // directly from D1; do not hydrate curated heroes from MAL or another
-    // metadata table on the homepage.
-    const curatedIds = curatedRows.map((r) => Number(r.anime_id));
-    const curatedImageMap = await mal.getLocalAnimeImagesMany(curatedIds);
-    const snapshotAnime = [...topList, ...upcomingList];
-    const snapshotById = new Map(snapshotAnime.map((anime) => [anime.mal_id, anime]));
-
-    for (const r of curatedRows) {
-      const id = Number(r.anime_id);
-      const cover = curatedImageMap.get(id) || '';
-      let storedAnime: NormalisedAnime | null = null;
-      try {
-        const parsed = r.metadata_json ? JSON.parse(r.metadata_json) : null;
-        if (parsed && Number(parsed.mal_id) === id) storedAnime = parsed as NormalisedAnime;
-      } catch { /* malformed/legacy metadata — fall back below */ }
-
-      const cachedAnime = storedAnime || snapshotById.get(id);
-      const anime = cachedAnime
-        ? ({
-            ...cachedAnime,
-            title: cachedAnime.title || r.anime_title || `Anime #${id}`,
-            images: {
-              jpg: {
-                image_url: cover || cachedAnime.images?.jpg?.image_url || '',
-                large_image_url: cover || cachedAnime.images?.jpg?.large_image_url || '',
-              },
-            },
-          } as NormalisedAnime)
-        : ({
-            mal_id: id,
-            title: r.anime_title || `Anime #${id}`,
-            title_english: '',
-            title_japanese: '',
-            synopsis: '',
-            score: 0,
-            episodes: 0,
-            type: '',
-            status: '',
-            genres: [],
-            images: { jpg: { image_url: cover, large_image_url: cover } },
-          } as NormalisedAnime);
-      heroPool.push(anime);
-      heroBanners.push(r.banner_image_url || '');
-      // Title logos are intentionally disabled until the later TMDB-logo phase.
-      heroLogos.push('');
-      heroCovers.push(cover);
-    }
-  }
-
-  if (heroPool.length === 0) {
-    heroPool = topList.slice(0, 6);
-    const heroIds = heroPool.map((a) => a.mal_id);
-    const [bannerMap, logoMap, imageMap] = await Promise.all([
-      mal.getLocalAnimeBannerInfoMany(heroIds),
-      mal.getLocalAnimeLogosMany(heroIds),
-      mal.getLocalAnimeImagesMany(heroIds),
-    ]);
-    heroBanners = heroPool.map((a) => bannerMap.get(a.mal_id)?.image_url || '');
-    // Title logos are intentionally disabled until the later TMDB-logo phase.
-    heroLogos = heroPool.map(() => '');
-    heroCovers = heroPool.map((a) => imageMap.get(a.mal_id) || '');
-  }
-  if (heroPool.length === 0) {
-    heroPool = [];
+  for (const item of curatedHeroRows) {
+    heroPool.push(item.anime);
+    heroBanners.push(item.row.banner_image_url || '');
+    heroLogos.push(''); // Hoshika has no title-logo endpoint.
+    heroCovers.push(item.anime.images?.jpg?.large_image_url || '');
   }
   // Preload slide 0's LCP image so it starts downloading during <head> parsing.
   if (heroPool.length > 0) {
