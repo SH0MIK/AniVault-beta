@@ -97,7 +97,7 @@ function episodeCountFrom(item: any): number | null {
 
 function shortIdFrom(item: any): string {
   const x = obj(item);
-  const id = x.shortId ?? x.short_id ?? x.shortId ?? x.slug ?? x.id;
+  const id = x.shortId ?? x.short_id;
   return typeof id === 'string' || typeof id === 'number' ? String(id) : '';
 }
 
