@@ -316,33 +316,6 @@ export class MalAPI {
     return res.json();
   }
 
-  async jikanGet(url: string): Promise<any> {
-    if (this.kv && this.cacheEnabled()) {
-      const cacheKey = 'jikan_' + (await sha1(url));
-      const cached = await this.safeKvGet(cacheKey, 'json') as any;
-      if (cached && cached.data !== undefined) return cached;
-    }
-
-    // Jikan rate-limit: 3 req/sec. Retry once after a short wait on 429.
-    for (let attempt = 0; attempt < 2; attempt++) {
-      const res = await fetch(url, { headers: { Accept: 'application/json', 'User-Agent': 'AnimeApp/1.0' } });
-      if (res.status === 429) {
-        await new Promise((r) => setTimeout(r, 1000));
-        continue;
-      }
-      if (!res.ok) return { data: [] };
-      const decoded: any = await res.json().catch(() => null);
-      if (!decoded || decoded.data === undefined) return { data: [] };
-
-      if (this.kv && this.cacheEnabled()) {
-        const cacheKey = 'jikan_' + (await sha1(url));
-        await this.safeKvPut(cacheKey, JSON.stringify(decoded), { expirationTtl: this.cacheTtl() });
-      }
-      return decoded;
-    }
-    return { data: [] };
-  }
-
   // AniList's "this season" data is far more current than MAL/Jikan's
   // season/now endpoint (which frequently lags real air dates or lists
   // shows as "airing" long after/before they actually are). This also
@@ -1188,22 +1161,13 @@ export class MalAPI {
   // animeography, and voice roles all on a single page, so one scrape
   // covers what used to take 3 requests. Falls back to the original 3
   // parallel Jikan calls if the scraper is unavailable/errors.
-  async getCharacterFull(id: number): Promise<{ character: any; animeography: any; voices: any }> {
-    const fromScraper = await this.scraperGet(`/api/mal/character/${id}`);
-    if (fromScraper) return mapScraperCharacterFull(fromScraper);
-
-    const [character, animeography, voices] = await Promise.all([
-      this.jikanGet(`https://api.jikan.moe/v4/characters/${id}`),
-      this.jikanGet(`https://api.jikan.moe/v4/characters/${id}/anime`),
-      this.jikanGet(`https://api.jikan.moe/v4/characters/${id}/voices`),
-    ]);
-    return { character, animeography, voices };
+  async getCharacterFull(_id: number): Promise<{ character: any; animeography: any; voices: any }> {
+    // Hoshika does not currently expose character/voice-role metadata.
+    return { character: { data: null }, animeography: { data: [] }, voices: { data: [] } };
   }
 
-  async getAnimeCharacters(id: number): Promise<any> {
-    const fromScraper = await this.scraperGet(`/api/mal/anime/${id}/characters`);
-    if (fromScraper) return mapScraperCharacters(fromScraper);
-    return this.jikanGet(`https://api.jikan.moe/v4/anime/${id}/characters`);
+  async getAnimeCharacters(_id: number): Promise<any> {
+    return { data: [] };
   }
 
   // Sourced from the unified /api/episode?malId=X scraper endpoint (see
@@ -1244,8 +1208,8 @@ export class MalAPI {
     }
   }
 
-  async getAnimeStreaming(id: number): Promise<any> {
-    return this.jikanGet(`https://api.jikan.moe/v4/anime/${id}/streaming`);
+  async getAnimeStreaming(_id: number): Promise<any> {
+    return { data: [] };
   }
 
   // New endpoints -- no prior site UI consumed these, so no Jikan-shape
@@ -1254,52 +1218,22 @@ export class MalAPI {
   // as everything else here, reshaped from Jikan's actual shape into ours
   // instead (the reverse direction, since our own shape is what the new
   // UI below is built against).
-  async getAnimeThemes(id: number): Promise<{ opening: any[]; ending: any[] }> {
-    const fromScraper = await this.scraperGet(`/api/mal/anime/${id}/themes`);
-    if (fromScraper) return fromScraper;
-
-    const jikan = await this.jikanGet(`https://api.jikan.moe/v4/anime/${id}/themes`);
-    return {
-      opening: (jikan?.data?.openings ?? []).map((t: string, i: number) => ({ number: i + 1, title: t, artist: '', episodes: null, spotifyUrl: null })),
-      ending: (jikan?.data?.endings ?? []).map((t: string, i: number) => ({ number: i + 1, title: t, artist: '', episodes: null, spotifyUrl: null })),
-    };
+  async getAnimeThemes(_id: number): Promise<{ opening: any[]; ending: any[] }> {
+    return { opening: [], ending: [] };
   }
 
-  async getAnimeVideos(id: number): Promise<{ musicVideos: any[]; trailers: any[] }> {
-    const fromScraper = await this.scraperGet(`/api/mal/anime/${id}/videos`);
-    if (fromScraper) return fromScraper;
-
-    const jikan = await this.jikanGet(`https://api.jikan.moe/v4/anime/${id}/videos`);
-    const trailer = jikan?.data?.promo?.[0]?.trailer;
-    return {
-      musicVideos: [],
-      trailers: trailer?.youtube_id
-        ? [{ label: 'PV 1', youtubeId: trailer.youtube_id, embedUrl: trailer.embed_url, songTitle: null, songArtist: null }]
-        : [],
-    };
+  async getAnimeVideos(_id: number): Promise<{ musicVideos: any[]; trailers: any[] }> {
+    return { musicVideos: [], trailers: [] };
   }
 
-  async getAnimePictures(id: number): Promise<{ data: any[] }> {
-    const fromScraper = await this.scraperGet(`/api/mal/anime/${id}/pictures`);
-    if (fromScraper) return fromScraper;
-
-    const jikan = await this.jikanGet(`https://api.jikan.moe/v4/anime/${id}/pictures`);
-    return { data: (jikan?.data ?? []).map((p: any) => ({ image: p.jpg?.image_url ?? null, thumbnail: p.jpg?.small_image_url ?? null })) };
+  async getAnimePictures(_id: number): Promise<{ data: any[] }> {
+    return { data: [] };
   }
 
-  async getCharacterPictures(id: number): Promise<{ data: any[] }> {
-    const fromScraper = await this.scraperGet(`/api/mal/character/${id}/pictures`);
-    if (fromScraper) return fromScraper;
-
-    const jikan = await this.jikanGet(`https://api.jikan.moe/v4/characters/${id}/pictures`);
-    return { data: (jikan?.data ?? []).map((p: any) => ({ image: p.jpg?.image_url ?? null, thumbnail: p.jpg?.small_image_url ?? null })) };
+  async getCharacterPictures(_id: number): Promise<{ data: any[] }> {
+    return { data: [] };
   }
 
-  // Own scraper (see AniVault-Scraper's src/scrapers/mal.ts) — same base-URL
-  // env var and stripping convention as api-scraper.ts / episode-air.ts.
-  // Returns null (not throw) on any failure/missing config so callers fall
-  // straight through to the Jikan path above, same "scraper first, Jikan as
-  // safety net" shape episode-air.ts already established.
   private async scraperGet(path: string, timeoutMs = 8000): Promise<any | null> {
     const configuredBase = this.env.SCRAPER_API_BASE?.replace(/\/+$/, '').replace(/\/api$/i, '');
     // This is the currently deployed AniVault scraper service. Keep the
