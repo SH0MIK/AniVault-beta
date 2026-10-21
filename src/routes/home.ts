@@ -148,9 +148,15 @@ homeRoutes.get('/', async (c) => {
     // poster fallback.
     await Promise.all(watchHistory.map(async (row) => {
       try {
-        const identity = await findIdentityByLegacyMalId(db, row.anime_id);
-        if (!identity?.hoshika_short_id) return;
-        const anime = await getHoshikaAnimeById(identity.hoshika_short_id);
+        // New watch-history rows may already use Hoshika IDs, so try the
+        // current catalog ID directly before consulting the legacy-ID mapping.
+        let anime = await getHoshikaAnimeById(String(row.anime_id)).catch(() => null);
+        if (!anime) {
+          const identity = await findIdentityByLegacyMalId(db, row.anime_id);
+          if (identity?.hoshika_short_id) {
+            anime = await getHoshikaAnimeById(identity.hoshika_short_id).catch(() => null);
+          }
+        }
         if (anime?.poster) historyPosters[row.anime_id] = anime.poster;
       } catch { /* keep a neutral placeholder if Hoshika has no poster */ }
     }));
@@ -386,6 +392,7 @@ function renderContinueWatchingCard(hRow: WatchHistoryRow, siteUrl: string, epis
   const thumbSrc = episodeThumbOverrides[`${hRow.anime_id}:${hRow.episode_num}`]
     || hRow.ep_thumb
     || animePoster
+    || hRow.anime_image
     || '';
   const epNum = hRow.episode_num;
   const animeTitle = h(hRow.anime_title || `Anime #${hRow.anime_id}`);
