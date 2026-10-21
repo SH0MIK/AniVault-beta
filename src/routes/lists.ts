@@ -13,7 +13,7 @@ import { renderAnimeCard, buildCardMetaMap, LANG_CODE } from '../lib/anime-card'
 import { renderHeader, renderFooter, CurrentUser } from '../render/layout';
 import { HISTORY_CSS } from '../render/history-css';
 import { getBannerData } from '../lib/settings';
-import { getHoshikaAnimeById } from '../lib/hoshika-api';
+import { getHoshikaAnimeById, getHoshikaAnimeEpisodesById } from '../lib/hoshika-api';
 import { findIdentityByLegacyMalId } from '../lib/anime-identity';
 
 export const listRoutes = new Hono<{ Bindings: Env }>();
@@ -341,7 +341,25 @@ listRoutes.get('/history', async (c) => {
       }
     } catch { /* best-effort -- cards fall back to scraper/placeholder */ }
 
-    // Missing images stay blank rather than reading/repopulating legacy scraper caches.
+    // Fill missing history-card art from Hoshika's actual episode endpoint.
+    // Admin overrides remain first priority; Hoshika episode stills are added
+    // only when no saved override exists for this exact episode.
+    await Promise.all(history.map(async (row: any) => {
+      const key = `${row.anime_id}:${row.episode_num}`;
+      if (episodeThumbOverrides[key]) return;
+      try {
+        let episodes = await getHoshikaAnimeEpisodesById(String(row.anime_id));
+        if (!episodes) {
+          const identity = await findIdentityByLegacyMalId(db, Number(row.anime_id));
+          if (identity?.hoshika_short_id) {
+            episodes = await getHoshikaAnimeEpisodesById(identity.hoshika_short_id);
+          }
+        }
+        const episode = episodes?.find((item) => item.number === Number(row.episode_num));
+        if (episode?.thumbnail) episodeThumbOverrides[key] = episode.thumbnail;
+      } catch { /* retain stored image/poster fallbacks */ }
+    }));
+\n    // Missing images stay blank rather than reading/repopulating legacy scraper caches.
   }
 
   const { unreadCount, layoutUser } = await commonLayoutData(db, auth);
