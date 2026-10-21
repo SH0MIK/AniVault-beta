@@ -95,7 +95,7 @@ mobileHomeRoutes.get('/api/mobile/home-v2', async (c) => {
           title: a.title_english && a.title_english !== a.title ? a.title_english : a.title,
           image: imageMap.get(a.mal_id) || a.images?.jpg?.large_image_url || '',
           banner: curatedRows[i].banner_image_url || a.banner_image || '',
-          logo: curatedRows[i].logo_image_url || a.logo_image || '',
+          logo: '', // Hoshika has no logo field; TMDB logo support is a later phase.
           synopsis: a.synopsis || '',
           score: a.score ?? null,
           type: a.type ?? '',
@@ -115,7 +115,7 @@ mobileHomeRoutes.get('/api/mobile/home-v2', async (c) => {
         title: a.title_english && a.title_english !== a.title ? a.title_english : a.title,
         image: a.images?.jpg?.large_image_url ?? a.images?.jpg?.image_url ?? '',
         banner: a.banner_image ?? '',
-        logo: a.logo_image ?? '',
+        logo: '', // Hoshika has no logo field; TMDB logo support is a later phase.
         synopsis: a.synopsis ?? '',
         score: a.score ?? null,
         type: a.type ?? '',
