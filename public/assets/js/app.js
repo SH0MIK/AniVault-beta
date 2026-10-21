@@ -1575,13 +1575,9 @@ document.addEventListener('DOMContentLoaded', () => {
   initAdminSidebar();
 });
 // ── Episode Card Thumbnails ───────────────────────
-// Was: a direct graphql.anilist.co call from the browser (fetchAniListThumbs)
-// plus loadEpCardThumbnails() to paint it onto .ep-card elements. Removed --
-// the grid on the anime detail page (anime-tail.ts) already paints from
-// our own scraper-backed D1 cache (getAnimeEpisodeThumbnails, which itself
-// tries TMDB -> Kitsu -> AniList server-side), so a second direct AniList
-// call from the client was pure duplicate work chasing a source the
-// scraper already covers.
+// Direct AniList episode-thumbnail fetching was removed. Hoshika-backed
+// episode pages now use Hoshika stills and explicit admin overrides; no legacy
+// provider chain or scraper thumbnail cache is used for the catalog flow.
 
 // ── Episode Modal ────────────────────────────────────────
 const _epCache = {};   // "malId-epNum" → { synopsis, thumb }
