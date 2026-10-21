@@ -1280,34 +1280,18 @@ export class MalAPI {
     return { data: result.data?.recommendations ?? [] };
   }
 
-  async getSeasonNow(page = 1): Promise<{ data: NormalisedAnime[]; pagination: any }> {
-    const year = new Date().getUTCFullYear();
-    const season = this.currentSeason();
-    const offset = (page - 1) * 20;
-    const raw = await this.get(`/anime/season/${year}/${season}`, { limit: 20, offset, fields: LIST_FIELDS, sort: 'anime_score', nsfw: 'false' });
-    await this.prefetchAnimeArt((raw.data ?? []).map((n: any) => Number(n.node?.id ?? 0)), false);
-    const data = await Promise.all((raw.data ?? []).map((n: any) => this.normalise(n.node, true)));
-    return { data, pagination: { last_visible_page: raw.paging?.next ? page + 1 : page } };
+  async getSeasonNow(_page = 1): Promise<{ data: NormalisedAnime[]; pagination: any }> {
+    // Hoshika has no seasonal-list endpoint. Do not substitute MAL/AniList.
+    return { data: [], pagination: { last_visible_page: 1 } };
   }
-
   async getSeasonUpcoming(): Promise<{ data: NormalisedAnime[] }> {
-    const [year, season] = this.nextSeason();
-    const raw = await this.get(`/anime/season/${year}/${season}`, { limit: 20, fields: LIST_FIELDS, nsfw: 'false' });
-    await this.prefetchAnimeArt((raw.data ?? []).map((n: any) => Number(n.node?.id ?? 0)), false);
-    const data = await Promise.all((raw.data ?? []).map((n: any) => this.normalise(n.node, true)));
-    return { data };
+    // Hoshika has no upcoming-list endpoint; an empty result is intentional.
+    return { data: [] };
   }
-
-  async getTopAnime(filter = 'bypopularity', page = 1): Promise<{ data: NormalisedAnime[]; pagination: any }> {
-    const rankingMap: Record<string, string> = { bypopularity: 'bypopularity', favorite: 'favorite', airing: 'airing', upcoming: 'upcoming', byrank: 'all' };
-    const rankingType = rankingMap[filter] ?? 'bypopularity';
-    const offset = (page - 1) * 25;
-    const raw = await this.get('/anime/ranking', { ranking_type: rankingType, limit: 25, offset, fields: LIST_FIELDS, nsfw: 'false' });
-    await this.prefetchAnimeArt((raw.data ?? []).map((n: any) => Number(n.node?.id ?? 0)), false);
-    const data = await Promise.all((raw.data ?? []).map((n: any) => this.normalise(n.node, true)));
-    return { data, pagination: { last_visible_page: raw.paging?.next ? page + 5 : page } };
+  async getTopAnime(_filter = 'bypopularity', _page = 1): Promise<{ data: NormalisedAnime[]; pagination: any }> {
+    // No Hoshika-native ranking endpoint is available yet.
+    return { data: [], pagination: { last_visible_page: 1 } };
   }
-
   getAnimeGenres(): { data: { mal_id: number; name: string }[] } {
     return {
       data: [
@@ -1322,62 +1306,16 @@ export class MalAPI {
     };
   }
 
-  async getAnimeByGenres(genreIds: number[], page = 1): Promise<{ data: NormalisedAnime[]; pagination: any }> {
-    const perPage = 20;
-    const collected: NormalisedAnime[] = [];
-    let apiPage = 1;
-    let hasMore = true;
-    const skip = (page - 1) * perPage;
-    let skipped = 0;
-
-    while (collected.length < perPage && hasMore && apiPage <= 20) {
-      const offset = (apiPage - 1) * 100;
-      const raw = await this.get('/anime/ranking', { ranking_type: 'bypopularity', limit: 100, offset, fields: LIST_FIELDS, nsfw: 'false' });
-      hasMore = !!raw.paging?.next;
-      apiPage++;
-
-      // Prefetch art for the whole 100-item raw page up front -- cheaper
-      // than letting each of the ~20 items that survive the genre filter
-      // below independently trigger normalise()'s per-item queries.
-      await this.prefetchAnimeArt((raw.data ?? []).map((n: any) => Number(n.node?.id ?? 0)), false);
-
-      for (const n of raw.data ?? []) {
-        // Check genres straight off the raw node before normalising --
-        // normalise() now resolves art via the scraper API, which isn't
-        // worth paying for on the ~80% of each 100-item page that gets
-        // discarded by the genre filter below.
-        const nodeGenreIds = (n.node?.genres ?? []).map((g: any) => g?.id ?? -1);
-        if (genreIds.some((g) => !nodeGenreIds.includes(g))) continue;
-        if (skipped < skip) { skipped++; continue; }
-        const anime = await this.normalise(n.node, true);
-        collected.push(anime);
-        if (collected.length >= perPage) break;
-      }
-    }
-    return { data: collected, pagination: { last_visible_page: collected.length === perPage ? page + 1 : page } };
+  async getAnimeByGenres(_genreIds: number[], _page = 1): Promise<{ data: NormalisedAnime[]; pagination: any }> {
+    // Hoshika search does not provide a full genre catalogue/filter endpoint.
+    return { data: [], pagination: { last_visible_page: 1 } };
   }
-
   async getAnimeByGenre(genreId: number, page = 1) {
     return this.getAnimeByGenres([genreId], page);
   }
-
-  async getSchedule(day = ''): Promise<{ data: NormalisedAnime[] }> {
-    const year = new Date().getUTCFullYear();
-    const season = this.currentSeason();
-    let all: NormalisedAnime[] = [];
-    for (let page = 1; page <= 3; page++) {
-      const offset = (page - 1) * 50;
-      const raw = await this.get(`/anime/season/${year}/${season}`, { limit: 50, offset, fields: LIST_FIELDS, sort: 'anime_score', nsfw: 'false' });
-      await this.prefetchAnimeArt((raw.data ?? []).map((n: any) => Number(n.node?.id ?? 0)), false);
-      const batch = await Promise.all((raw.data ?? []).map((n: any) => this.normalise(n.node, true)));
-      all = all.concat(batch);
-      if (!raw.paging?.next) break;
-    }
-    if (day !== '') {
-      all = all.filter((a) => (a.broadcast.day ?? '').toLowerCase() === day.toLowerCase());
-    }
-    all.sort((a, b) => (a.broadcast.time ?? '99:99').localeCompare(b.broadcast.time ?? '99:99'));
-    return { data: all };
+  async getSchedule(_day = ''): Promise<{ data: NormalisedAnime[] }> {
+    // Hoshika currently has no schedule listing endpoint.
+    return { data: [] };
   }
 }
 
