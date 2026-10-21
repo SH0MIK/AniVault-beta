@@ -264,13 +264,13 @@ apiListRoutes.post('/api/watch_history.php', async (c) => {
               [watchTime, watchedSeconds, now, userId, animeId, epNum]);
             const earnedToday = await db.count("SELECT COUNT(*) AS cnt FROM points_ledger WHERE user_id=? AND event_type='watch_episode' AND created_at >= date('now')", [userId]);
             if (pct >= 0.9 && watchedSeconds >= Math.floor(duration * 0.8) && earnedToday < 10) {
-              const awarded = await awardPoints(db, userId, 5, 'watch_episode', 'watch:' + animeId + ':' + epNum, 'Watched an episode');
+              const awarded = await awardPoints(db, userId!, 5, 'watch_episode', 'watch:' + animeId + ':' + epNum, 'Watched an episode');
               if (awarded) await db.query('UPDATE points_watch_sessions SET rewarded=1 WHERE user_id=? AND anime_id=? AND episode_num=?', [userId, animeId, epNum]);
             }
           }
         }
         const totalEpsParam = parseInt(body.total_eps ?? '0', 10) || 0;
-        await AnimeTracker.autoTrackProgress(db, userId, animeId, epNum, pct, totalEpsParam, animeTitle, animeImage);
+        await AnimeTracker.autoTrackProgress(db, userId!, animeId, epNum, pct, totalEpsParam, animeTitle, animeImage);
       }
     } else {
       const existing = await db.fetchOne<{ id: number }>(
