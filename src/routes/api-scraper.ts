@@ -17,7 +17,6 @@ import { h } from '../lib/helpers';
 import { findIdentityByLegacyMalId } from '../lib/anime-identity';
 import { getHoshikaAnimeById, getHoshikaAnimeEpisodesById } from '../lib/hoshika-api';
 import { MalAPI } from '../lib/mal-api';
-import { EpisodeAir } from '../lib/episode-air';
 import { AnimeTracker } from '../lib/tracker';
 import { getEpisodeThumbnail } from '../lib/episode-thumb';
 
@@ -628,16 +627,9 @@ scraperRoutes.get('/api/anime_info.php', async (c) => {
 });
 
 // ── api/ep_count.php ────────────────────────────────────────────────────
-// Does the full scraper-API-then-Jikan lookup and writes through to
-// episode_air_cache (same as EpisodeAir.get) — this is the "slow" work.
-// anime.ts renders instantly off the cache (see EpisodeAir.getCachedAny)
-// and calls this from the client, in the background, only when that cache
-// was missing or stale, so a slow scraper response never blocks the page.
-// In practice anime.ts only ever triggers this for a currently-airing show
-// (see epsNeedsRefresh there) — finished/not-yet-aired shows already have
-// their final count straight from MAL and never need it. The status check
-// below is just a second line of defense (direct hits, stale clients, etc.)
-// so a finished/upcoming show can never end up writing to the cache either.
+// Legacy episode-count endpoint: only verified Hoshika mappings can resolve
+// a MAL-keyed request. Unmapped records return null rather than using another
+// anime provider or guessing from a title.
 scraperRoutes.get('/api/ep_count.php', async (c) => {
   const animeId = parseInt(c.req.query('anime_id') ?? '0', 10) || 0;
   if (!animeId) return c.json({ error: 'Missing anime_id' }, 400);
