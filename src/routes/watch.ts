@@ -28,7 +28,6 @@ import { playerBody } from '../render/player-body';
 import { getBannerData, Settings } from '../lib/settings';
 import { AnimeTracker } from '../lib/tracker';
 import { DubStatus, DUB_LANGUAGES } from '../lib/dub-status';
-import { getEpisodeThumbnail } from '../lib/episode-thumb';
 import { SUB_PROVIDERS, DUB_PROVIDERS, HINDI_PROVIDERS, fixedServerBtn } from '../lib/stream-sources';
 import { renderWatchComments } from '../render/watch-comments';
 
@@ -93,18 +92,11 @@ export function parseDurationSeconds(durationStr: string | null | undefined): nu
   return 0;
 }
 
-/** Episode-specific thumbnail for the watch page's og:image, so link previews
- * (Discord, Twitter, etc.) show the actual episode instead of the anime's
- * generic cover. Previously this ran a multi-source auto-fetch chain (Kitsu
- * -> TMDB -> AniList -> Jikan -> AniSearch) directly against those APIs.
- * Priority now: an admin-saved override wins (episode_overrides.image_url,
- * set via the Episode Thumbnails admin panel) -- that lets an admin correct
- * a bad auto-fetched thumbnail. Otherwise, fetch it live from our own
- * scraper API (cached in D1, see getEpisodeThumbnail). Only falls back to
- * the anime's cover art if neither of those has anything. */
+/** Episode-specific social preview image. During the Hoshika migration, use
+ * an admin-saved override when available and otherwise the verified anime
+ * cover. Do not read or repopulate the legacy scraper thumbnail cache. */
 async function getEpisodeOgImage(
-  db: Db, env: { SCRAPER_API_BASE?: string },
-  malId: number, epNum: number, fallback: string, animeStatus?: string | null
+  db: Db, malId: number, epNum: number, fallback: string
 ): Promise<string> {
   try {
     const row = await db.fetchOne<{ image_url: string | null }>(
@@ -112,10 +104,8 @@ async function getEpisodeOgImage(
       [malId, epNum]
     );
     if (row?.image_url) return row.image_url;
-  } catch { /* fall through to scraper/fallback */ }
-
-  const scraped = await getEpisodeThumbnail(env, db, malId, epNum, animeStatus);
-  return scraped ?? fallback;
+  } catch { /* use the verified anime cover as a fallback */ }
+  return fallback;
 }
 
 // Matches the user-agents link-preview crawlers send (Facebook, Discord,
@@ -188,7 +178,7 @@ watchRoutes.get('/watch', async (c) => {
     const anime = mapped.anime;
     const title = getAnimeTitle(anime);
     const coverFallback = anime.images?.jpg?.large_image_url ?? '';
-    const image = await getEpisodeOgImage(db, c.env, animeId, epNum, coverFallback, anime.status);
+    const image = await getEpisodeOgImage(db, animeId, epNum, coverFallback);
     const __banner = await getBannerData(db);
     const html = renderHeader({
       ...__banner, siteUrl, siteName: c.env.SITE_NAME, pageTitle: `Ep ${epNum} — ${title}`, currentPage: 'watch',
@@ -359,7 +349,7 @@ watchRoutes.get('/watch', async (c) => {
     : null;
 
   const bannerInfo = await mal.getLocalAnimeBannerInfo(animeId).catch(() => null);
-  const ogImage = await getEpisodeOgImage(db, c.env, animeId, epNum, bannerInfo?.image_url || image, anime.status);
+  const ogImage = await getEpisodeOgImage(db, animeId, epNum, bannerInfo?.image_url || image);
 
   const __banner = await getBannerData(db);
   let html = renderHeader({
