@@ -1086,22 +1086,16 @@ export class MalAPI {
   // ── Public API (same shapes as the old Jikan-backed version) ─────────────
 
   async searchAnime(query: string, page = 1, type = '', status = ''): Promise<{ data: NormalisedAnime[]; pagination: any }> {
-    // Catalog search is Hoshika-only. This legacy-shaped method intentionally
-    // returns only entries with an explicitly verified legacy ID, because its
-    // callers still store and route by MAL IDs. Native Hoshika search pages
-    // use searchHoshikaAnime directly and do not need this compatibility shape.
+    // Legacy callers store numeric MAL IDs, so expose only Hoshika search
+    // results with an explicitly verified legacy mapping.
     const items = await searchHoshikaAnime(query, 50);
-    const mapped = await Promise.all(items.map(async (item) => {
-      const identity = await findIdentityByLegacyMalId(this.db, Number.NaN).catch(() => null);
-      return { item, identity };
-    }));
     const data: NormalisedAnime[] = [];
-    for (const { item } of mapped) {
+    for (const item of items) {
       const identity = await this.db.fetchOne<any>(
         'SELECT legacy_mal_id, verified FROM anime_identity_map WHERE hoshika_short_id = ?',
         [item.shortId],
       ).catch(() => null);
-      if (identity?.verified !== 1 || !Number.isSafeInteger(Number(identity.legacy_mal_id))) continue;
+      if (identity?.verified !== 1 || !Number.isSafeInteger(Number(identity.legacy_mal_id)) || Number(identity.legacy_mal_id) <= 0) continue;
       if (type && item.type && item.type.toLowerCase() !== type.toLowerCase()) continue;
       if (status && item.status && !item.status.toLowerCase().includes(status.toLowerCase())) continue;
       const poster = item.poster || '';
@@ -1111,7 +1105,8 @@ export class MalAPI {
         images: { jpg: { image_url: poster, large_image_url: poster } },
         synopsis: item.synopsis, background: '', score: item.score, scored_by: null,
         rank: null, popularity: null, episodes: item.episodes ?? 0, status: item.status,
-        type: item.type, rating: '', source: '', duration: null, aired: { string: item.year ? String(item.year) : null },
+        type: item.type, rating: '', source: '', duration: null,
+        aired: { string: item.year ? String(item.year) : null },
         start_date: item.year ? String(item.year) : null,
         genres: item.genres.map((name, i) => ({ mal_id: i + 1, name })),
         studios: [], related_anime: [], recommendations: [], trailer: [], themes: [],
@@ -1120,7 +1115,8 @@ export class MalAPI {
     }
     const perPage = 20;
     const start = (Math.max(1, page) - 1) * perPage;
-    return { data: data.slice(start, start + perPage), pagination: { last_visible_page: 1, items: { total: data.length } } };
+    const pageData = data.slice(start, start + perPage);
+    return { data: pageData, pagination: { last_visible_page: pageData.length === perPage ? page + 1 : page, items: { total: data.length } } };
   }
 
   // `isList = true` for callers using this in a grid/row context (e.g. the
