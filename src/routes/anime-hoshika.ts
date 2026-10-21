@@ -42,9 +42,12 @@ hoshikaAnimeRoutes.get('/anime/hoshika', async (c) => {
 
   // Save only Hoshika identity metadata; never infer a MAL mapping from title.
   await rememberHoshikaIdentity(db, { shortId: anime.shortId, id: anime.id, slug: anime.slug, title: anime.title }).catch(() => undefined);
+  // The identity-map migration is intentionally not applied to the shared
+  // production D1 yet. Keep the read fail-closed so this page can still render
+  // on the Beta branch before the migration is deployed.
   const [episodes, identity] = await Promise.all([
     getHoshikaAnimeEpisodesById(anime.shortId),
-    findIdentityByHoshikaId(db, anime.shortId),
+    findIdentityByHoshikaId(db, anime.shortId).catch(() => null),
   ]);
   const legacyWatchId = identity?.verified === 1 ? identity.legacy_mal_id : null;
   const title = h(anime.title);
