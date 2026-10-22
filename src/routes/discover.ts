@@ -1,6 +1,5 @@
-// Hoshika currently exposes title search and anime details, but no confirmed
-// seasonal, ranking, or schedule listing endpoints. These pages intentionally
-// show a clear notice instead of falling back to MAL/Jikan/AniList.
+// Seasonal listings come directly from Hoshika. Ranking data remains unavailable
+// and must not fall back to MAL/Jikan/AniList.
 import { Hono } from 'hono';
 import type { Env } from '../index';
 import { Db } from '../lib/db';
@@ -11,6 +10,7 @@ import { h } from '../lib/helpers';
 import { renderHeader, renderFooter, CurrentUser } from '../render/layout';
 import { icon } from '../lib/icons';
 import { getBannerData } from '../lib/settings';
+import { getHoshikaSeason } from '../lib/hoshika-api';
 
 export const discoverRoutes = new Hono<{ Bindings: Env }>();
 
@@ -44,7 +44,58 @@ async function unavailablePage(c: any, title: string, view: string) {
   return c.html(html);
 }
 
-discoverRoutes.get('/seasonal', (c) => unavailablePage(c, 'Seasonal anime', 'seasonal anime'));
+discoverRoutes.get('/seasonal', async (c) => {
+  const db = new Db(c.env.DB);
+  const lifetime = Number(c.env.SESSION_LIFETIME_SECONDS ?? 86400);
+  const session = await Session.load(c, db, lifetime);
+  const auth = new Auth(db, session, c.env as any, c.req.header('cf-connecting-ip') ?? 'unknown');
+  const siteUrl = c.env.SITE_URL;
+  const currentUser = auth.check() ? await auth.getCurrentUser() : null;
+  const unreadCount = currentUser ? await Notification.unreadCount(db, currentUser.id) : 0;
+  const layoutUser: CurrentUser | null = currentUser
+    ? { id: currentUser.id, username: currentUser.username, avatar_url: currentUser.avatar_url, role: currentUser.role }
+    : null;
+  const banner = await getBannerData(db);
+  const feed = await getHoshikaSeason();
+  const items = feed.items;
+  const seasonLabel = [feed.season, feed.year].filter(Boolean).join(' ');
+  let html = renderHeader({
+    ...banner, siteUrl, siteName: c.env.SITE_NAME, pageTitle: 'Seasonal Anime',
+    currentPage: 'seasonal', currentUser: layoutUser, unreadCount, requestUrl: c.req.url,
+  });
+  html += `
+<main class="container section seasonal-page">
+  <div class="seasonal-heading">
+    <div><h1>Seasonal Anime</h1><p class="text-muted">What's on this season</p></div>
+    ${seasonLabel ? `<span class="seasonal-badge">${h(seasonLabel)}</span>` : ''}
+  </div>
+  ${items.length ? `<div class="seasonal-grid">${items.map((anime) => {
+    const title = anime.title || anime.titleEnglish || anime.titleRomaji || anime.slug || 'Untitled anime';
+    const poster = anime.poster;
+    const score = anime.score !== null && Number.isFinite(anime.score) ? anime.score : null;
+    const id = encodeURIComponent(anime.shortId);
+    const format = anime.type || 'Anime';
+    const status = anime.status ? anime.status.replace(/_/g, ' ') : '';
+    const episodes = anime.episodes !== null ? String(anime.episodes) + ' eps' : '';
+    return `<article class="card seasonal-card">
+      <a class="seasonal-poster" href="/anime/hoshika?id=${id}" aria-label="View ${h(title)}">
+        ${poster ? `<img src="${h(poster)}" alt="" loading="lazy">` : `<div class="seasonal-placeholder">${h(title)}</div>`}
+        ${score !== null ? `<span class="seasonal-score">★ ${h(String(score))}</span>` : ''}
+      </a>
+      <div class="seasonal-info">
+        <h2><a href="/anime/hoshika?id=${id}">${h(title)}</a></h2>
+        <div class="seasonal-meta">${[format, episodes, status].filter(Boolean).map(value => `<span>${h(value)}</span>`).join('')}</div>
+      </div>
+    </article>`;
+  }).join('')}</div>` : `<div class="card card-body seasonal-empty">${feed.season || feed.year ? 'No seasonal anime were returned by Hoshika for this season.' : 'Could not load seasonal anime from Hoshika right now. Please try again shortly.'}</div>`}
+</main>
+<style>
+.seasonal-heading{display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin-bottom:1.5rem}.seasonal-heading h1{margin:0}.seasonal-heading p{margin:.25rem 0 0}.seasonal-badge{border:1px solid var(--border-accent,var(--border));background:var(--accent-glow);color:var(--accent);border-radius:999px;padding:.45rem .85rem;font-size:.85rem;font-weight:700}.seasonal-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(155px,1fr));gap:1rem}.seasonal-card{overflow:hidden;min-width:0}.seasonal-poster{position:relative;display:block;aspect-ratio:2/3;background:var(--bg-surface);overflow:hidden}.seasonal-poster img{display:block;width:100%;height:100%;object-fit:cover;transition:transform .2s ease}.seasonal-poster:hover img{transform:scale(1.035)}.seasonal-placeholder{height:100%;min-height:190px;display:grid;place-items:center;padding:1rem;text-align:center;color:var(--text-muted)}.seasonal-score{position:absolute;top:.5rem;left:.5rem;padding:.25rem .45rem;border-radius:7px;background:rgba(0,0,0,.78);color:#fff;font-size:.78rem;font-weight:700}.seasonal-info{padding:.7rem}.seasonal-info h2{font-size:.95rem;line-height:1.4;margin:0 0 .55rem}.seasonal-info h2 a{color:inherit;text-decoration:none}.seasonal-info h2 a:hover{color:var(--accent)}.seasonal-meta{display:flex;gap:.35rem;flex-wrap:wrap}.seasonal-meta span{font-size:.72rem;color:var(--text-muted);background:var(--bg-surface);border-radius:5px;padding:.2rem .35rem;text-transform:capitalize}.seasonal-empty{margin-top:1rem}@media(max-width:480px){.seasonal-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:.7rem}}
+</style>`;
+  html += renderFooter({ siteUrl, currentUser: layoutUser });
+  await session.save(c, lifetime);
+  return c.html(html);
+});
 discoverRoutes.get('/top', (c) => unavailablePage(c, 'Top anime', 'top anime'));
 discoverRoutes.get('/schedule', async (c) => {
   const db = new Db(c.env.DB);
