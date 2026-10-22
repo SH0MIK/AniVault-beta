@@ -104,7 +104,7 @@ homeRoutes.get('/', async (c) => {
   const siteUrl = c.env.SITE_URL;
 
   // Homepage feeds come directly from Hoshika. No MAL/Jikan/AniList fallback.
-  const hoshikaHome = await getHoshikaHomeSections();
+  const hoshikaHome = await getHoshikaHomeSections(c.env.HOSHIKA_API_KEY);
   const topList: NormalisedAnime[] = (hoshikaHome.trending.length ? hoshikaHome.trending : hoshikaHome.top).map(toHoshikaHomeAnime);
   const upcomingList: NormalisedAnime[] = hoshikaHome.seasonal.map(toHoshikaHomeAnime);
   const recentList: NormalisedAnime[] = hoshikaHome.recent.map(toHoshikaHomeAnime);
@@ -118,7 +118,7 @@ homeRoutes.get('/', async (c) => {
     const resolved = await Promise.all(rows.map(async ({ anime_id }) => {
       const identity = await findIdentityByLegacyMalId(db, anime_id).catch(() => null);
       if (!identity || identity.verified !== 1 || !identity.hoshika_short_id) return null;
-      const anime = await getHoshikaAnimeById(identity.hoshika_short_id);
+      const anime = await getHoshikaAnimeById(identity.hoshika_short_id, c.env.HOSHIKA_API_KEY);
       return toHoshikaNormalisedAnime(anime, anime_id);
     }));
     watchNowList = resolved.filter((anime): anime is NormalisedAnime => anime !== null);
@@ -154,7 +154,7 @@ homeRoutes.get('/', async (c) => {
         if (!anime) {
           const identity = await findIdentityByLegacyMalId(db, row.anime_id);
           if (identity?.hoshika_short_id) {
-            anime = await getHoshikaAnimeById(identity.hoshika_short_id).catch(() => null);
+            anime = await getHoshikaAnimeById(identity.hoshika_short_id, c.env.HOSHIKA_API_KEY).catch(() => null);
           }
         }
         if (anime?.poster) historyPosters[row.anime_id] = anime.poster;
@@ -180,7 +180,7 @@ homeRoutes.get('/', async (c) => {
         const key = `${row.anime_id}:${row.episode_num}`;
         if (episodeThumbOverrides[key]) return;
         try {
-          let episodes = await getHoshikaAnimeEpisodesById(String(row.anime_id));
+          let episodes = await getHoshikaAnimeEpisodesById(String(row.anime_id), c.env.HOSHIKA_API_KEY);
           if (!episodes) {
             const identity = await findIdentityByLegacyMalId(db, Number(row.anime_id));
             if (identity?.hoshika_short_id) {
@@ -208,7 +208,7 @@ homeRoutes.get('/', async (c) => {
     const legacyId = Number(row.anime_id);
     const identity = await findIdentityByLegacyMalId(db, legacyId).catch(() => null);
     if (!identity || identity.verified !== 1 || !identity.hoshika_short_id) return null;
-    const hoshika = await getHoshikaAnimeById(identity.hoshika_short_id);
+    const hoshika = await getHoshikaAnimeById(identity.hoshika_short_id, c.env.HOSHIKA_API_KEY);
     const anime = toHoshikaNormalisedAnime(hoshika, legacyId);
     return anime ? { row, anime } : null;
   }))).filter((item): item is { row: any; anime: NormalisedAnime } => item !== null);
@@ -301,7 +301,7 @@ ${heroSliderScript(heroPool.length)}
   }
 
   // ── Genre bar ────────────────────────────────────────────────────────────
-  const genreList = await getHoshikaGenres();
+  const genreList = await getHoshikaGenres(c.env.HOSHIKA_API_KEY);
   if (genreList.length > 0) {
     html += `
   <div class="genre-nav-wrap">
