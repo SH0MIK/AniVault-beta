@@ -84,19 +84,26 @@ discoverRoutes.get('/schedule', async (c) => {
       ? `/schedule?year=${year}&week=${weekNo}`
       : '/schedule';
   };
+  const parseAiringDate = (value: any) => {
+    if (typeof value === 'number' || (typeof value === 'string' && /^\\d{10,13}$/.test(value.trim()))) {
+      const numeric = Number(value);
+      return new Date(numeric < 1e12 ? numeric * 1000 : numeric);
+    }
+    return new Date(value);
+  };
   const fmtDay = (value: string) => {
-    const date = new Date(value);
+    const date = parseAiringDate(value);
     if (!Number.isFinite(date.getTime())) return 'Upcoming';
     return new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Tokyo', weekday: 'long', month: 'short', day: 'numeric' }).format(date);
   };
   const fmtTime = (value: string) => {
-    const date = new Date(value);
+    const date = parseAiringDate(value);
     return Number.isFinite(date.getTime())
       ? new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Tokyo', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }).format(date)
       : 'Time TBA';
   };
   const grouped = new Map<string, any[]>();
-  for (const item of [...items].sort((a, b) => Date.parse(a.airingAt ?? '') - Date.parse(b.airingAt ?? ''))) {
+  for (const item of [...items].sort((a, b) => parseAiringDate(a.airingAt ?? '').getTime() - parseAiringDate(b.airingAt ?? '').getTime())) {
     const key = item?.airingAt ? fmtDay(item.airingAt) : 'Time TBA';
     if (!grouped.has(key)) grouped.set(key, []);
     grouped.get(key)!.push(item);
@@ -157,12 +164,15 @@ discoverRoutes.get('/schedule', async (c) => {
           const episode = Number.isFinite(Number(item.episode)) ? Number(item.episode) : null;
           const format = String(item.format || 'TV').trim().toUpperCase();
           const airingAt = String(item.airingAt ?? '');
-          return `<article class="card schedule-episode" data-title="${h(title.toLowerCase())}" data-format="${h(format)}" data-time="${h(airingAt)}" data-airing-ms="${Number.isFinite(Date.parse(airingAt)) ? Date.parse(airingAt) : ''}" data-watch-url="/watch?anime=${id}&ep=${episode ?? ''}" data-popularity="${Number(item.averageScore)||0}" style="display:flex;gap:1rem;padding:.85rem;min-width:0;">
+          const airingDate = parseAiringDate(item.airingAt ?? '');
+          const airingMs = airingDate.getTime();
+          const airingISO = Number.isFinite(airingMs) ? airingDate.toISOString() : '';
+          return `<article class="card schedule-episode" data-title="${h(title.toLowerCase())}" data-format="${h(format)}" data-time="${h(airingISO)}" data-airing-ms="${Number.isFinite(airingMs) ? airingMs : ''}" data-watch-url="/watch?anime=${id}&ep=${episode ?? ''}" data-popularity="${Number(item.averageScore)||0}" style="display:flex;gap:1rem;padding:.85rem;min-width:0;">
             <a class="schedule-cover" href="/anime/hoshika?id=${id}" style="flex:0 0 92px;align-self:flex-start;">
               ${image ? `<img src="${h(image)}" alt="" loading="lazy" style="display:block;width:92px;aspect-ratio:2/3;object-fit:cover;border-radius:8px;">` : '<div class="anime-card-placeholder" style="width:92px;aspect-ratio:2/3;border-radius:8px;"></div>'}
             </a>
             <div class="schedule-episode-content" style="min-width:0;flex:1;">
-              <div class="text-muted schedule-airing-time" data-iso="${h(airingAt)}" style="font-size:.82rem;margin-bottom:.35rem;">${h(fmtTime(airingAt))}</div>
+              <div class="text-muted schedule-airing-time" data-iso="${h(airingISO)}" style="font-size:.82rem;margin-bottom:.35rem;">${h(fmtTime(airingAt))}</div>
               <h3 class="schedule-episode-title" style="font-size:1rem;line-height:1.4;margin:0 0 .4rem;"><a href="/anime/hoshika?id=${id}">${h(title)}</a></h3>
               <div class="text-muted" style="font-size:.85rem;">${episode !== null ? `Episode ${episode}` : 'Episode TBA'} · ${h(format)}</div>
               <div class="schedule-episode-action" style="margin-top:.7rem;"></div>
@@ -173,7 +183,7 @@ discoverRoutes.get('/schedule', async (c) => {
     </section>`).join('')}
 </main>
 <style>
-.schedule-heading-icon{display:grid;place-items:center;width:44px;height:44px;border-radius:14px;background:var(--accent-glow);border:1px solid var(--border-accent);color:var(--accent);font-size:1.2rem;flex-shrink:0}.schedule-heading-icon svg{width:20px;height:20px;stroke:currentColor}.schedule-types,.schedule-options{display:flex;gap:.45rem;flex-wrap:wrap}.schedule-chip{border:1px solid var(--border,rgba(255,255,255,.12));background:transparent;color:inherit;border-radius:999px;padding:.35rem .8rem;font:inherit;font-size:.82rem;cursor:pointer}.schedule-chip.is-active{border-color:var(--accent,#a78bfa);background:var(--accent-glow,rgba(124,58,237,.18));color:var(--accent,#a78bfa)}.schedule-week-nav{display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:.7rem 1rem;margin:1rem 0;border:1px solid var(--border,rgba(255,255,255,.1));border-radius:999px;background:var(--bg-surface,rgba(255,255,255,.025))}.schedule-day-nav{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:.45rem;margin:1.2rem 0 1.5rem}.schedule-day-button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.15rem;min-height:72px;border:1px solid var(--border,rgba(255,255,255,.1));border-radius:22px;background:var(--bg-surface,rgba(255,255,255,.025));color:inherit;cursor:pointer}.schedule-day-button span{font-size:.72rem;font-weight:600}.schedule-day-button strong{font-size:1.1rem}.schedule-day-button small{font-size:.68rem;color:var(--text-muted,#999)}.schedule-day-button.is-active{border-color:var(--accent,#a78bfa);background:var(--accent-glow,rgba(124,58,237,.18))}.schedule-filter-grid{display:grid;grid-template-columns:1fr 1fr;gap:1.2rem}.schedule-filter-label{display:block;font-size:.72rem;color:var(--text-muted,#999);margin-bottom:.55rem}.schedule-episode-content{display:flex;flex-direction:column;align-self:stretch;min-height:100%;gap:0}.schedule-episode-title a{color:#fff;text-decoration:none;font-weight:700}.schedule-episode-title a:hover{text-decoration:underline}.schedule-episode-action{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-top:auto!important;padding-top:.7rem}.schedule-watch-button{min-height:36px}.schedule-countdown{font-size:1rem;font-weight:800;color:#fff;letter-spacing:.01em;line-height:1.35}.schedule-watch-button{display:inline-flex;align-items:center;gap:.35rem;padding:.35rem .75rem;border-radius:999px;background:var(--accent,#a78bfa);color:#fff;text-decoration:none;font-size:.8rem;font-weight:600}.schedule-countdown{font-size:.8rem;color:var(--text-muted,#aaa)}.schedule-episode-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,330px),1fr));gap:1rem}.schedule-page [hidden]{display:none!important}@media(max-width:600px){.schedule-day-nav{gap:.25rem}.schedule-day-button{min-height:64px;border-radius:14px}.schedule-day-button span{font-size:.62rem}.schedule-day-button strong{font-size:1rem}.schedule-day-button small{font-size:.62rem}.schedule-filter-grid{grid-template-columns:1fr}.schedule-week-nav{border-radius:18px;padding:.6rem}.schedule-week-nav .btn{padding:.35rem .5rem}}
+.schedule-heading-icon{display:grid;place-items:center;width:44px;height:44px;border-radius:14px;background:var(--accent-glow);border:1px solid var(--border-accent);color:var(--accent);font-size:1.2rem;flex-shrink:0}.schedule-heading-icon svg{width:20px;height:20px;stroke:currentColor}.schedule-types,.schedule-options{display:flex;gap:.45rem;flex-wrap:wrap}.schedule-chip{border:1px solid var(--border,rgba(255,255,255,.12));background:transparent;color:inherit;border-radius:999px;padding:.35rem .8rem;font:inherit;font-size:.82rem;cursor:pointer}.schedule-chip.is-active{border-color:var(--accent,#a78bfa);background:var(--accent-glow,rgba(124,58,237,.18));color:var(--accent,#a78bfa)}.schedule-week-nav{display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:.7rem 1rem;margin:1rem 0;border:1px solid var(--border,rgba(255,255,255,.1));border-radius:999px;background:var(--bg-surface,rgba(255,255,255,.025))}.schedule-day-nav{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:.45rem;margin:1.2rem 0 1.5rem}.schedule-day-button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.15rem;min-height:72px;border:1px solid var(--border,rgba(255,255,255,.1));border-radius:22px;background:var(--bg-surface,rgba(255,255,255,.025));color:inherit;cursor:pointer}.schedule-day-button span{font-size:.72rem;font-weight:600}.schedule-day-button strong{font-size:1.1rem}.schedule-day-button small{font-size:.68rem;color:var(--text-muted,#999)}.schedule-day-button.is-active{border-color:var(--accent,#a78bfa);background:var(--accent-glow,rgba(124,58,237,.18))}.schedule-filter-grid{display:grid;grid-template-columns:1fr 1fr;gap:1.2rem}.schedule-filter-label{display:block;font-size:.72rem;color:var(--text-muted,#999);margin-bottom:.55rem}.schedule-episode-content{display:flex;flex-direction:column;align-self:stretch;min-height:100%;gap:0}.schedule-episode-title a{color:#fff;text-decoration:none;font-weight:700}.schedule-episode-title a:hover{text-decoration:underline}.schedule-episode-action{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-top:auto!important;padding-top:.7rem}.schedule-watch-button{min-height:36px}.schedule-countdown{font-size:1rem;font-weight:800;color:#fff;letter-spacing:.01em;line-height:1.35}.schedule-watch-button{display:inline-flex;align-items:center;gap:.35rem;padding:.35rem .75rem;border-radius:999px;background:var(--accent,#a78bfa);color:#fff;text-decoration:none;font-size:.8rem;font-weight:600}.schedule-episode-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,330px),1fr));gap:1rem}.schedule-page [hidden]{display:none!important}@media(max-width:600px){.schedule-day-nav{gap:.25rem}.schedule-day-button{min-height:64px;border-radius:14px}.schedule-day-button span{font-size:.62rem}.schedule-day-button strong{font-size:1rem}.schedule-day-button small{font-size:.62rem}.schedule-filter-grid{grid-template-columns:1fr}.schedule-week-nav{border-radius:18px;padding:.6rem}.schedule-week-nav .btn{padding:.35rem .5rem}}
 </style>
 <script>
 (function(){
