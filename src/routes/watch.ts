@@ -423,7 +423,7 @@ watchRoutes.get('/watch', async (c) => {
   // syntax error that silently kills this entire block before anything,
   // including the server probe, ever runs).
   html += watchScript1({
-    anilistId, epNum, resumeParam, animeId, siteUrl, qSub, qDub, isLoggedIn: auth.check(),
+    anilistId, epNum, resumeParam, animeId, hoshikaId: mapped.shortId, siteUrl, qSub, qDub, isLoggedIn: auth.check(),
   });
 
   // Wall-clock progress tracker (logged-in users only, matches the PHP Auth::check() gate)
