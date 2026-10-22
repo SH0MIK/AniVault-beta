@@ -105,7 +105,8 @@ discoverRoutes.get('/schedule', async (c) => {
     ...banner, siteUrl, siteName: c.env.SITE_NAME, pageTitle: 'Anime Schedule',
     currentPage: 'schedule', currentUser: layoutUser, unreadCount, requestUrl: c.req.url,
   });
-  const dayGroups = [...grouped.entries()];
+  // The schedule should display exactly seven day groups, not an extra boundary-day group.
+  const dayGroups = [...grouped.entries()].slice(0, 7);
   const initialDay = dayGroups.find(([day]) => day === fmtDay(new Date().toISOString()))?.[0] ?? dayGroups[0]?.[0] ?? '';
   const dayCount = (entries: any[]) => entries.length;
   html += `
