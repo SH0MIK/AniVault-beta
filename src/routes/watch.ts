@@ -119,11 +119,13 @@ async function getEpisodeOgImage(
 // episode/character/AniList calls.
 const PREVIEW_BOT_RE = /facebookexternalhit|Facebot|Twitterbot|Discordbot|Slackbot|TelegramBot|WhatsApp|LinkedInBot|Pinterest|SkypeUriPreview|vkShare|redditbot|Applebot|Google-InspectionTool|W3C_Validator/i;
 
-async function getMappedWatchAnime(db: Db, requestedId: number): Promise<{ anime: NormalisedAnime; shortId: string } | null> {
+async function getMappedWatchAnime(db: Db, requestedId: string | number): Promise<{ anime: NormalisedAnime; shortId: string } | null> {
   // Hoshika is the sole catalogue identity. Never reinterpret a requested
   // Hoshika ID as a legacy MAL ID or borrow metadata from another catalogue.
-  const identity = await findIdentityByHoshikaId(db, requestedId).catch(() => null);
-  const shortId = identity?.hoshika_short_id ?? `hsk-${requestedId}`;
+  const rawId = String(requestedId ?? '').trim();
+  const hoshikaLookupId = rawId.replace(/^hsk-/i, '');
+  const identity = await findIdentityByHoshikaId(db, hoshikaLookupId).catch(() => null);
+  const shortId = identity?.hoshika_short_id ?? hoshikaLookupId;
   const hoshika = await getHoshikaAnimeById(shortId).catch(() => null);
   if (!hoshika) return null;
   const poster = hoshika.poster || '';
@@ -165,15 +167,17 @@ async function getMappedWatchAnime(db: Db, requestedId: number): Promise<{ anime
 
 watchRoutes.get('/watch', async (c) => {
   const siteUrl = c.env.SITE_URL;
-  const animeId = parseInt(c.req.query('anime') ?? '0', 10) || 0;
+  const animeParam = (c.req.query('anime') ?? '').trim();
+  const hoshikaParam = animeParam.replace(/^hsk-/i, '');
+  const animeId = /^\d+$/.test(hoshikaParam) ? Number(hoshikaParam) : 0;
   const epNum = parseInt(c.req.query('ep') ?? '0', 10) || 0;
-  if (!animeId || !epNum) return c.redirect(siteUrl + '/');
+  if (!hoshikaParam || !epNum) return c.redirect(siteUrl + '/');
 
   const ua = c.req.header('user-agent') ?? '';
   if (PREVIEW_BOT_RE.test(ua)) {
     const db = new Db(c.env.DB);
-    const mapped = await getMappedWatchAnime(db, animeId);
-    if (!mapped) return c.redirect(siteUrl + '/anime?id=' + animeId);
+    const mapped = await getMappedWatchAnime(db, hoshikaParam);
+    if (!mapped) return c.text('Anime not found in Hoshika. Please check the Hoshika ID.', 404);
     const anime = mapped.anime;
     const title = getAnimeTitle(anime);
     const coverFallback = anime.images?.jpg?.large_image_url ?? '';
