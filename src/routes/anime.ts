@@ -290,7 +290,7 @@ animeRoutes.get('/anime', async (c) => {
           ${infoStatRow('Status', anime.status || '—')}
           ${infoStatRow('Aired', anime.aired?.string || '—')}
           ${infoStatRow('Duration', anime.duration || '—')}
-          ${infoStatRow('Rating', anime.rating || '—')}
+          ${infoStatRow('Rating', anime.rating ? ratingInfoHtml(anime.rating) : '—', !!anime.rating)}
           ${infoStatRow('Studio', (anime.studios ?? []).filter(Boolean).map((s: any) => s?.name ?? '').filter(Boolean).join(', ') || '—')}
           ${infoStatRow('Source', anime.source || '—')}
         </div>
@@ -426,6 +426,13 @@ ${animeTailScript(animeDubConfirmed)}`;
   await session.save(c, lifetime);
   return c.html(html);
 });
+
+function ratingInfoHtml(value: string): string {
+  const rating = value.trim();
+  const match = rating.match(/^(.*?)(\\s*\\([^)]*\\)\\s*)$/);
+  if (!match) return h(rating);
+  return `<span class="info-rating-main" style="font-size:1em;font-weight:600;color:var(--text-primary);">${h(match[1].trim())}</span><span class="info-rating-notes" style="font-size:.82em;color:var(--text-muted);">${h(match[2].trim())}</span>`;
+}
 
 function infoStatRow(label: string, value: string | number, rawHtml = false): string {
   return `<div class="info-stat-row"><span class="label">${h(label)}</span><span class="value">${rawHtml ? value : h(String(value))}</span></div>`;
