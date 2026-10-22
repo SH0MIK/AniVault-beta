@@ -185,6 +185,7 @@ function episodeThumbnailFrom(item: any): string {
 export async function getHoshikaAnimeEpisodes(
   title: string,
   kv?: KVNamespace,
+  apiKey?: string,
 ): Promise<HoshikaEpisode[] | null> {
   if (!title) return null;
 
@@ -192,7 +193,7 @@ export async function getHoshikaAnimeEpisodes(
   searchUrl.searchParams.set('q', title);
   try {
     const searchResponse = await fetch(searchUrl.toString(), {
-      headers: { Accept: 'application/json' },
+      headers: { Accept: 'application/json', ...(apiKey ? { 'X-Hoshika-Key': apiKey } : {}) },
     });
     if (!searchResponse.ok) return null;
     const searchPayload: any = await searchResponse.json();
@@ -215,7 +216,7 @@ export async function getHoshikaAnimeEpisodes(
       url.searchParams.set('limit', '100');
       if (after) url.searchParams.set('after', after);
       const response = await fetch(url.toString(), {
-        headers: { Accept: 'application/json' },
+        headers: { Accept: 'application/json', ...(apiKey ? { 'X-Hoshika-Key': apiKey } : {}) },
       });
       if (!response.ok) return episodes.length ? episodes : null;
       const payload: any = await response.json();
@@ -253,7 +254,7 @@ export async function getHoshikaAnimeEpisodes(
  * Fetch episodes directly by Hoshika shortId. This is the preferred API for
  * migrated pages; it avoids title matching and never interprets IDs as MAL.
  */
-export async function getHoshikaAnimeEpisodesById(shortIdValue: string | number): Promise<HoshikaEpisode[] | null> {
+export async function getHoshikaAnimeEpisodesById(shortIdValue: string | number, apiKey?: string): Promise<HoshikaEpisode[] | null> {
   const shortId = String(shortIdValue ?? '').trim();
   if (!shortId) return null;
   const episodes: HoshikaEpisode[] = [];
@@ -311,6 +312,7 @@ export async function getHoshikaAnimeMetadata(
   title: string,
   kv?: KVNamespace,
   includeDetail = false,
+  apiKey?: string,
 ): Promise<HoshikaAnimeMetadata | null> {
   if (!malId || !title) return null;
 
@@ -339,7 +341,7 @@ export async function getHoshikaAnimeMetadata(
     if (needsDetail) {
       const detailResponse = await fetch(
         `https://hoshika.app/api/v1/anime/${encodeURIComponent(shortId)}`,
-        { headers: { Accept: 'application/json' } },
+        { headers: { Accept: 'application/json', ...(apiKey ? { 'X-Hoshika-Key': apiKey } : {}) } },
       );
       if (detailResponse.ok) {
         const detailPayload: any = await detailResponse.json();
@@ -433,7 +435,7 @@ function normaliseHoshikaAnime(item: any): HoshikaCatalogAnime | null {
 }
 
 /** Search only Hoshika. No MAL/Jikan/AniList fallback and no KV cache. */
-export async function searchHoshikaAnime(query: string, limit = 20): Promise<HoshikaCatalogAnime[]> {
+export async function searchHoshikaAnime(query: string, limit = 20, apiKey?: string): Promise<HoshikaCatalogAnime[]> {
   const q = query.trim();
   if (!q) return [];
   try {
@@ -454,7 +456,7 @@ export async function searchHoshikaAnime(query: string, limit = 20): Promise<Hos
 }
 
 /** Fetch one catalog record using Hoshika's canonical shortId. */
-export async function getHoshikaAnimeById(shortId: string | number): Promise<HoshikaCatalogAnime | null> {
+export async function getHoshikaAnimeById(shortId: string | number, apiKey?: string): Promise<HoshikaCatalogAnime | null> {
   const id = String(shortId ?? '').trim();
   if (!id) return null;
   try {
