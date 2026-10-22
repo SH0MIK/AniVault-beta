@@ -40,7 +40,32 @@ browseRoutes.get('/browse', async (c) => {
   let hoshikaSearchItems: Awaited<ReturnType<typeof searchHoshikaAnime>> = [];
   let catalogResult: Awaited<ReturnType<typeof getHoshikaCatalog>> = { items: [], total: 0, totalPages: 1 };
   if (q) hoshikaSearchItems = await searchHoshikaAnime(q, 50);
-  else catalogResult = await getHoshikaCatalog({ genre: selectedGenre, year: year || undefined, sort, page, type: type || undefined, status: status || undefined });
+  else if (sort === 'trending') {
+    const trendingPayload = await fetch('https://hoshika.app/api/v1/browse?type=anime&sort=trending', { headers: { Accept: 'application/json' } }).then(async (r) => r.ok ? r.json() : null).catch(() => null);
+    const trendingRoot: any = trendingPayload?.data ?? trendingPayload?.result ?? trendingPayload ?? {};
+    const trendingRaw = Array.isArray(trendingRoot) ? trendingRoot : (trendingRoot.items ?? trendingRoot.results ?? trendingRoot.anime ?? trendingRoot.entries ?? trendingRoot.data ?? []);
+    const trendingItems = Array.isArray(trendingRaw) ? trendingRaw : [];
+    hoshikaSearchItems = trendingItems.map((item: any) => ({
+      id: String(item.id ?? item.shortId ?? item.short_id ?? ''),
+      shortId: String(item.shortId ?? item.short_id ?? item.id ?? ''),
+      slug: String(item.slug ?? ''),
+      title: String(item.title ?? item.titleEnglish ?? item.titleRomaji ?? item.slug ?? 'Untitled anime'),
+      titleEnglish: String(item.titleEnglish ?? item.title_english ?? ''),
+      titleRomaji: String(item.titleRomaji ?? item.title_romaji ?? ''),
+      titleJapanese: String(item.titleJapanese ?? item.title_japanese ?? ''),
+      synopsis: String(item.synopsis ?? item.description ?? ''),
+      poster: String(item.poster ?? item.posterImage ?? item.coverImage ?? item.cover_image ?? item.image ?? ''),
+      cover: String(item.cover ?? item.bannerImage ?? item.banner_image ?? ''),
+      episodes: Number.isFinite(Number(item.episodes ?? item.episodeCount)) ? Number(item.episodes ?? item.episodeCount) : null,
+      score: Number.isFinite(Number(item.score ?? item.rating)) ? Number(item.score ?? item.rating) : null,
+      status: String(item.status ?? ''),
+      type: String(item.type ?? item.format ?? 'TV'),
+      year: Number.isFinite(Number(item.year ?? item.seasonYear)) ? Number(item.year ?? item.seasonYear) : null,
+      genres: Array.isArray(item.genres) ? item.genres.map((g: any) => typeof g === 'string' ? g : String(g?.name ?? '')).filter(Boolean) : [],
+      raw: item,
+    })).filter((item: any) => item.shortId);
+    catalogResult = { items: hoshikaSearchItems, total: hoshikaSearchItems.length, totalPages: 1 };
+  } else catalogResult = await getHoshikaCatalog({ genre: selectedGenre, year: year || undefined, sort, page, type: type || undefined, status: status || undefined });
   const items = q ? hoshikaSearchItems : catalogResult.items;
   const totalCount = q ? hoshikaSearchItems.length : catalogResult.total;
   const totalPages = q ? 1 : catalogResult.totalPages;
