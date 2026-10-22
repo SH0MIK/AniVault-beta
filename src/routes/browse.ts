@@ -23,7 +23,7 @@ browseRoutes.get('/browse', async (c) => {
   const q = (c.req.query('q') ?? '').trim();
   const type = c.req.query('type') ?? '';
   const status = c.req.query('status') ?? '';
-  const sort = (c.req.query('sort') ?? 'popular').trim();
+  const sort = (c.req.query('sort') ?? 'trending').trim();
   const year = Math.max(0, Number.parseInt(c.req.query('year') ?? '', 10) || 0);
   const page = Math.max(1, parseInt(c.req.query('page') ?? '1', 10) || 1);
   const hoshikaGenres = await getHoshikaGenres();
@@ -49,7 +49,7 @@ browseRoutes.get('/browse', async (c) => {
       id: String(item.id ?? item.shortId ?? item.short_id ?? ''),
       shortId: String(item.shortId ?? item.short_id ?? item.id ?? ''),
       slug: String(item.slug ?? ''),
-      title: String(item.title ?? item.titleEnglish ?? item.titleRomaji ?? item.slug ?? 'Untitled anime'),
+      title: String(item.titleLocalized ?? item.titleEnglish ?? item.title ?? item.titleRomaji ?? item.slug ?? 'Untitled anime'),
       titleEnglish: String(item.titleEnglish ?? item.title_english ?? ''),
       titleRomaji: String(item.titleRomaji ?? item.title_romaji ?? ''),
       titleJapanese: String(item.titleJapanese ?? item.title_japanese ?? ''),
@@ -57,7 +57,7 @@ browseRoutes.get('/browse', async (c) => {
       poster: String(item.poster ?? item.posterImage ?? item.coverImage ?? item.cover_image ?? item.image ?? ''),
       cover: String(item.cover ?? item.bannerImage ?? item.banner_image ?? ''),
       episodes: Number.isFinite(Number(item.episodes ?? item.episodeCount)) ? Number(item.episodes ?? item.episodeCount) : null,
-      score: Number.isFinite(Number(item.score ?? item.rating)) ? Number(item.score ?? item.rating) : null,
+      score: Number.isFinite(Number(item.averageScore ?? item.score ?? item.rating)) ? Number(item.averageScore ?? item.score ?? item.rating) : null,
       status: String(item.status ?? ''),
       type: String(item.type ?? item.format ?? 'TV'),
       year: Number.isFinite(Number(item.year ?? item.seasonYear)) ? Number(item.year ?? item.seasonYear) : null,
@@ -84,9 +84,9 @@ browseRoutes.get('/browse', async (c) => {
     currentUser: layoutUser, unreadCount, requestUrl: c.req.url,
   });
 
-  const heading = q ? `🔍 Results for \"${h(q)}\"` : (sort === 'popular' && !type && !status && !year && genres.length === 0 ? '🔥 Most Popular Series' : '🌐 Browse Anime');
+  const heading = q ? `🔍 Results for \"${h(q)}\"` : (sort === 'trending' && !type && !status && !year && genres.length === 0 ? '🔥 Trending Series' : sort === 'popular' && !type && !status && !year && genres.length === 0 ? '🔥 Most Popular Series' : '🌐 Browse Anime');
 
-  const activeFilterCount = (type ? 1 : 0) + (status ? 1 : 0) + (sort !== 'popular' ? 1 : 0) + (year ? 1 : 0) + genres.length + (q ? 1 : 0);
+  const activeFilterCount = (type ? 1 : 0) + (status ? 1 : 0) + (sort !== 'trending' ? 1 : 0) + (year ? 1 : 0) + genres.length + (q ? 1 : 0);
   const hasAnyFilter = activeFilterCount > 0;
 
   // Each chip links to the same filter set minus that one filter, so a
@@ -96,7 +96,7 @@ browseRoutes.get('/browse', async (c) => {
     if (q && !opts.dropQ) qs.set('q', q);
     if (type && !opts.dropType) qs.set('type', type);
     if (status && !opts.dropStatus) qs.set('status', status);
-    if (sort !== 'popular') qs.set('sort', sort);
+    if (sort !== 'trending') qs.set('sort', sort);
     if (year) qs.set('year', String(year));
     for (const g of genres) if (g !== opts.dropGenre) qs.append('genres[]', String(g));
     const s = qs.toString();
