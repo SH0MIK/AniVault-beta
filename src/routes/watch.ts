@@ -126,7 +126,7 @@ async function getMappedWatchAnime(db: Db, requestedId: string | number): Promis
   const hoshikaLookupId = rawId.replace(/^hsk-/i, '');
   const identity = await findIdentityByHoshikaId(db, hoshikaLookupId).catch(() => null);
   const shortId = identity?.hoshika_short_id ?? hoshikaLookupId;
-  const hoshika = await getHoshikaAnimeById(shortId).catch(() => null);
+  const hoshika = await getHoshikaAnimeById(shortId, c.env.HOSHIKA_API_KEY).catch(() => null);
   if (!hoshika) return null;
   const poster = hoshika.poster || '';
   const status = /airing|ongoing|currently/i.test(hoshika.status) ? 'Currently Airing'
@@ -233,7 +233,7 @@ watchRoutes.get('/watch', async (c) => {
   // Finished and not-yet-aired shows skip all of that and use anime.episodes
   // straight from MAL — that field is already accurate once a show isn't
   // actively airing, so there's nothing for the cache to correct.
-  const hoshikaEpisodes = await getHoshikaAnimeEpisodesById(mapped.shortId);
+  const hoshikaEpisodes = await getHoshikaAnimeEpisodesById(mapped.shortId, c.env.HOSHIKA_API_KEY);
   const totalEps = Math.max(anime.episodes ?? 0, hoshikaEpisodes?.length ?? 0);
   const dubbedLangs = await DubStatus.getFor(db, animeId);
 
