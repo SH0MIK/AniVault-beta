@@ -103,54 +103,28 @@ async function fetchJson(url: string, timeoutMs = 12000, apiKey = ''): Promise<{
 // ── api/animeheaven_stream.php ─────────────────────────────────────────────
 // AnimeHeaven runs inside this Worker. Hoshika IDs are canonical; numeric
 // legacy MAL IDs remain supported only through the verified identity map.
+// AnimeHeaven is resolved by the external scraper service; the Worker only proxies it.
 scraperRoutes.get('/api/animeheaven_stream.php', async (c) => {
-  const animeParam = (c.req.query('anime') ?? '').trim();
-  const legacyMalId = /^\\d+$/.test(animeParam) ? Number(animeParam) : 0;
+  const animeId = parseInt(c.req.query('anime') ?? '0', 10) || 0;
+  const hoshikaId = (c.req.query('hoshikaId') ?? '').trim();
   const epNum = parseInt(c.req.query('ep') ?? '0', 10) || 0;
-  if (!animeParam || !epNum) return c.json({ error: 'Missing anime or ep' }, 400);
-
-  const db = new Db(c.env.DB);
-  let title = '';
-
-  // Prefer the canonical Hoshika shortId, including IDs not yet linked to
-  // legacy user data. This lets newly migrated watch URLs work without MAL.
-  const directAnime = await getHoshikaAnimeById(animeParam).catch(() => null);
-  if (directAnime) {
-    title = directAnime.titleEnglish || directAnime.titleRomaji || directAnime.title || '';
-  }
-
-  if (!title) {
-    const hoshikaIdentity = await findIdentityByHoshikaId(db, animeParam).catch(() => null);
-    if (hoshikaIdentity?.title) title = hoshikaIdentity.title;
-  }
-
-  // Backward compatibility for older pages that still send a MAL ID.
-  if (!title && legacyMalId > 0) {
-    const identity = await findIdentityByLegacyMalId(db, legacyMalId).catch(() => null);
-    if (identity?.verified === 1 && identity.legacy_mal_id === legacyMalId) {
-      const anime = await getHoshikaAnimeById(identity.hoshika_short_id).catch(() => null);
-      title = anime?.titleEnglish || anime?.titleRomaji || anime?.title || identity.title || '';
-    }
-  }
-
-  if (!title) return c.json({ error: 'Could not resolve anime title from Hoshika' }, 404);
-
-  try {
-    const mp4 = await resolveAnimeHeavenMp4(title, epNum);
-    if (!mp4) return c.json({ error: 'AnimeHeaven has no playable MP4 for this episode' }, 404);
-    return c.json({ mp4, playbackMode: 'mp4', source: 'animeheaven' });
-  } catch (error) {
-    console.error('[AnimeHeaven] Worker scraper failed:', error instanceof Error ? error.message : String(error));
-    return c.json({ error: 'AnimeHeaven could not be reached right now' }, 502);
-  }
+  const audio = ['sub', 'dub', 'raw'].includes(c.req.query('audio') ?? '') ? c.req.query('audio')! : 'sub';
+  const server = (c.req.query('server') ?? '').trim();
+  if ((!animeId && !hoshikaId) || !epNum) return c.json({ error: 'Missing anime or ep' }, 400);
+  const base = getScraperBase(c.env);
+  if (!base) return c.json({ error: 'Scraper API not configured' }, 500);
+  let watchUrl = `${base}/api/watch/animeheaven/${hoshikaId || `mal-${animeId}`}/${epNum}/${audio}`;
+  if (server) watchUrl += `?server=${encodeURIComponent(server)}`;
+  const { ok, code, data } = await fetchJson(watchUrl, 23000, c.env.SCRAPER_API_KEY || '');
+  if (!ok) return c.json({ error: data?.error ?? `AnimeHeaven fetch failed HTTP ${code}` }, 502);
+  const m3u8 = data?.hlsProxyUrl ?? data?.m3u8 ?? null;
+  const mp4 = data?.mp4ProxyUrl ?? data?.mp4 ?? null;
+  if (data?.iframeOnly) return c.json({ servers: data?.availableServers ?? [], embedUrl: data.embedUrl ?? '', iframeOnly: true, server: data.server ?? server });
+  if (m3u8) return c.json({ servers: data?.availableServers ?? [], m3u8, server: data.server ?? server, subtitles: data.subtitles ?? [], qualities: data.qualities ?? [] });
+  if (mp4) return c.json({ servers: data?.availableServers ?? [], mp4, server: data.server ?? server, qualities: data.qualities ?? [] });
+  return c.json({ error: 'No stream URL in response' });
 });
 
-// ── api/anikoto_stream.php ─────────────────────────────────────────────────
-// ── api/anikoto_stream.php ─────────────────────────────────────────────────
-// Same reasoning as animeheaven_stream.php above: read-only proxy, no
-// session data to persist, and this is the one that gets hit MOST often
-// per page load (once for the list, then once per provider found) — so
-// it was the biggest contributor to the D1 session-row write pileup.
 scraperRoutes.get('/api/anikoto_stream.php', async (c) => {
   const animeId = parseInt(c.req.query('anime') ?? '0', 10) || 0;
   const hoshikaId = (c.req.query('hoshikaId') ?? '').trim();
@@ -213,100 +187,30 @@ scraperRoutes.get('/api/desidub_stream.php', async (c) => {
 
 // ── api/reanime_stream.php ───────────────────────────────────────────────
 // ReAnime now resolves directly in the Worker; no external scraper API call.
+// ReAnime playback is handled by the scraper API, not a Worker-side resolver.
 scraperRoutes.get('/api/reanime_stream.php', async (c) => {
   const animeId = parseInt(c.req.query('anime') ?? '0', 10) || 0;
   const hoshikaId = (c.req.query('hoshikaId') ?? '').trim();
   const epNum = parseInt(c.req.query('ep') ?? '0', 10) || 0;
   const audio = ['sub', 'dub', 'raw'].includes(c.req.query('audio') ?? '') ? c.req.query('audio')! : 'sub';
   const server = (c.req.query('server') ?? '').trim();
-  if (!animeId || !epNum) return c.json({ error: 'Missing anime or ep' }, 400);
-
-  try {
-    const db = new Db(c.env.DB);
-    let title = '';
-    let reanimeMalId: number | undefined;
-    const direct = await getHoshikaAnimeById(String(animeId)).catch(() => null);
-    if (direct) {
-      // The player normally sends a Hoshika ID, not a MAL ID.
-      // Use the title for ReAnime lookup unless a verified MAL mapping is known.
-      title = direct.titleEnglish || direct.titleRomaji || direct.title || '';
-    }
-    if (!title) {
-      const identity = await findIdentityByLegacyMalId(db, animeId).catch(() => null);
-      if (identity?.verified === 1 && identity.legacy_mal_id === animeId) {
-        const anime = await getHoshikaAnimeById(identity.hoshika_short_id).catch(() => null);
-        title = anime?.titleEnglish || anime?.titleRomaji || anime?.title || identity.title || '';
-        reanimeMalId = identity.legacy_mal_id;
-      }
-    }
-    if (!title) return c.json({ error: 'Could not resolve anime title for ReAnime' }, 404);
-
-    const episodes = await getReanimeEpisodes({ malId: reanimeMalId, title, altTitle: title });
-    const episode = episodes.find((item) => item.num === epNum);
-    if (!episode) return c.json({ error: 'ReAnime episode not found' }, 404);
-    const available = await getReanimeServers(episode.id);
-    const servers = available.map((item) => ({ name: item.name, type: item.type }));
-    if (!server) return c.json({ servers });
-
-    const selected = available.find((item) =>
-      item.name.toLowerCase() === server.toLowerCase() &&
-      (item.type === audio || audio === 'raw')
-    );
-    if (!selected) return c.json({ error: 'ReAnime server not found', servers }, 404);
-
-    const stream = await getReanimeStream(selected.sourceId);
-    if (stream.type === 'iframe' || !stream.m3u8) {
-      return c.json({ servers, embedUrl: stream.embedUrl, iframeOnly: true, server: stream.serverName });
-    }
-    const proxiedMaster = await storeReanimeResource(c.env.API_CACHE, {
-      url: stream.m3u8,
-      playlistKey: stream.playlistKey ?? null,
-      referer: stream.referer || 'https://flixcloud.cc/',
-      kind: 'playlist',
-    });
-    const proxiedSubtitles = await Promise.all((stream.subtitles ?? []).map(async (subtitle: any) => ({
-      ...subtitle,
-      url: subtitle.url ? await storeReanimeResource(c.env.API_CACHE, {
-        url: subtitle.url,
-        playlistKey: stream.playlistKey ?? null,
-        referer: stream.referer || 'https://flixcloud.cc/',
-        kind: reanimeResourceKind(subtitle.url),
-      }) : subtitle.url,
-    })));
-    const proxiedQualities = await Promise.all((stream.qualities ?? []).map(async (quality: any) => ({
-      ...quality,
-      url: quality.url ? await storeReanimeResource(c.env.API_CACHE, {
-        url: quality.url,
-        playlistKey: stream.playlistKey ?? null,
-        referer: stream.referer || 'https://flixcloud.cc/',
-        kind: 'playlist',
-      }) : quality.url,
-    })));
-    return c.json({
-      servers,
-      m3u8: proxiedMaster,
-      server: stream.serverName,
-      subtitles: proxiedSubtitles,
-      qualities: proxiedQualities,
-      audioTracks: await Promise.all((stream.audioTracks ?? []).map(async (track: any) => ({
-        ...track,
-        url: track.url ? await storeReanimeResource(c.env.API_CACHE, {
-          url: track.url,
-          playlistKey: stream.playlistKey ?? null,
-          referer: stream.referer || 'https://flixcloud.cc/',
-          kind: reanimeResourceKind(track.url),
-        }) : track.url,
-      }))),
-      selectedAudioLang: stream.selectedAudioLang,
-    });
-  } catch (error) {
-    console.error('[ReAnime] Worker resolver failed:', error instanceof Error ? error.message : String(error));
-    return c.json({ error: 'ReAnime could not resolve this episode right now' }, 502);
-  }
+  if ((!animeId && !hoshikaId) || !epNum) return c.json({ error: 'Missing anime or ep' }, 400);
+  const base = getScraperBase(c.env);
+  if (!base) return c.json({ error: 'Scraper API not configured' }, 500);
+  let watchUrl = `${base}/api/watch/reanime/${hoshikaId || `mal-${animeId}`}/${epNum}/${audio}`;
+  if (server) watchUrl += `?server=${encodeURIComponent(server)}`;
+  const { ok, code, data } = await fetchJson(watchUrl, 23000, c.env.SCRAPER_API_KEY || '');
+  if (!ok) return c.json({ error: data?.error ?? `ReAnime fetch failed HTTP ${code}` }, 502);
+  const servers = (data?.availableServers ?? []).map((s: string) => ({ name: s, type: audio }));
+  const m3u8 = data?.hlsProxyUrl ?? data?.m3u8 ?? null;
+  const mp4 = data?.mp4ProxyUrl ?? data?.mp4 ?? null;
+  const qualities = Array.isArray(data?.qualities) ? data.qualities : [];
+  if (data?.iframeOnly) return c.json({ servers, embedUrl: data.embedUrl ?? '', iframeOnly: true, server: data.server ?? server });
+  if (m3u8) return c.json({ servers, m3u8, server: data.server ?? server, subtitles: data.subtitles ?? [], qualities });
+  if (mp4) return c.json({ servers, mp4, server: data.server ?? server, qualities });
+  return c.json({ error: 'No stream URL in response' });
 });
 
-// Opaque, short-lived resource tokens keep ReAnime's decrypted HLS playlists and
-// their child playlists/segments on the same-origin Worker without exposing an open proxy.
 scraperRoutes.get('/api/reanime_hls/:token', async (c) => {
   const token = c.req.param('token');
   if (!/^[0-9a-f-]{36}$/i.test(token)) return c.text('Not found', 404);
