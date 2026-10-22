@@ -31,10 +31,10 @@ function toCard(a: any, userStatus: string | null) {
   };
 }
 
-async function hoshikaForLegacyId(db: Db, legacyId: number) {
+async function hoshikaForLegacyId(db: Db, legacyId: number, apiKey?: string) {
   const identity = await findIdentityByLegacyMalId(db, legacyId).catch(() => null);
   if (!identity || identity.verified !== 1 || !identity.hoshika_short_id) return null;
-  const anime = await getHoshikaAnimeById(identity.hoshika_short_id);
+  const anime = await getHoshikaAnimeById(identity.hoshika_short_id, apiKey);
   if (!anime) return null;
   return {
     id: legacyId,
