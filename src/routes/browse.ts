@@ -39,8 +39,25 @@ browseRoutes.get('/browse', async (c) => {
   const selectedGenre = genreList.find((g) => genres.includes(g.mal_id))?.slug ?? '';
   let hoshikaSearchItems: Awaited<ReturnType<typeof searchHoshikaAnime>> = [];
   let catalogResult: Awaited<ReturnType<typeof getHoshikaCatalog>> = { items: [], total: 0, totalPages: 1 };
-  if (q) hoshikaSearchItems = await searchHoshikaAnime(q, 50);
-  else if (sort === 'trending') {
+  if (q) {
+    hoshikaSearchItems = await searchHoshikaAnime(q, 50);
+    const norm = (value: unknown) => String(value ?? '').trim().toLowerCase().replace(/[_-]+/g, ' ');
+    if (year) hoshikaSearchItems = hoshikaSearchItems.filter((item: any) => Number(item.year ?? item.raw?.year ?? item.raw?.seasonYear) === year);
+    if (type) hoshikaSearchItems = hoshikaSearchItems.filter((item: any) => {
+      const actual = norm(item.type ?? item.raw?.format);
+      const aliases: Record<string, string[]> = { tv: ['tv', 'tv series', 'television'], movie: ['movie', 'film'], ova: ['ova'], ona: ['ona'], special: ['special'], music: ['music'] };
+      return (aliases[norm(type)] ?? [norm(type)]).some((alias) => actual === alias || actual.includes(alias));
+    });
+    if (status) hoshikaSearchItems = hoshikaSearchItems.filter((item: any) => {
+      const actual = norm(item.status ?? item.raw?.airingStatus);
+      if (status === 'airing') return /releasing|airing|ongoing|currently/.test(actual);
+      if (status === 'complete') return /finished|complete|ended/.test(actual);
+      if (status === 'upcoming') return /upcoming|not yet released|unreleased|planned/.test(actual);
+      return actual === norm(status);
+    });
+    if (selectedGenre) hoshikaSearchItems = hoshikaSearchItems.filter((item: any) => (item.genres ?? []).some((g: any) => norm(typeof g === 'string' ? g : g?.name) === norm(selectedGenre) || norm(typeof g === 'string' ? g : g?.name) === norm(genreList.find((x) => x.slug === selectedGenre)?.name)));
+  }
+  else if (sort === 'trending' && !type && !status && !year && genres.length === 0) {
     const trendingPayload: any = await fetch('https://hoshika.app/api/v1/browse?type=anime&sort=trending', { headers: { Accept: 'application/json' } }).then(async (r) => r.ok ? r.json() : null).catch(() => null);
     const trendingRoot: any = trendingPayload?.data ?? trendingPayload?.result ?? trendingPayload ?? {};
     const trendingRaw = Array.isArray(trendingRoot) ? trendingRoot : (trendingRoot.items ?? trendingRoot.results ?? trendingRoot.anime ?? trendingRoot.entries ?? trendingRoot.data ?? []);
