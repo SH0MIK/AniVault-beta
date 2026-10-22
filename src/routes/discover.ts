@@ -129,7 +129,7 @@ discoverRoutes.get('/schedule', async (c) => {
   </section>
   <nav class="schedule-week-nav" aria-label="Schedule week navigation">
     <a class="btn btn-ghost" href="${h(weekLink(week.prev))}">‹ Prev</a>
-    <div style="text-align:center;"><strong>Week ${h(String(week.week ?? '—'))} · ${h(String(week.year ?? ''))}</strong><div class="text-muted" style="font-size:.82rem;margin-top:.2rem;">${week.startISO ? h(new Intl.DateTimeFormat('en-US',{timeZone:'UTC',month:'short',day:'numeric'}).format(new Date(week.startISO))+' - '+h(new Intl.DateTimeFormat('en-US',{timeZone:'UTC',month:'short',day:'numeric'}).format(new Date(Date.parse(week.startISO)+6*86400000))) : ''}</div></div>
+    <div style="text-align:center;"><strong>Week ${h(String(week.week ?? '—'))} · ${h(String(week.year ?? ''))}</strong><div class="text-muted" style="font-size:.82rem;margin-top:.2rem;">${week.startISO ? h(`${new Intl.DateTimeFormat('en-US',{timeZone:'UTC',month:'short',day:'numeric'}).format(new Date(week.startISO))} - ${new Intl.DateTimeFormat('en-US',{timeZone:'UTC',month:'short',day:'numeric'}).format(new Date(Date.parse(week.startISO)+6*86400000))}`) : ''} </div></div>
     <a class="btn btn-ghost" href="${h(weekLink(week.next))}">Next ›</a>
   </nav>
   <nav class="schedule-day-nav" aria-label="Choose airing day">
