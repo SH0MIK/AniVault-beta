@@ -66,7 +66,7 @@ mobileHomeRoutes.get('/api/mobile/home-v2', async (c) => {
     const rows = await db.fetchAll<{ anime_id: number }>(
       'SELECT anime_id, MAX(updated_at) AS updated_at FROM episode_videos WHERE is_active = 1 GROUP BY anime_id ORDER BY MAX(updated_at) DESC LIMIT 12'
     );
-    const resolved = await Promise.all(rows.map((row) => hoshikaForLegacyId(db, Number(row.anime_id))));
+    const resolved = await Promise.all(rows.map((row) => hoshikaForLegacyId(db, Number(row.anime_id), c.env.HOSHIKA_API_KEY)));
     watchNowList = resolved.filter(Boolean) as any[];
   } catch {
     watchNowList = [];
