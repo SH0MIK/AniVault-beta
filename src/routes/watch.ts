@@ -201,9 +201,9 @@ watchRoutes.get('/watch', async (c) => {
   const lifetime = Number(c.env.SESSION_LIFETIME_SECONDS ?? 86400);
   const session = await Session.load(c, db, lifetime);
   const auth = new Auth(db, session, c.env as any, c.req.header('cf-connecting-ip') ?? 'unknown');
-  // The requested anime ID is interpreted only as a Hoshika numeric ID.
-  const mapped = await getMappedWatchAnime(db, animeId);
-  if (!mapped) return c.redirect(siteUrl + '/anime?id=' + animeId);
+  // Accept both plain Hoshika short IDs and the hsk-<id> URL form.
+  const mapped = await getMappedWatchAnime(db, hoshikaParam);
+  if (!mapped) return c.text('Anime not found in Hoshika. Please check the Hoshika ID.', 404);
   const anime = mapped.anime;
 
   // No more login wall on the watch page: a signed-out visitor gets a real
