@@ -50,7 +50,7 @@ apiListRoutes.on(['GET', 'POST'], '/api/list.php', async (c) => {
   let result: any;
   switch (action) {
     case 'add': {
-      result = await AnimeTracker.addOrUpdate(db, userId, body as Record<string, any>);
+      result = await AnimeTracker.addOrUpdate(db, userId, body as Record<string, any>, c.env.HOSHIKA_API_KEY);
       if (result.success) {
         const animeId = parseInt((body.anime_id as string) ?? '0', 10) || 0;
         const alreadyTracked = await db.fetchOne<{id:number}>('SELECT id FROM points_ledger WHERE user_id=? AND event_key=?', [userId, 'add_anime:' + animeId]);
