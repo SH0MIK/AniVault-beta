@@ -604,7 +604,6 @@ scraperRoutes.post('/api/dub_report.php', async (c) => {
 scraperRoutes.get('/api/embed.php', async (c) => {
   const siteUrl = c.env.SITE_URL;
   const animeId = parseInt(c.req.query('anime') ?? '0', 10) || 0;
-  const hoshikaId = (c.req.query('hoshikaId') ?? '').trim();
   const epNum = parseInt(c.req.query('ep') ?? '0', 10) || 0;
   if (!animeId || !epNum) return c.text('Not found', 404);
 
