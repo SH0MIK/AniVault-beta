@@ -96,7 +96,7 @@ homeRoutes.get('/', async (c) => {
     const resolved = await Promise.all(rows.map(async ({ anime_id }) => {
       const identity = await findIdentityByLegacyMalId(db, anime_id).catch(() => null);
       if (!identity || identity.verified !== 1 || !identity.hoshika_short_id) return null;
-      const anime = await getHoshikaAnimeById(identity.hoshika_short_id);
+      const anime = await getHoshikaAnimeById(identity.hoshika_short_id, c.env.HOSHIKA_API_KEY);
       return toHoshikaNormalisedAnime(anime, anime_id);
     }));
     watchNowList = resolved.filter((anime): anime is NormalisedAnime => anime !== null);
@@ -152,7 +152,7 @@ homeRoutes.get('/', async (c) => {
     const legacyId = Number(row.anime_id);
     const identity = await findIdentityByLegacyMalId(db, legacyId).catch(() => null);
     if (!identity || identity.verified !== 1 || !identity.hoshika_short_id) return null;
-    const hoshika = await getHoshikaAnimeById(identity.hoshika_short_id);
+    const hoshika = await getHoshikaAnimeById(identity.hoshika_short_id, c.env.HOSHIKA_API_KEY);
     const anime = toHoshikaNormalisedAnime(hoshika, legacyId);
     return anime ? { row, anime } : null;
   }))).filter((item): item is { row: any; anime: NormalisedAnime } => item !== null);
