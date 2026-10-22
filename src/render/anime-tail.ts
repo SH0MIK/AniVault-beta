@@ -400,7 +400,7 @@ async function lazyLoadCharacters() {
     const res = await fetch((window.__siteUrl || '') + '/api/hoshika/anime/' + encodeURIComponent(animeId), { cache: 'no-store' });
     if (!res.ok) throw new Error('Hoshika anime details unavailable');
     const payload = await res.json();
-    const chars = (payload?.data?.characters || []).slice(0, 12);
+    const chars = (payload?.data?.raw?.characters || payload?.data?.characters || []).slice(0, 12);
     if (loading) loading.style.display = 'none';
     grid.innerHTML = '';
     if (!chars.length) {
@@ -612,7 +612,7 @@ async function lazyLoadRelated() {
     const res = await fetch((window.__siteUrl || '') + '/api/hoshika/anime/' + encodeURIComponent(animeId), { cache: 'no-store' });
     if (!res.ok) throw new Error('Hoshika recommendations unavailable');
     const payload = await res.json();
-    const recommendations = (payload?.data?.recommendations || []).slice(0, 12);
+    const recommendations = (payload?.data?.raw?.recommendations || payload?.data?.recommendations || []).slice(0, 12);
     if (loading) loading.style.display = 'none';
     grid.innerHTML = '';
     if (!recommendations.length) {
