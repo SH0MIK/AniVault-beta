@@ -18,6 +18,7 @@ export interface MalEnv {
   API_CACHE_ENABLED?: string; // "1" / "0" via wrangler.toml var
   API_CACHE_TIME?: string; // seconds
   TMDB_API_KEY?: string;
+  HOSHIKA_API_KEY?: string;
   SCRAPER_API_BASE?: string; // private scraper service URL
   SCRAPER_API_KEY?: string; // server-side key, never sent to browsers
 }
@@ -357,7 +358,7 @@ export class MalAPI {
       targets.map(async (anime) => ({
         id: anime.mal_id,
         art: await this.getTmdbArtForCard(anime, true).catch(() => ({ poster: '', cover: '', logo: '' })),
-        hoshika: await getHoshikaAnimeMetadata(anime.mal_id, anime.title, this.kv, true).catch(() => null),
+        hoshika: await getHoshikaAnimeMetadata(anime.mal_id, anime.title, this.kv, true, this.env.HOSHIKA_API_KEY).catch(() => null),
       }))
     );
 
@@ -716,7 +717,7 @@ export class MalAPI {
     const resolved = await Promise.all(items.map(async (anime) => {
       const title = anime.title_english || anime.title || anime.title_japanese || '';
       const metadata = title
-        ? await getHoshikaAnimeMetadata(anime.mal_id, title, this.kv, true).catch(() => null)
+        ? await getHoshikaAnimeMetadata(anime.mal_id, title, this.kv, true, this.env.HOSHIKA_API_KEY).catch(() => null)
         : null;
       return { anime, poster: metadata?.poster || '', cover: metadata?.cover || '' };
     }));
@@ -953,7 +954,7 @@ export class MalAPI {
     // per row on top of everything else the page needs.
     const [art, hoshika] = await Promise.all([
       animeId ? this.getAnimeArt(animeId, !isList) : Promise.resolve({ poster: '', cover: '', logo: '' }),
-      animeId ? getHoshikaAnimeMetadata(animeId, node.title ?? '', this.kv, true).catch(() => null) : Promise.resolve(null),
+      animeId ? getHoshikaAnimeMetadata(animeId, node.title ?? '', this.kv, true, this.env.HOSHIKA_API_KEY).catch(() => null) : Promise.resolve(null),
     ]);
     const mediumImage = hoshika?.poster || art.poster;
     const largeImage = hoshika?.poster || art.poster;
@@ -1056,7 +1057,7 @@ export class MalAPI {
   async searchAnime(query: string, page = 1, type = '', status = ''): Promise<{ data: NormalisedAnime[]; pagination: any }> {
     // Legacy callers store numeric MAL IDs, so expose only Hoshika search
     // results with an explicitly verified legacy mapping.
-    const items = await searchHoshikaAnime(query, 50);
+    const items = await searchHoshikaAnime(query, 50, this.env.HOSHIKA_API_KEY);
     const data: NormalisedAnime[] = [];
     for (const item of items) {
       const identity = await this.db.fetchOne<any>(
@@ -1102,7 +1103,7 @@ export class MalAPI {
     if (!Number.isSafeInteger(id) || id <= 0) return { data: null };
     const identity = await findIdentityByLegacyMalId(this.db, id).catch(() => null);
     if (identity?.verified !== 1 || !identity.hoshika_short_id) return { data: null };
-    const item = await getHoshikaAnimeById(identity.hoshika_short_id);
+    const item = await getHoshikaAnimeById(identity.hoshika_short_id, this.env.HOSHIKA_API_KEY);
     if (!item) return { data: null };
     const poster = item.poster || '';
     return { data: {
@@ -1152,7 +1153,7 @@ export class MalAPI {
       if (!identity || identity.verified !== 1 || !identity.hoshika_short_id) {
         return { data: [], pagination: { last_visible_page: 1, has_next_page: false } };
       }
-      const episodes = await getHoshikaAnimeEpisodesById(identity.hoshika_short_id);
+      const episodes = await getHoshikaAnimeEpisodesById(identity.hoshika_short_id, this.env.HOSHIKA_API_KEY);
       const data = (episodes ?? []).map((episode) => ({
         mal_id: episode.number,
         title: episode.title,
