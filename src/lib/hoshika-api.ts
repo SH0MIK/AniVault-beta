@@ -390,6 +390,7 @@ export interface HoshikaCatalogAnime {
   status: string;
   type: string;
   year: number | null;
+  season: string;
   genres: string[];
   raw: any;
 }
@@ -414,7 +415,7 @@ function normaliseHoshikaAnime(item: any): HoshikaCatalogAnime | null {
   const titleEnglish = firstText(x.titleEnglish, x.title_english, x.titles?.english);
   const titleRomaji = firstText(x.titleRomaji, x.title_romaji, x.titles?.romaji);
   const titleJapanese = firstText(x.titleJapanese, x.title_japanese, x.titles?.japanese);
-  const title = firstText(x.title, titleEnglish, titleRomaji, titleJapanese, x.slug);
+  const title = firstText(x.titleLocalized, x.title_localized, x.title, titleEnglish, titleRomaji, titleJapanese, x.slug);
   const rawGenres = Array.isArray(x.genres) ? x.genres : [];
   const genres = rawGenres.map((g: any) => typeof g === 'string' ? g : firstText(g?.name, g?.title)).filter(Boolean);
   const rawYear = x.year ?? x.seasonYear ?? x.startYear ?? x.start_date?.year;
@@ -430,10 +431,11 @@ function normaliseHoshikaAnime(item: any): HoshikaCatalogAnime | null {
     poster: posterFrom(x),
     cover: coverFrom(x),
     episodes: episodeCountFrom(x),
-    score: numberOrNull(x.score ?? x.rating ?? x.mean),
+    score: numberOrNull(x.averageScore ?? x.average_score ?? x.score ?? x.rating ?? x.mean),
     status: firstText(x.status, x.airingStatus),
     type: firstText(x.type, x.format, x.mediaType),
     year: numberOrNull(rawYear),
+    season: firstText(x.season, x.seasonName, x.season_name),
     genres,
     raw: x,
   };
