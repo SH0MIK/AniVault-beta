@@ -254,20 +254,20 @@ animeRoutes.get('/anime', async (c) => {
 
       <div id="anime-user-status" class="mt-2" data-total-eps="${totalEps}" data-eps-watched="${userEntry?.episodes_watched ?? 0}">
         ${userEntry ? `
-        <div class="flex gap-1" style="gap:8px;align-items:center;justify-content:center;">
+        <div class="flex gap-1" style="gap:8px;align-items:center;justify-content:flex-start;flex-wrap:wrap;">
           <span id="anime-status-badge">${statusBadge(userEntry.status)}</span>
           <span id="anime-score-badge" style="color:var(--gold);font-size:0.9rem;">${userEntry.score ? `⭐ ${userEntry.score}/10` : ''}</span>
           <span id="anime-eps-badge" class="text-muted" style="font-size:0.85rem;">${totalEps > 0 ? `${userEntry.episodes_watched}/${totalEps} eps` : ''}</span>
         </div>
-        <div id="anime-progress-wrap" class="progress-bar mt-1" style="max-width:400px;margin-left:auto;margin-right:auto;${totalEps > 0 && userEntry.episodes_watched ? '' : 'display:none'}">
+        <div id="anime-progress-wrap" class="progress-bar mt-1" style="max-width:400px;margin-left:0;margin-right:auto;${totalEps > 0 && userEntry.episodes_watched ? '' : 'display:none'}">
           <div id="anime-progress-fill" class="progress-fill" style="width:${totalEps > 0 ? Math.min(100, Math.round((userEntry.episodes_watched / totalEps) * 100)) : 0}%"></div>
         </div>` : `
-        <div class="flex gap-1" style="gap:8px;align-items:center;justify-content:center;">
+        <div class="flex gap-1" style="gap:8px;align-items:center;justify-content:flex-start;flex-wrap:wrap;">
           <span id="anime-status-badge"></span>
           <span id="anime-score-badge" style="color:var(--gold);font-size:0.9rem;"></span>
           <span id="anime-eps-badge" class="text-muted" style="font-size:0.85rem;"></span>
         </div>
-        <div id="anime-progress-wrap" class="progress-bar mt-1" style="max-width:400px;margin-left:auto;margin-right:auto;display:none;"><div id="anime-progress-fill" class="progress-fill" style="width:0%"></div></div>`}
+        <div id="anime-progress-wrap" class="progress-bar mt-1" style="max-width:400px;margin-left:0;margin-right:auto;display:none;"><div id="anime-progress-fill" class="progress-fill" style="width:0%"></div></div>`}
       </div>
     </div>
   </div>
