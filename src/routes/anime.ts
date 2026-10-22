@@ -77,7 +77,7 @@ animeRoutes.get('/anime/hoshika', async (c) => {
   }
 
   const [anime, identity] = await Promise.all([
-    getHoshikaAnimeById(shortId),
+    getHoshikaAnimeById(shortId, c.env.HOSHIKA_API_KEY),
     findIdentityByHoshikaId(db, shortId).catch(() => null),
   ]);
   const currentUser = auth.check() ? await auth.getCurrentUser() : null;
