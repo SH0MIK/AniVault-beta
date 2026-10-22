@@ -3,7 +3,7 @@ import type { Env } from '../index';
 import { Db } from '../lib/db';
 import { Session } from '../lib/session';
 import { Auth } from '../lib/auth';
-import { getHoshikaAnimeById } from '../lib/hoshika-api';
+import { getHoshikaAnimeById, getHoshikaSeason } from '../lib/hoshika-api';
 import { findIdentityByLegacyMalId } from '../lib/anime-identity';
 import { getUserAnimeStatuses } from '../lib/user-list';
 
@@ -55,9 +55,14 @@ mobileHomeRoutes.get('/api/mobile/home-v2', async (c) => {
   const currentUser = auth.check() ? await auth.getCurrentUser() : null;
   const userStatuses = currentUser ? await getUserAnimeStatuses(db, currentUser.id) : {};
 
-  // Hoshika currently has no confirmed popularity, seasonal, upcoming, or
-  // genre-list endpoints. Keep these arrays honest rather than using MAL data.
-  const seasonal: any[] = [];
+  // Seasonal cards use Hoshika's dedicated season feed; other listing sections
+  // remain empty until Hoshika provides native endpoints for them.
+  const seasonFeed = await getHoshikaSeason();
+  const seasonal: any[] = seasonFeed.items.map((a) => ({
+    id: a.shortId, shortId: a.shortId, title: a.title, image: a.poster,
+    score: a.score, type: a.type, episodes: a.episodes ?? 0,
+    status: a.status, year: a.year, source: 'hoshika',
+  }));
   const topAnime: any[] = [];
   const upcoming: any[] = [];
 
@@ -124,7 +129,7 @@ mobileHomeRoutes.get('/api/mobile/home-v2', async (c) => {
     success: true,
     hero,
     genres: [],
-    catalogMessage: 'Hoshika listing and genre feeds are not available yet.',
+    catalogMessage: 'Seasonal anime is provided by Hoshika; other catalogue listing feeds are not available yet.',
     seasonal: seasonal.map((a: any) => toCard(a, userStatuses[a.id] ?? null)),
     top: topAnime.map((a: any) => toCard(a, userStatuses[a.id] ?? null)),
     upcoming: upcoming.map((a: any) => toCard(a, userStatuses[a.id] ?? null)),
