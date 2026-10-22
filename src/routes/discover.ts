@@ -162,7 +162,7 @@ discoverRoutes.get('/schedule', async (c) => {
               ${image ? `<img src="${h(image)}" alt="" loading="lazy" style="display:block;width:92px;aspect-ratio:2/3;object-fit:cover;border-radius:8px;">` : '<div class="anime-card-placeholder" style="width:92px;aspect-ratio:2/3;border-radius:8px;"></div>'}
             </a>
             <div style="min-width:0;flex:1;">
-              <div class="text-muted schedule-release-timer" data-iso="${h(airingAt)}" data-airing-ms="${Number.isFinite(Date.parse(airingAt)) ? Date.parse(airingAt) : ''}" style="font-size:.82rem;margin-bottom:.35rem;">${h(fmtTime(airingAt))}</div>
+              <div class="text-muted schedule-airing-time" data-iso="${h(airingAt)}" style="font-size:.82rem;margin-bottom:.35rem;">${h(fmtTime(airingAt))}</div>
               <h3 style="font-size:1rem;line-height:1.4;margin:0 0 .4rem;"><a href="/anime/hoshika?id=${id}">${h(title)}</a></h3>
               <div class="text-muted" style="font-size:.85rem;">${episode !== null ? `Episode ${episode}` : 'Episode TBA'} · ${h(format)}</div>
               <div class="schedule-episode-action" style="margin-top:.7rem;"></div>
@@ -187,19 +187,17 @@ discoverRoutes.get('/schedule', async (c) => {
  function updateReleaseTimers(){
   const now=Date.now();
   root.querySelectorAll('.schedule-episode').forEach(card=>{
-   const timer=card.querySelector('.schedule-release-timer');const action=card.querySelector('.schedule-episode-action');
-   if(!timer||!action)return;
-   const airing=Number(timer.dataset.airingMs);const watchUrl=card.dataset.watchUrl; 
-   if(!Number.isFinite(airing)||!timer.dataset.airingMs){timer.textContent='Release time TBA';action.innerHTML='';return;}
+   const action=card.querySelector('.schedule-episode-action');
+   if(!action)return;
+   const airing=Number(card.dataset.airingMs);const watchUrl=card.dataset.watchUrl;
+   if(!Number.isFinite(airing)||!card.dataset.airingMs){action.innerHTML='<span class="schedule-countdown">Release time TBA</span>';return;}
    const remaining=airing-now;
    if(remaining<=0){
-    timer.textContent='Episode aired';
     const episode=Number((watchUrl||'').split('&ep=')[1]);
-    action.innerHTML=Number.isFinite(episode)&&episode>0?'<a class="schedule-watch-button" href="'+watchUrl+'">▶ Watch Episode '+episode+'</a>':'';
+    action.innerHTML=Number.isFinite(episode)&&episode>0?'<a class="schedule-watch-button" href="'+watchUrl+'">▶ Watch Episode '+episode+'</a>':'<span class="schedule-countdown">Episode aired</span>';
    }else{
     const totalSeconds=Math.floor(remaining/1000);const days=Math.floor(totalSeconds/86400);const hours=Math.floor((totalSeconds%86400)/3600);const minutes=Math.floor((totalSeconds%3600)/60);const seconds=totalSeconds%60;
-    timer.textContent='Releases in '+(days?days+'d ':'')+String(hours).padStart(2,'0')+':'+String(minutes).padStart(2,'0')+':'+String(seconds).padStart(2,'0');
-    action.innerHTML='<span class="schedule-countdown">Coming soon</span>';
+    action.innerHTML='<span class="schedule-countdown">Releases in '+(days?days+'d ':'')+String(hours).padStart(2,'0')+':'+String(minutes).padStart(2,'0')+':'+String(seconds).padStart(2,'0')+'</span>';
    }
   });
  }
