@@ -10,7 +10,7 @@ import { h } from '../lib/helpers';
 import { renderHeader, renderFooter, CurrentUser } from '../render/layout';
 import { icon } from '../lib/icons';
 import { getBannerData } from '../lib/settings';
-import { getHoshikaSeason } from '../lib/hoshika-api';
+import { getHoshikaSeason, getHoshikaTrending } from '../lib/hoshika-api';
 
 export const discoverRoutes = new Hono<{ Bindings: Env }>();
 
@@ -95,7 +95,86 @@ discoverRoutes.get('/seasonal', async (c) => {
   await session.save(c, lifetime);
   return c.html(html);
 });
-discoverRoutes.get('/top', (c) => unavailablePage(c, 'Top anime', 'top anime'));
+discoverRoutes.get('/top', async (c) => {
+  const db = new Db(c.env.DB);
+  const lifetime = Number(c.env.SESSION_LIFETIME_SECONDS ?? 86400);
+  const session = await Session.load(c, db, lifetime);
+  const auth = new Auth(db, session, c.env as any, c.req.header('cf-connecting-ip') ?? 'unknown');
+  const siteUrl = c.env.SITE_URL;
+  const currentUser = auth.check() ? await auth.getCurrentUser() : null;
+  const unreadCount = currentUser ? await Notification.unreadCount(db, currentUser.id) : 0;
+  const layoutUser: CurrentUser | null = currentUser
+    ? { id: currentUser.id, username: currentUser.username, avatar_url: currentUser.avatar_url, role: currentUser.role }
+    : null;
+  const banner = await getBannerData(db);
+  const items = await getHoshikaTrending();
+  const pageSize = 25;
+  const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
+  const page = Math.min(totalPages, Math.max(1, Number.parseInt(c.req.query('page') ?? '1', 10) || 1));
+  const pageItems = items.slice((page - 1) * pageSize, page * pageSize);
+
+  let html = renderHeader({
+    ...banner, siteUrl, siteName: c.env.SITE_NAME, pageTitle: 'Top Anime',
+    currentPage: 'top', currentUser: layoutUser, unreadCount, requestUrl: c.req.url,
+  });
+  html += `
+<style>
+.top-table-responsive{overflow-x:auto;-webkit-overflow-scrolling:touch;width:100%;border-radius:8px}
+.top-data-table{width:100%;min-width:650px;border-collapse:collapse}
+.top-data-table th,.top-data-table td{padding:.8rem .9rem;text-align:left;border-bottom:1px solid var(--border);white-space:nowrap}
+.top-data-table th{font-size:.78rem;text-transform:uppercase;letter-spacing:.04em;color:var(--text-muted);font-weight:700}
+.top-data-table tbody tr{transition:background .15s}
+.top-data-table tbody tr:hover{background:var(--bg-surface)}
+.top-anime-link{display:flex;align-items:center;gap:12px;min-width:240px;white-space:normal;color:var(--text-main);text-decoration:none;font-weight:500}
+.top-anime-link img{width:36px;height:50px;object-fit:cover;border-radius:4px;flex-shrink:0}
+.top-anime-placeholder{width:36px;height:50px;border-radius:4px;background:var(--bg-surface);display:grid;place-items:center;flex-shrink:0}
+.top-score{color:var(--gold);font-weight:600}
+.top-pagination{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:.5rem;margin:2rem 0}
+.top-pagination a{padding:8px 14px;border-radius:6px;background:rgba(255,255,255,.05);color:var(--text-main);text-decoration:none;transition:.2s}
+.top-pagination a:hover{background:rgba(255,255,255,.1)}
+.top-pagination a.current{background:var(--primary-color,#6c5ce7);color:white;font-weight:bold}
+@media(max-width:600px){.top-page-heading{align-items:flex-start;flex-direction:column}}
+</style>
+<main class="container section">
+  <div class="flex-between mb-3 top-page-heading" style="flex-wrap:wrap;gap:1rem;">
+    <div><h1 style="margin:0;">🏆 Top Anime</h1><p class="text-muted" style="margin:.35rem 0 0;">Trending anime on Hoshika</p></div>
+    <span class="filter-pill active">Trending</span>
+  </div>
+  ${pageItems.length ? `
+  <div class="card" style="margin-bottom:1.5rem;padding:0;overflow:hidden;">
+    <div class="top-table-responsive"><table class="top-data-table">
+      <thead><tr><th>Rank</th><th>Anime</th><th>Type</th><th>Eps</th><th>Score</th></tr></thead>
+      <tbody>${pageItems.map((anime, index) => {
+        const title = anime.title || anime.titleEnglish || anime.titleRomaji || anime.slug || 'Untitled anime';
+        const id = encodeURIComponent(anime.shortId);
+        const rank = (page - 1) * pageSize + index + 1;
+        const score = anime.score !== null && Number.isFinite(anime.score) ? anime.score.toFixed(2) : '—';
+        const episodes = anime.episodes !== null ? String(anime.episodes) : '—';
+        const poster = anime.poster;
+        return `<tr>
+          <td><strong style="color:var(--gold);font-family:var(--font-display);">#${rank}</strong></td>
+          <td><a class="top-anime-link" href="/anime/hoshika?id=${id}">
+            ${poster ? `<img src="${h(poster)}" alt="" loading="lazy">` : '<span class="top-anime-placeholder"></span>'}
+            <span>${h(title)}</span>
+          </a></td>
+          <td>${h(anime.type || '—')}</td>
+          <td>${h(episodes)}</td>
+          <td class="top-score">${h(score)}</td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table></div>
+  </div>
+  ${totalPages > 1 ? `<nav class="top-pagination" aria-label="Top anime pages">
+    ${page > 1 ? `<a href="/top?page=${page - 1}">‹ Prev</a>` : ''}
+    ${Array.from({ length: totalPages }, (_, index) => index + 1).filter(number => number === 1 || number === totalPages || Math.abs(number - page) <= 2).map(number => `<a href="/top?page=${number}" class="${number === page ? 'current' : ''}">${number}</a>`).join('')}
+    ${page < totalPages ? `<a href="/top?page=${page + 1}">Next ›</a>` : ''}
+  </nav>` : ''}` : `
+  <div class="card card-body"><p class="text-muted" style="margin:0;">Could not load trending anime from Hoshika right now. Please try again shortly.</p></div>`}
+</main>`;
+  html += renderFooter({ siteUrl, currentUser: layoutUser });
+  await session.save(c, lifetime);
+  return c.html(html);
+});
 discoverRoutes.get('/schedule', async (c) => {
   const db = new Db(c.env.DB);
   const lifetime = Number(c.env.SESSION_LIFETIME_SECONDS ?? 86400);
