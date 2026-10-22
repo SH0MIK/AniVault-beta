@@ -31,10 +31,10 @@ function toCard(a: any, userStatus: string | null) {
   };
 }
 
-async function hoshikaForLegacyId(db: Db, legacyId: number) {
+async function hoshikaForLegacyId(db: Db, legacyId: number, apiKey?: string) {
   const identity = await findIdentityByLegacyMalId(db, legacyId).catch(() => null);
   if (!identity || identity.verified !== 1 || !identity.hoshika_short_id) return null;
-  const anime = await getHoshikaAnimeById(identity.hoshika_short_id);
+  const anime = await getHoshikaAnimeById(identity.hoshika_short_id, apiKey);
   if (!anime) return null;
   return {
     id: legacyId,
@@ -57,7 +57,7 @@ mobileHomeRoutes.get('/api/mobile/home-v2', async (c) => {
 
   // Seasonal cards use Hoshika's dedicated season feed; other listing sections
   // remain empty until Hoshika provides native endpoints for them.
-  const seasonFeed = await getHoshikaSeason();
+  const seasonFeed = await getHoshikaSeason(c.env.HOSHIKA_API_KEY);
   const seasonal: any[] = seasonFeed.items.map((a) => ({
     id: a.shortId, shortId: a.shortId, title: a.title, image: a.poster,
     score: a.score, type: a.type, episodes: a.episodes ?? 0,
@@ -71,7 +71,7 @@ mobileHomeRoutes.get('/api/mobile/home-v2', async (c) => {
     const rows = await db.fetchAll<{ anime_id: number }>(
       'SELECT anime_id, MAX(updated_at) AS updated_at FROM episode_videos WHERE is_active = 1 GROUP BY anime_id ORDER BY MAX(updated_at) DESC LIMIT 12'
     );
-    const resolved = await Promise.all(rows.map((row) => hoshikaForLegacyId(db, Number(row.anime_id))));
+    const resolved = await Promise.all(rows.map((row) => hoshikaForLegacyId(db, Number(row.anime_id), c.env.HOSHIKA_API_KEY)));
     watchNowList = resolved.filter(Boolean) as any[];
   } catch {
     watchNowList = [];
@@ -104,7 +104,7 @@ mobileHomeRoutes.get('/api/mobile/home-v2', async (c) => {
     const curatedRows = await db.fetchAll<any>(
       'SELECT anime_id, banner_image_url, logo_image_url FROM home_hero_banners ORDER BY display_order ASC LIMIT 8'
     );
-    const curated = await Promise.all(curatedRows.map((row) => hoshikaForLegacyId(db, Number(row.anime_id))));
+    const curated = await Promise.all(curatedRows.map((row) => hoshikaForLegacyId(db, Number(row.anime_id), c.env.HOSHIKA_API_KEY)));
     for (let i = 0; i < curatedRows.length; i++) {
       const anime = curated[i];
       if (!anime) continue;
