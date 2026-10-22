@@ -32,7 +32,7 @@ animeRoutes.get('/anime', async (c) => {
   const id = (c.req.query('id') ?? '').trim();
   if (!/^\d+$/.test(id)) return c.redirect(siteUrl + '/browse');
   const [record, identity] = await Promise.all([
-    getHoshikaAnimeById(id),
+    getHoshikaAnimeById(id, c.env.HOSHIKA_API_KEY),
     findIdentityByHoshikaId(db, id).catch(() => null),
   ]);
   if (!record) return c.html(`<script>location.replace(${JSON.stringify(siteUrl + '/browse')});</script>`);
