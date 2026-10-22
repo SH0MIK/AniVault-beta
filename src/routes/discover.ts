@@ -75,7 +75,6 @@ discoverRoutes.get('/seasonal', async (c) => {
     const score = anime.score !== null && Number.isFinite(anime.score) ? anime.score : null;
     const id = encodeURIComponent(anime.shortId);
     const format = anime.type || 'Anime';
-    const status = anime.status ? anime.status.replace(/_/g, ' ') : '';
     const episodes = anime.episodes !== null ? String(anime.episodes) + ' eps' : '';
     return `<article class="card seasonal-card">
       <a class="seasonal-poster" href="/anime/hoshika?id=${id}" aria-label="View ${h(title)}">
@@ -84,7 +83,7 @@ discoverRoutes.get('/seasonal', async (c) => {
       </a>
       <div class="seasonal-info">
         <h2><a href="/anime/hoshika?id=${id}">${h(title)}</a></h2>
-        <div class="seasonal-meta">${[format, episodes, status].filter(Boolean).map(value => `<span>${h(value)}</span>`).join('')}</div>
+        <div class="seasonal-meta">${[format, episodes].filter(Boolean).map(value => `<span>${h(value)}</span>`).join('')}</div>
       </div>
     </article>`;
   }).join('')}</div>` : `<div class="card card-body seasonal-empty">${feed.season || feed.year ? 'No seasonal anime were returned by Hoshika for this season.' : 'Could not load seasonal anime from Hoshika right now. Please try again shortly.'}</div>`}
