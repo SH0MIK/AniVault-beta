@@ -85,7 +85,7 @@ discoverRoutes.get('/schedule', async (c) => {
       : '/schedule';
   };
   const parseAiringDate = (value: any) => {
-    if (typeof value === 'number' || (typeof value === 'string' && /^\\d{10,13}$/.test(value.trim()))) {
+    if (typeof value === 'number' || (typeof value === 'string' && /^\d{10,13}$/.test(value.trim()))) {
       const numeric = Number(value);
       return new Date(numeric < 1e12 ? numeric * 1000 : numeric);
     }
