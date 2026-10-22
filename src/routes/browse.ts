@@ -40,7 +40,7 @@ browseRoutes.get('/browse', async (c) => {
   let hoshikaSearchItems: Awaited<ReturnType<typeof searchHoshikaAnime>> = [];
   let catalogResult: Awaited<ReturnType<typeof getHoshikaCatalog>> = { items: [], total: 0, totalPages: 1 };
   if (q) hoshikaSearchItems = await searchHoshikaAnime(q, 50);
-  else if (sort === 'trending' && !type && !status && !year && genres.length === 0 && page === 1) {
+  else if (sort === 'trending') {
     const trendingPayload = await fetch('https://hoshika.app/api/v1/browse?type=anime&sort=trending', { headers: { Accept: 'application/json' } }).then(async (r) => r.ok ? r.json() : null).catch(() => null);
     const trendingRoot: any = trendingPayload?.data ?? trendingPayload?.result ?? trendingPayload ?? {};
     const trendingRaw = Array.isArray(trendingRoot) ? trendingRoot : (trendingRoot.items ?? trendingRoot.results ?? trendingRoot.anime ?? trendingRoot.entries ?? trendingRoot.data ?? []);
@@ -64,6 +64,35 @@ browseRoutes.get('/browse', async (c) => {
       genres: Array.isArray(item.genres) ? item.genres.map((g: any) => typeof g === 'string' ? g : String(g?.name ?? '')).filter(Boolean) : [],
       raw: item,
     })).filter((item: any) => item.shortId);
+    // Keep the Hoshika trending feed as the source for trending, then apply
+    // facets against its normalized fields. Do not switch to a different
+    // catalogue endpoint just because a facet is selected.
+    if (year) hoshikaSearchItems = hoshikaSearchItems.filter((item: any) => Number(item.year) === year);
+    if (type) {
+      const wanted = type.toLowerCase();
+      hoshikaSearchItems = hoshikaSearchItems.filter((item: any) => {
+        const actual = String(item.type ?? '').toLowerCase();
+        return actual === wanted || (wanted === 'tv' && (actual === 'tv series' || actual === 'television')) ||
+          (wanted === 'ona' && actual.includes('ona')) || (wanted === 'ova' && actual.includes('ova')) ||
+          (wanted === 'movie' && (actual.includes('movie') || actual.includes('film'))) ||
+          (wanted === 'special' && actual.includes('special')) || (wanted === 'music' && actual.includes('music'));
+      });
+    }
+    if (status) {
+      const wanted = status.toLowerCase();
+      hoshikaSearchItems = hoshikaSearchItems.filter((item: any) => {
+        const actual = String(item.status ?? '').toLowerCase();
+        if (wanted === 'airing') return actual.includes('airing') || actual.includes('ongoing');
+        if (wanted === 'complete') return actual.includes('complete') || actual.includes('finished');
+        if (wanted === 'upcoming') return actual.includes('upcoming') || actual.includes('not yet');
+        return actual === wanted;
+      });
+    }
+    if (genres.length) {
+      const wantedGenres = genres.map((id) => genreList.find((g) => g.mal_id === id)?.name.toLowerCase()).filter(Boolean);
+      hoshikaSearchItems = hoshikaSearchItems.filter((item: any) => wantedGenres.every((wanted) =>
+        (item.genres ?? []).some((g: string) => String(g).toLowerCase() === wanted)));
+    }
     catalogResult = { items: hoshikaSearchItems, total: hoshikaSearchItems.length, totalPages: 1 };
   } else catalogResult = await getHoshikaCatalog({ genre: selectedGenre, year: year || undefined, sort, page, type: type || undefined, status: status || undefined });
   const items = q ? hoshikaSearchItems : catalogResult.items;
