@@ -118,7 +118,7 @@ discoverRoutes.get('/schedule', async (c) => {
     <button class="btn btn-ghost" id="schedule-filter-toggle" type="button" aria-expanded="false" aria-controls="schedule-filters">☷ Filters</button>
   </div>
   <div class="schedule-types" aria-label="Filter by anime type">
-    ${['TV','ONA','Movie','OVA','Special','Music'].map(type => `<button type="button" class="schedule-chip" data-type-filter="${type}">${type}</button>`).join('')}
+    ${['TV','ONA','Movie','OVA','Special','Music'].map(type => `<button type="button" class="schedule-chip" data-type-filter="${type.toUpperCase()}">${type}</button>`).join('')}
   </div>
   <section id="schedule-filters" class="card card-body" hidden style="margin:1rem 0;display:none;">
     <div class="schedule-filter-grid">
@@ -154,7 +154,7 @@ discoverRoutes.get('/schedule', async (c) => {
           const image = typeof item.coverImage === 'string' ? item.coverImage : '';
           const id = encodeURIComponent(String(item.shortId ?? item.id ?? ''));
           const episode = Number.isFinite(Number(item.episode)) ? Number(item.episode) : null;
-          const format = String(item.format || 'TV');
+          const format = String(item.format || 'TV').trim().toUpperCase();
           const platforms = Array.isArray(item.platforms) ? item.platforms.filter((p: any) => p && typeof p.url === 'string' && (p.url.startsWith('https://') || p.url.startsWith('http://'))) : [];
           return `<article class="card schedule-episode" data-title="${h(title.toLowerCase())}" data-format="${h(format)}" data-time="${h(String(item.airingAt ?? ''))}" data-popularity="${Number(item.averageScore)||0}" style="display:flex;gap:1rem;padding:.85rem;min-width:0;">
             <a class="schedule-cover" href="/anime/hoshika?id=${id}" style="flex:0 0 92px;align-self:flex-start;">
