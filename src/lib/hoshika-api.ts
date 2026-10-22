@@ -680,7 +680,7 @@ export interface HoshikaSeasonFeed {
 
 /** Fetch the current season directly from Hoshika; no third-party catalogue fallback. */
 export async function getHoshikaSeason(apiKey?: string): Promise<HoshikaSeasonFeed> {
-  const payload = await fetchHoshikaJson('season?locale=en');
+  const payload = await fetchHoshikaJson('season?locale=en', apiKey);
   const root = obj(payload);
   const data = unwrap(payload ?? {});
   const seasonInfo = obj(root.season ?? data?.season);
