@@ -576,21 +576,34 @@ export async function getHoshikaHomeSections(): Promise<HoshikaHomeSections> {
 export async function getHoshikaCatalog(options: {
   genre?: string; year?: number; sort?: string; page?: number; type?: string; status?: string;
 } = {}): Promise<{ items: HoshikaCatalogAnime[]; total: number; totalPages: number }> {
+  // Fetch the base catalogue without optional facets first. Hoshika's public
+  // catalogue does not consistently apply format/status/year query params;
+  // filtering locally avoids an empty result caused by unsupported values.
   const url = new URL('https://hoshika.app/api/v1/catalog');
   url.searchParams.set('type', 'anime');
   if (options.genre) url.searchParams.set('genre', options.genre);
-  if (options.year) url.searchParams.set('year', String(options.year));
   url.searchParams.set('sort', options.sort || 'popular');
   url.searchParams.set('page', String(Math.max(1, options.page || 1)));
-  if (options.type) url.searchParams.set('format', options.type);
-  if (options.status) url.searchParams.set('status', options.status);
   const payload = await fetchHoshikaJson(url.pathname.replace('/api/v1/', '') + url.search);
   const root = unwrap(payload ?? {});
   const rawItems = resultsFrom(payload ?? {});
-  const items = normalizeCatalogArray(rawItems.length ? rawItems : findCatalogArray(root, ['items', 'results', 'anime', 'catalog']));
+  let items = normalizeCatalogArray(rawItems.length ? rawItems : findCatalogArray(root, ['items', 'results', 'anime', 'catalog']));
+
+  const wantedType = (options.type ?? '').trim().toLowerCase();
+  const wantedStatus = (options.status ?? '').trim().toLowerCase();
+  if (options.year) items = items.filter((item: any) => Number(item.year ?? item.seasonYear ?? item.season_year) === options.year);
+  if (wantedType) items = items.filter((item: any) => String(item.type ?? item.format ?? item.mediaType ?? '').toLowerCase() === wantedType);
+  if (wantedStatus) items = items.filter((item: any) => {
+    const status = String(item.status ?? item.airingStatus ?? '').toLowerCase();
+    if (wantedStatus === 'airing') return status.includes('airing') || status.includes('ongoing');
+    if (wantedStatus === 'complete') return status.includes('complete') || status.includes('finished');
+    if (wantedStatus === 'upcoming') return status.includes('upcoming') || status.includes('not yet');
+    return status === wantedStatus;
+  });
+
   const total = numberOrNull(root?.total ?? root?.pagination?.total ?? root?.pagination?.items?.total ?? root?.items?.total ?? payload?.total) ?? items.length;
   const totalPages = numberOrNull(root?.totalPages ?? root?.total_pages ?? root?.lastPage ?? root?.last_page ?? root?.last_visible_page ?? root?.pagination?.totalPages ?? root?.pagination?.total_pages ?? root?.pagination?.lastPage ?? root?.pagination?.last_page ?? root?.pagination?.last_visible_page ?? payload?.totalPages) ?? (total ? Math.max(1, Math.ceil(total / Math.max(items.length, 1))) : 1);
-  return { items, total, totalPages };
+  return { items, total: items.length === total ? total : items.length, totalPages: items.length === total ? totalPages : 1 };
 }
 
 /** Fetch Hoshika's anime genre slugs and display names. */
