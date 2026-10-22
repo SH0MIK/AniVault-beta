@@ -1,12 +1,11 @@
 import { Hono } from 'hono';
 import type { Env } from '../index';
-import { searchHoshikaAnime } from '../lib/hoshika-api';
+import { searchHoshikaAnime, getHoshikaSeason } from '../lib/hoshika-api';
 
 export const mobileDiscoverRoutes = new Hono<{ Bindings: Env }>();
 
-// Hoshika's public API currently provides title search, not the legacy MAL
-// seasonal/top/broadcast feeds. Return an explicit empty state rather than
-// silently filling these catalog views from MAL/Jikan/AniList.
+// Seasonal data comes from Hoshika's native season endpoint. Top rankings remain
+// unavailable and never fall back to MAL/Jikan/AniList.
 function unavailable(c: any, view: string) {
   return c.json({
     success: true,
@@ -19,20 +18,19 @@ function unavailable(c: any, view: string) {
 }
 
 mobileDiscoverRoutes.get('/api/mobile/seasonal', async (c) => {
-  const q = (c.req.query('q') ?? '').trim();
-  if (!q) return unavailable(c, 'seasonal');
-  const data = await searchHoshikaAnime(q, 50);
+  const q = (c.req.query('q') ?? '').trim().toLowerCase();
+  const feed = await getHoshikaSeason();
+  const items = q ? feed.items.filter((a) => [a.title, a.titleEnglish, a.titleRomaji, a.slug].some((value) => value.toLowerCase().includes(q))) : feed.items;
   return c.json({
-    success: true, source: 'hoshika', season: c.req.query('season') === 'upcoming' ? 'upcoming' : 'now',
-    data: data.map((a) => ({
-      id: a.shortId, shortId: a.shortId, title: a.title, image: a.poster,
-      score: a.score, type: a.type, episodes: a.episodes ?? 0,
-      status: a.status, year: a.year, genres: a.genres,
+    success: true, source: 'hoshika', season: feed.season, year: feed.year,
+    data: items.map((a) => ({
+      id: a.shortId, shortId: a.shortId, slug: a.slug, title: a.title,
+      image: a.poster, cover: a.cover, score: a.score, type: a.type,
+      episodes: a.episodes ?? 0, status: a.status, year: a.year, genres: a.genres,
     })),
     pagination: { current_page: 1, last_visible_page: 1, has_next_page: false },
-  }, 200, { 'Cache-Control': 'no-store' });
+  }, 200, { 'Cache-Control': 'public, max-age=300, s-maxage=300' });
 });
-
 mobileDiscoverRoutes.get('/api/mobile/top', async (c) => {
   const q = (c.req.query('q') ?? '').trim();
   if (!q) return unavailable(c, 'top');
