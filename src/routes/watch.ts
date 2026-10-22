@@ -772,9 +772,6 @@ ${renderLuluTrackButtons(lulustreamServers, 'multi', siteUrl)}
           ${isLoggedIn ? `<button class="watch-action" type="button" onclick='addToList(${animeId}, ${jTitle}, ${jImage}, ${totalEps})'>
             <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg> My List
           </button>` : ''}
-          <a href="https://myanimelist.net/anime/${animeId}" target="_blank" rel="noopener" class="watch-action">
-            <svg viewBox="0 0 24 24"><path d="M14 3h7v7M21 3l-9 9M19 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h6"/></svg> MAL
-          </a>
           <button class="watch-action" type="button" onclick="if(navigator.clipboard){navigator.clipboard.writeText(location.href).then(()=>{this.textContent='Copied';setTimeout(()=>this.textContent='Share',1000)})}">
             <svg viewBox="0 0 24 24"><path d="M8 7V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2M16 9H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2-2v-8"/></svg> Share
           </button>
