@@ -430,8 +430,8 @@ ${animeTailScript(animeDubConfirmed)}`;
 function ratingInfoHtml(value: string): string {
   const rating = value.trim();
   const match = rating.match(/^(.*?)(\s*\([^)]*\)\s*)$/);
-  if (!match) return h(rating);
-  return `<span class="info-rating-main" style="font-size:1em;font-weight:600;color:var(--text-primary);">${h(match[1].trim())}</span><span class="info-rating-notes" style="font-size:.82em;color:var(--text-muted);">${h(match[2].trim())}</span>`;
+  if (!match) return `<span class="info-rating-main" style="white-space:nowrap;font-size:1em;font-weight:600;color:var(--text-primary);">${h(rating)}</span>`;
+  return `<span class="info-rating-inline" style="display:inline-flex;align-items:baseline;gap:4px;white-space:nowrap;max-width:100%;"><span class="info-rating-main" style="font-size:1em;font-weight:600;color:var(--text-primary);white-space:nowrap;">${h(match[1].trim())}</span><span class="info-rating-notes" style="font-size:.78em;color:var(--text-muted);white-space:nowrap;">${h(match[2].trim())}</span></span>`;
 }
 
 function infoStatRow(label: string, value: string | number, rawHtml = false): string {
