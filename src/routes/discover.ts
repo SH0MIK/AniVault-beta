@@ -56,7 +56,7 @@ discoverRoutes.get('/seasonal', async (c) => {
     ? { id: currentUser.id, username: currentUser.username, avatar_url: currentUser.avatar_url, role: currentUser.role }
     : null;
   const banner = await getBannerData(db);
-  const feed = await getHoshikaSeason();
+  const feed = await getHoshikaSeason(c.env.HOSHIKA_API_KEY);
   const items = feed.items;
   const seasonLabel = [feed.season, feed.year].filter(Boolean).join(' ');
   let html = renderHeader({
@@ -107,7 +107,7 @@ discoverRoutes.get('/top', async (c) => {
     ? { id: currentUser.id, username: currentUser.username, avatar_url: currentUser.avatar_url, role: currentUser.role }
     : null;
   const banner = await getBannerData(db);
-  const items = await getHoshikaTrending();
+  const items = await getHoshikaTrending(c.env.HOSHIKA_API_KEY);
   const pageSize = 25;
   const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
   const page = Math.min(totalPages, Math.max(1, Number.parseInt(c.req.query('page') ?? '1', 10) || 1));
@@ -196,7 +196,7 @@ discoverRoutes.get('/schedule', async (c) => {
   let payload: any = null;
   let loadError = false;
   try {
-    const response = await fetch(scheduleUrl.toString(), { headers: { Accept: 'application/json' } });
+    const response = await fetch(scheduleUrl.toString(), { headers: { Accept: 'application/json', ...(c.env.HOSHIKA_API_KEY ? { 'X-Hoshika-Key': c.env.HOSHIKA_API_KEY } : {}) } });
     if (response.ok) payload = await response.json();
     else loadError = true;
   } catch (error) {
