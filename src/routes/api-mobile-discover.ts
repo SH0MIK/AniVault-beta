@@ -48,6 +48,32 @@ mobileDiscoverRoutes.get('/api/mobile/top', async (c) => {
   }, 200, { 'Cache-Control': 'no-store' });
 });
 
-mobileDiscoverRoutes.get('/api/mobile/schedule', async (c) => unavailable(c, 'schedule'));
+mobileDiscoverRoutes.get('/api/mobile/schedule', async (c) => {
+  const url = new URL('https://hoshika.app/api/v1/schedule');
+  const year = Number.parseInt(c.req.query('year') ?? '', 10);
+  const week = Number.parseInt(c.req.query('week') ?? '', 10);
+  if (Number.isInteger(year) && year >= 1900 && year <= 2200) url.searchParams.set('year', String(year));
+  if (Number.isInteger(week) && week >= 1 && week <= 53) url.searchParams.set('week', String(week));
+  try {
+    const response = await fetch(url.toString(), { headers: { Accept: 'application/json' } });
+    if (!response.ok) {
+      return c.json({ success: false, source: 'hoshika', view: 'schedule', message: 'Hoshika schedule is temporarily unavailable.', data: [] }, 502, { 'Cache-Control': 'no-store' });
+    }
+    const payload: any = await response.json();
+    if (payload?.ok === false) {
+      return c.json({ success: false, source: 'hoshika', view: 'schedule', message: 'Hoshika could not return the schedule.', data: [] }, 502, { 'Cache-Control': 'no-store' });
+    }
+    return c.json({
+      success: true,
+      source: 'hoshika',
+      view: 'schedule',
+      week: payload?.week ?? null,
+      data: Array.isArray(payload?.items) ? payload.items : [],
+    }, 200, { 'Cache-Control': 'public, max-age=300, s-maxage=300' });
+  } catch (error) {
+    console.warn('[mobile-schedule] Hoshika request failed:', String(error));
+    return c.json({ success: false, source: 'hoshika', view: 'schedule', message: 'Hoshika schedule is temporarily unavailable.', data: [] }, 502, { 'Cache-Control': 'no-store' });
+  }
+});
 
 export default mobileDiscoverRoutes;

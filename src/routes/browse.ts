@@ -41,7 +41,7 @@ browseRoutes.get('/browse', async (c) => {
   let catalogResult: Awaited<ReturnType<typeof getHoshikaCatalog>> = { items: [], total: 0, totalPages: 1 };
   if (q) hoshikaSearchItems = await searchHoshikaAnime(q, 50);
   else if (sort === 'trending') {
-    const trendingPayload = await fetch('https://hoshika.app/api/v1/browse?type=anime&sort=trending', { headers: { Accept: 'application/json' } }).then(async (r) => r.ok ? r.json() : null).catch(() => null);
+    const trendingPayload: any = await fetch('https://hoshika.app/api/v1/browse?type=anime&sort=trending', { headers: { Accept: 'application/json' } }).then(async (r) => r.ok ? r.json() : null).catch(() => null);
     const trendingRoot: any = trendingPayload?.data ?? trendingPayload?.result ?? trendingPayload ?? {};
     const trendingRaw = Array.isArray(trendingRoot) ? trendingRoot : (trendingRoot.items ?? trendingRoot.results ?? trendingRoot.anime ?? trendingRoot.entries ?? trendingRoot.data ?? []);
     const trendingItems = Array.isArray(trendingRaw) ? trendingRaw : [];
