@@ -101,8 +101,7 @@ async function fetchJson(url: string, timeoutMs = 12000, apiKey = ''): Promise<{
 }
 
 // ── api/animeheaven_stream.php ─────────────────────────────────────────────
-// AnimeHeaven runs inside this Worker. Hoshika IDs are canonical; numeric
-// legacy MAL IDs remain supported only through the verified identity map.
+// Hoshika IDs are the only accepted playback identity.
 // AnimeHeaven is resolved by the external scraper service; the Worker only proxies it.
 scraperRoutes.get('/api/animeheaven_stream.php', async (c) => {
   const hoshikaId = (c.req.query('hoshikaId') ?? '').trim();
@@ -125,7 +124,6 @@ scraperRoutes.get('/api/animeheaven_stream.php', async (c) => {
 });
 
 scraperRoutes.get('/api/anikoto_stream.php', async (c) => {
-  const animeId = parseInt(c.req.query('anime') ?? '0', 10) || 0;
   const hoshikaId = (c.req.query('hoshikaId') ?? '').trim();
   const epNum = parseInt(c.req.query('ep') ?? '0', 10) || 0;
   const audio = ['sub', 'dub', 'raw'].includes(c.req.query('audio') ?? '') ? c.req.query('audio')! : 'sub';
@@ -158,7 +156,6 @@ scraperRoutes.get('/api/anikoto_stream.php', async (c) => {
 // Abyss/CLOUD — surfaced on the watch page with an "Embed" badge and played
 // back in a plain iframe instead of the custom player).
 scraperRoutes.get('/api/desidub_stream.php', async (c) => {
-  const animeId = parseInt(c.req.query('anime') ?? '0', 10) || 0;
   const hoshikaId = (c.req.query('hoshikaId') ?? '').trim();
   const epNum = parseInt(c.req.query('ep') ?? '0', 10) || 0;
   const audio = ['dub', 'raw'].includes(c.req.query('audio') ?? '') ? c.req.query('audio')! : 'dub';
@@ -187,7 +184,6 @@ scraperRoutes.get('/api/desidub_stream.php', async (c) => {
 // ReAnime now resolves directly in the Worker; no external scraper API call.
 // ReAnime playback is handled by the scraper API, not a Worker-side resolver.
 scraperRoutes.get('/api/reanime_stream.php', async (c) => {
-  const animeId = parseInt(c.req.query('anime') ?? '0', 10) || 0;
   const hoshikaId = (c.req.query('hoshikaId') ?? '').trim();
   const epNum = parseInt(c.req.query('ep') ?? '0', 10) || 0;
   const audio = ['sub', 'dub', 'raw'].includes(c.req.query('audio') ?? '') ? c.req.query('audio')! : 'sub';
@@ -246,7 +242,6 @@ scraperRoutes.get('/api/reanime_hls/:token', async (c) => {
 // ── api/animenosub_stream.php ────────────────────────────────────────────
 // English-dub-only source. Same shape as reanime_stream.php above.
 scraperRoutes.get('/api/animenosub_stream.php', async (c) => {
-  const animeId = parseInt(c.req.query('anime') ?? '0', 10) || 0;
   const hoshikaId = (c.req.query('hoshikaId') ?? '').trim();
   const epNum = parseInt(c.req.query('ep') ?? '0', 10) || 0;
   const audio = ['sub', 'dub', 'raw'].includes(c.req.query('audio') ?? '') ? c.req.query('audio')! : 'sub';
@@ -275,7 +270,6 @@ scraperRoutes.get('/api/animenosub_stream.php', async (c) => {
 // ── api/aniwaves_stream.php ──────────────────────────────────────────────
 // English-dub-only source. Same shape as reanime_stream.php above.
 scraperRoutes.get('/api/aniwaves_stream.php', async (c) => {
-  const animeId = parseInt(c.req.query('anime') ?? '0', 10) || 0;
   const hoshikaId = (c.req.query('hoshikaId') ?? '').trim();
   const epNum = parseInt(c.req.query('ep') ?? '0', 10) || 0;
   const audio = ['sub', 'dub', 'raw'].includes(c.req.query('audio') ?? '') ? c.req.query('audio')! : 'sub';
@@ -310,7 +304,6 @@ scraperRoutes.get('/api/aniwaves_stream.php', async (c) => {
 // Hindi Dub / Multi Dub groups). Resolve mode forwards an optional `lang`
 // to disambiguate same-named servers across languages.
 scraperRoutes.get('/api/anizone_stream.php', async (c) => {
-  const animeId = parseInt(c.req.query('anime') ?? '0', 10) || 0;
   const hoshikaId = (c.req.query('hoshikaId') ?? '').trim();
   const epNum = parseInt(c.req.query('ep') ?? '0', 10) || 0;
   const audio = ['sub', 'dub', 'raw'].includes(c.req.query('audio') ?? '') ? c.req.query('audio')! : 'sub';
@@ -348,7 +341,6 @@ scraperRoutes.get('/api/anizone_stream.php', async (c) => {
 // Multi-dub-language source (English, Hindi, Tamil, Telugu...). Same shape
 // and reasoning as anizone_stream.php above.
 scraperRoutes.get('/api/watchanimeworld_stream.php', async (c) => {
-  const animeId = parseInt(c.req.query('anime') ?? '0', 10) || 0;
   const hoshikaId = (c.req.query('hoshikaId') ?? '').trim();
   const epNum = parseInt(c.req.query('ep') ?? '0', 10) || 0;
   const audio = ['sub', 'dub', 'raw'].includes(c.req.query('audio') ?? '') ? c.req.query('audio')! : 'sub';
