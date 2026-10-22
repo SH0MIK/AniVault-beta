@@ -31,7 +31,7 @@ hoshikaAnimeRoutes.get('/anime/hoshika', async (c) => {
     return c.redirect(`${siteUrl}/browse`);
   }
 
-  const anime = await getHoshikaAnimeById(id);
+  const anime = await getHoshikaAnimeById(id, c.env.HOSHIKA_API_KEY);
   if (!anime) {
     const html = renderHeader({ ...banner, siteUrl, siteName: c.env.SITE_NAME, pageTitle: 'Anime unavailable', currentPage: 'browse', currentUser: layoutUser, unreadCount, requestUrl: c.req.url })
       + '<main class="container section"><h1>Anime unavailable</h1><p class="text-muted">Hoshika could not return this title. Please try again.</p><a class="btn btn-primary" href="/browse">Back to browse</a></main>'
@@ -46,7 +46,7 @@ hoshikaAnimeRoutes.get('/anime/hoshika', async (c) => {
   // production D1 yet. Keep the read fail-closed so this page can still render
   // on the Beta branch before the migration is deployed.
   const [episodes, identity] = await Promise.all([
-    getHoshikaAnimeEpisodesById(anime.shortId),
+    getHoshikaAnimeEpisodesById(anime.shortId, c.env.HOSHIKA_API_KEY),
     findIdentityByHoshikaId(db, anime.shortId).catch(() => null),
   ]);
   const legacyWatchId = identity?.verified === 1 ? identity.legacy_mal_id : null;
