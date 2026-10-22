@@ -118,7 +118,7 @@ discoverRoutes.get('/schedule', async (c) => {
     <button class="btn btn-ghost" id="schedule-filter-toggle" type="button" aria-expanded="false" aria-controls="schedule-filters">☷ Filters</button>
   </div>
   <div class="schedule-types" aria-label="Filter by anime type">
-    ${['TV','ONA','Movie','OVA','Special','Music'].map(type => `<button type="button" class="schedule-chip" data-type-filter="${type}">${type}</button>`).join('')}
+    ${['TV','ONA','Movie','OVA','Special','Music'].map(type => `<button type="button" class="schedule-chip" data-type-filter="${type.toUpperCase()}">${type}</button>`).join('')}
   </div>
   <section id="schedule-filters" class="card card-body" hidden style="margin:1rem 0;display:none;">
     <div class="schedule-filter-grid">
