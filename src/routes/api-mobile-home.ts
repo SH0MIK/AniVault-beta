@@ -99,7 +99,7 @@ mobileHomeRoutes.get('/api/mobile/home-v2', async (c) => {
     const curatedRows = await db.fetchAll<any>(
       'SELECT anime_id, banner_image_url, logo_image_url FROM home_hero_banners ORDER BY display_order ASC LIMIT 8'
     );
-    const curated = await Promise.all(curatedRows.map((row) => hoshikaForLegacyId(db, Number(row.anime_id))));
+    const curated = await Promise.all(curatedRows.map((row) => hoshikaForLegacyId(db, Number(row.anime_id), c.env.HOSHIKA_API_KEY)));
     for (let i = 0; i < curatedRows.length; i++) {
       const anime = curated[i];
       if (!anime) continue;
