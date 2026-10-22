@@ -576,9 +576,9 @@ export async function getHoshikaHomeSections(): Promise<HoshikaHomeSections> {
 export async function getHoshikaCatalog(options: {
   genre?: string; year?: number; sort?: string; page?: number; type?: string; status?: string;
 } = {}): Promise<{ items: HoshikaCatalogAnime[]; total: number; totalPages: number }> {
-  // Hoshika deployments differ in which facet parameters they honor. Fetch a
-  // bounded window of catalogue pages, then apply all facets consistently
-  // against normalized Hoshika records before slicing the requested page.
+  // Use Hoshika's documented server-side genre/year facets first. Format and
+  // status are normalized locally because the public contract only documents
+  // genre/year for this endpoint. Pagination metadata comes from Hoshika.
   const requestedPage = Math.max(1, Math.trunc(options.page || 1));
   const pageSize = 24;
   const maxSourcePages = 10;
@@ -586,6 +586,8 @@ export async function getHoshikaCatalog(options: {
     const url = new URL('https://hoshika.app/api/v1/catalog');
     url.searchParams.set('type', 'anime');
     url.searchParams.set('sort', options.sort || 'popular');
+    if (options.genre) url.searchParams.set('genre', options.genre);
+    if (options.year) url.searchParams.set('year', String(options.year));
     url.searchParams.set('page', String(sourcePage));
     const payload = await fetchHoshikaJson(url.pathname.replace('/api/v1/', '') + url.search);
     const root = unwrap(payload ?? {});
@@ -593,11 +595,12 @@ export async function getHoshikaCatalog(options: {
     const items = normalizeCatalogArray(rawItems.length ? rawItems : findCatalogArray(root, ['items', 'results', 'anime', 'catalog']));
     const total = numberOrNull(root?.total ?? root?.pagination?.total ?? root?.pagination?.items?.total ?? root?.items?.total ?? payload?.total);
     const totalPages = numberOrNull(root?.totalPages ?? root?.total_pages ?? root?.lastPage ?? root?.last_page ?? root?.last_visible_page ?? root?.pagination?.totalPages ?? root?.pagination?.total_pages ?? root?.pagination?.lastPage ?? root?.pagination?.last_page ?? root?.pagination?.last_visible_page ?? payload?.totalPages);
-    return { items, total, totalPages };
+    const hasMore = typeof root?.hasMore === 'boolean' ? root.hasMore : (typeof payload?.hasMore === 'boolean' ? payload.hasMore : null);
+    return { items, total, totalPages, hasMore };
   };
 
   const first = await fetchPage(1);
-  const sourcePages = Math.max(1, Math.min(maxSourcePages, first.totalPages ?? (first.total ? Math.ceil(first.total / Math.max(first.items.length, 1)) : 1)));
+  const sourcePages = Math.max(1, Math.min(maxSourcePages, first.totalPages ?? (first.total ? Math.ceil(first.total / Math.max(first.items.length, 1)) : (first.hasMore ? maxSourcePages : 1))));
   const rest = sourcePages > 1
     ? await Promise.all(Array.from({ length: sourcePages - 1 }, (_, index) => fetchPage(index + 2)))
     : [];
@@ -615,7 +618,8 @@ export async function getHoshikaCatalog(options: {
     special: ['special', 'tv special'],
     music: ['music', 'music video'],
   };
-  if (options.year) items = items.filter((item) => item.year === options.year);
+  // Year and genre are already applied by Hoshika. Some catalog records omit
+  // those fields, so filtering them again locally would incorrectly drop valid matches.
   if (options.type) {
     const wanted = normalize(options.type);
     const aliases = typeAliases[wanted] ?? [wanted];
@@ -634,11 +638,6 @@ export async function getHoshikaCatalog(options: {
       return actual === wanted;
     });
   }
-  if (options.genre) {
-    const wanted = normalize(options.genre).replace(/-/g, ' ');
-    items = items.filter((item) => item.genres.some((genre) => normalize(genre).replace(/-/g, ' ') === wanted));
-  }
-
   const total = items.length;
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const startIndex = (requestedPage - 1) * pageSize;
