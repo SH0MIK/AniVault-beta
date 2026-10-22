@@ -390,46 +390,45 @@ async function lazyLoadEpisodes() {
   }
 }
 
-// ── Fetch and render characters ────────────────────────────────
+// ── Fetch and render characters from Hoshika ────────────────────
 async function lazyLoadCharacters() {
   const animeId = window.__animeId;
-  const grid    = document.getElementById('char-grid-js');
+  const grid = document.getElementById('char-grid-js');
   const loading = document.getElementById('char-grid-loading');
-  if (!grid) return;
+  if (!grid || !animeId) return;
   try {
-    const res  = await fetch(\`\${window.__siteUrl || ''}/api/anime_characters.php?anime=\${animeId}\`);
-    const data = await res.json();
-    const chars = (data.data || []).slice(0, 12);
+    const res = await fetch((window.__siteUrl || '') + '/api/hoshika/anime/' + encodeURIComponent(animeId), { cache: 'no-store' });
+    if (!res.ok) throw new Error('Hoshika anime details unavailable');
+    const payload = await res.json();
+    const chars = (payload?.data?.characters || []).slice(0, 12);
     if (loading) loading.style.display = 'none';
+    grid.innerHTML = '';
     if (!chars.length) {
       grid.style.display = 'block';
       grid.innerHTML = '<p class="text-muted text-center">No character data available.</p>';
       return;
     }
     chars.forEach(ch => {
-      const char   = ch.character || {};
-      const va     = (ch.voice_actors || []).find(v => v.language === 'Japanese')?.person || ch.voice_actors?.[0]?.person || null;
-      const role   = ch.role || '';
-      const charId = char.mal_id || 0;
-      const img    = char.images?.jpg?.image_url || '';
-      const isMain = role.toLowerCase() === 'main';
+      const name = ch.name || 'Unknown character';
+      const role = ch.role || '';
+      const img = ch.avatar || '';
+      const va = ch.seiyuu || null;
+      const isMain = role.toUpperCase() === 'MAIN';
       const div = document.createElement('div');
       div.className = 'anime-card char-card';
-      div.style.cursor = 'pointer';
-      div.onclick = () => { window.location.href = window.__siteUrl + '/character?id=' + charId; };
       div.innerHTML = \`
         <div class="anime-card-poster char-card-poster">
-          \${img ? \`<img src="\${img}" alt="\${char.name || ''}" loading="lazy">\` : ''}
+          \${img ? \`<img src="\${img}" alt="\${name.replace(/"/g, '&quot;')}" loading="lazy">\` : ''}
           \${isMain ? '<span style="position:absolute;top:6px;left:6px;background:var(--accent);color:#fff;font-size:.65rem;font-weight:700;padding:2px 7px;border-radius:10px;text-transform:uppercase;letter-spacing:.04em;z-index:2;">Main</span>' : ''}
         </div>
         <div class="anime-card-info" style="text-align:center;">
-          <div class="anime-card-title">\${(char.name||'').replace(/</g,'&lt;')}</div>
-          <div class="anime-card-meta">\${role}\${va ? '<br><span style="color:var(--text-muted);">' + (va.name||'').replace(/</g,'&lt;') + '</span>' : ''}</div>
+          <div class="anime-card-title">\${name.replace(/</g, '&lt;')}</div>
+          <div class="anime-card-meta">\${role}\${va?.name ? '<br><span style="color:var(--text-muted);">' + va.name.replace(/</g, '&lt;') + '</span>' : ''}</div>
         </div>\`;
       grid.appendChild(div);
     });
     grid.style.display = '';
-  } catch(e) {
+  } catch (e) {
     if (loading) loading.innerHTML = '<p class="text-muted">Failed to load characters. <button class="btn btn-ghost btn-sm" onclick="lazyLoadCharacters()">Retry</button></p>';
   }
 }
@@ -603,14 +602,45 @@ async function lazyLoadPictures() {
   }
 }
 
-// ── Fetch and render related/recommendations ───────────────────
+// ── Fetch and render recommendations from Hoshika ──────────────
 async function lazyLoadRelated() {
+  const animeId = window.__animeId;
   const grid = document.getElementById('related-grid-js');
   const loading = document.getElementById('related-grid-loading');
-  if (loading) loading.style.display = 'none';
-  if (grid) {
-    grid.style.display = 'block';
-    grid.innerHTML = '<p class="text-muted text-center">No recommendations available.</p>';
+  if (!grid || !animeId) return;
+  try {
+    const res = await fetch((window.__siteUrl || '') + '/api/hoshika/anime/' + encodeURIComponent(animeId), { cache: 'no-store' });
+    if (!res.ok) throw new Error('Hoshika recommendations unavailable');
+    const payload = await res.json();
+    const recommendations = (payload?.data?.recommendations || []).slice(0, 12);
+    if (loading) loading.style.display = 'none';
+    grid.innerHTML = '';
+    if (!recommendations.length) {
+      grid.style.display = 'block';
+      grid.innerHTML = '<p class="text-muted text-center">No recommendations available.</p>';
+      return;
+    }
+    recommendations.forEach(item => {
+      const card = document.createElement('a');
+      card.className = 'anime-card';
+      card.href = (window.__siteUrl || '') + '/anime?id=' + encodeURIComponent(item.shortId);
+      card.style.cssText = 'flex-shrink:0;width:160px;text-decoration:none;';
+      const title = item.title || 'Unknown anime';
+      const image = item.coverImage || '';
+      const score = Number(item.averageScore);
+      card.innerHTML = \`
+        <div class="anime-card-poster">
+          \${image ? \`<img src="\${image}" alt="\${title.replace(/"/g, '&quot;')}" loading="lazy">\` : ''}
+        </div>
+        <div class="anime-card-info">
+          <div class="anime-card-title">\${title.replace(/</g, '&lt;')}</div>
+          <div class="anime-card-meta">\${Number.isFinite(score) && score > 0 ? '★ ' + score : ''}</div>
+        </div>\`;
+      grid.appendChild(card);
+    });
+    grid.style.display = '';
+  } catch (e) {
+    if (loading) loading.innerHTML = '<p class="text-muted">Failed to load recommendations. <button class="btn btn-ghost btn-sm" onclick="lazyLoadRelated()">Retry</button></p>';
   }
 }
 
