@@ -192,6 +192,7 @@ function episodeThumbnailFrom(item: any): string {
 export async function getHoshikaAnimeEpisodes(
   title: string,
   kv?: KVNamespace,
+  apiKey?: string,
 ): Promise<HoshikaEpisode[] | null> {
   if (!title) return null;
 
@@ -199,7 +200,7 @@ export async function getHoshikaAnimeEpisodes(
   searchUrl.searchParams.set('q', title);
   try {
     const searchResponse = await fetch(searchUrl.toString(), {
-      headers: { Accept: 'application/json' },
+      headers: { Accept: 'application/json', ...(apiKey ? { 'X-Hoshika-Key': apiKey } : {}) },
     });
     if (!searchResponse.ok) return null;
     const searchPayload: any = await searchResponse.json();
@@ -222,7 +223,7 @@ export async function getHoshikaAnimeEpisodes(
       url.searchParams.set('limit', '100');
       if (after) url.searchParams.set('after', after);
       const response = await fetch(url.toString(), {
-        headers: { Accept: 'application/json' },
+        headers: { Accept: 'application/json', ...(apiKey ? { 'X-Hoshika-Key': apiKey } : {}) },
       });
       if (!response.ok) return episodes.length ? episodes : null;
       const payload: any = await response.json();
@@ -260,7 +261,7 @@ export async function getHoshikaAnimeEpisodes(
  * Fetch episodes directly by Hoshika shortId. This is the preferred API for
  * migrated pages; it avoids title matching and never interprets IDs as MAL.
  */
-export async function getHoshikaAnimeEpisodesById(shortIdValue: string | number): Promise<HoshikaEpisode[] | null> {
+export async function getHoshikaAnimeEpisodesById(shortIdValue: string | number, apiKey?: string): Promise<HoshikaEpisode[] | null> {
   const shortId = String(shortIdValue ?? '').trim();
   if (!shortId) return null;
   const episodes: HoshikaEpisode[] = [];
@@ -271,7 +272,7 @@ export async function getHoshikaAnimeEpisodesById(shortIdValue: string | number)
       url.searchParams.set('locale', 'en');
       url.searchParams.set('limit', '100');
       if (after) url.searchParams.set('after', after);
-      const response = await fetch(url.toString(), { headers: { Accept: 'application/json' } });
+      const response = await fetch(url.toString(), { headers: { Accept: 'application/json', ...(apiKey ? { 'X-Hoshika-Key': apiKey } : {}) } });
       if (!response.ok) return episodes.length ? episodes : null;
       const payload: any = await response.json();
       if (payload?.ok === false || !Array.isArray(payload?.items)) return episodes.length ? episodes : null;
@@ -318,6 +319,7 @@ export async function getHoshikaAnimeMetadata(
   title: string,
   kv?: KVNamespace,
   includeDetail = false,
+  apiKey?: string,
 ): Promise<HoshikaAnimeMetadata | null> {
   if (!malId || !title) return null;
 
@@ -326,7 +328,7 @@ export async function getHoshikaAnimeMetadata(
     const url = new URL('https://hoshika.app/api/v1/search');
     url.searchParams.set('q', title);
     const response = await fetch(url.toString(), {
-      headers: { Accept: 'application/json' },
+      headers: { Accept: 'application/json', ...(apiKey ? { 'X-Hoshika-Key': apiKey } : {}) },
     });
     if (!response.ok) return null;
     const payload: any = await response.json();
@@ -346,7 +348,7 @@ export async function getHoshikaAnimeMetadata(
     if (needsDetail) {
       const detailResponse = await fetch(
         `https://hoshika.app/api/v1/anime/${encodeURIComponent(shortId)}`,
-        { headers: { Accept: 'application/json' } },
+        { headers: { Accept: 'application/json', ...(apiKey ? { 'X-Hoshika-Key': apiKey } : {}) } },
       );
       if (detailResponse.ok) {
         const detailPayload: any = await detailResponse.json();
@@ -442,13 +444,13 @@ function normaliseHoshikaAnime(item: any): HoshikaCatalogAnime | null {
 }
 
 /** Search only Hoshika. No MAL/Jikan/AniList fallback and no KV cache. */
-export async function searchHoshikaAnime(query: string, limit = 20): Promise<HoshikaCatalogAnime[]> {
+export async function searchHoshikaAnime(query: string, limit = 20, apiKey?: string): Promise<HoshikaCatalogAnime[]> {
   const q = query.trim();
   if (!q) return [];
   try {
     const url = new URL('https://hoshika.app/api/v1/search');
     url.searchParams.set('q', q);
-    const response = await fetch(url.toString(), { headers: { Accept: 'application/json' } });
+    const response = await fetch(url.toString(), { headers: { Accept: 'application/json', ...(apiKey ? { 'X-Hoshika-Key': apiKey } : {}) } });
     if (!response.ok) return [];
     const payload: any = await response.json();
     if (payload?.ok === false) return [];
@@ -463,13 +465,13 @@ export async function searchHoshikaAnime(query: string, limit = 20): Promise<Hos
 }
 
 /** Fetch one catalog record using Hoshika's canonical shortId. */
-export async function getHoshikaAnimeById(shortId: string | number): Promise<HoshikaCatalogAnime | null> {
+export async function getHoshikaAnimeById(shortId: string | number, apiKey?: string): Promise<HoshikaCatalogAnime | null> {
   const id = String(shortId ?? '').trim();
   if (!id) return null;
   try {
     const response = await fetch(
       `https://hoshika.app/api/v1/anime/${encodeURIComponent(id)}`,
-      { headers: { Accept: 'application/json' } },
+      { headers: { Accept: 'application/json', ...(apiKey ? { 'X-Hoshika-Key': apiKey } : {}) } },
     );
     if (!response.ok) return null;
     const payload: any = await response.json();
@@ -532,10 +534,10 @@ function findCatalogArray(root: any, keys: string[], depth = 0): any[] {
   return [];
 }
 
-async function fetchHoshikaJson(path: string): Promise<any | null> {
+async function fetchHoshikaJson(path: string, apiKey?: string): Promise<any | null> {
   try {
     const response = await fetch('https://hoshika.app/api/v1/' + path.replace(/^\/+/, ''), {
-      headers: { Accept: 'application/json' },
+      headers: { Accept: 'application/json', ...(apiKey ? { 'X-Hoshika-Key': apiKey } : {}) },
     });
     if (!response.ok) return null;
     const payload: any = await response.json();
@@ -551,14 +553,14 @@ function normalizeCatalogArray(items: any[]): HoshikaCatalogAnime[] {
 }
 
 /** Load the public Hoshika homepage feeds; deliberately no third-party fallback. */
-export async function getHoshikaHomeSections(): Promise<HoshikaHomeSections> {
+export async function getHoshikaHomeSections(apiKey?: string): Promise<HoshikaHomeSections> {
   // The homepage's main feed is explicitly driven by Hoshika's trending
   // browse endpoint, rather than the separate /home aggregate response.
   const [trendingPayload, recentPayload, topPayload, seasonPayload] = await Promise.all([
-    fetchHoshikaJson('browse?type=anime&sort=trending'),
-    fetchHoshikaJson('browse?type=anime&sort=recent'),
-    fetchHoshikaJson('browse?type=anime&sort=top'),
-    fetchHoshikaJson('season?locale=en'),
+    fetchHoshikaJson('browse?type=anime&sort=trending', apiKey),
+    fetchHoshikaJson('browse?type=anime&sort=recent', apiKey),
+    fetchHoshikaJson('browse?type=anime&sort=top', apiKey),
+    fetchHoshikaJson('season?locale=en', apiKey),
   ]);
 
   const trending = normalizeCatalogArray(resultsFrom(trendingPayload ?? {}));
@@ -570,7 +572,7 @@ export async function getHoshikaHomeSections(): Promise<HoshikaHomeSections> {
 }
 
 /** Fetch the public trending anime feed directly from Hoshika's browse endpoint. */
-export async function getHoshikaTrending(): Promise<HoshikaCatalogAnime[]> {
+export async function getHoshikaTrending(apiKey?: string): Promise<HoshikaCatalogAnime[]> {
   const payload = await fetchHoshikaJson('browse?type=anime&sort=trending');
   return normalizeCatalogArray(resultsFrom(payload ?? {}));
 }
@@ -578,7 +580,7 @@ export async function getHoshikaTrending(): Promise<HoshikaCatalogAnime[]> {
 /** Hoshika's paginated, filterable anime catalog. */
 export async function getHoshikaCatalog(options: {
   genre?: string; year?: number; sort?: string; page?: number; type?: string; status?: string;
-} = {}): Promise<{ items: HoshikaCatalogAnime[]; total: number; totalPages: number }> {
+} = {}, apiKey?: string): Promise<{ items: HoshikaCatalogAnime[]; total: number; totalPages: number }> {
   // Use Hoshika's documented server-side genre/year facets first. Format and
   // status are normalized locally because the public contract only documents
   // genre/year for this endpoint. Pagination metadata comes from Hoshika.
@@ -597,7 +599,7 @@ export async function getHoshikaCatalog(options: {
     endpoint.searchParams.set('sort', catalogSort);
     if (options.year) endpoint.searchParams.set('year', String(options.year));
     endpoint.searchParams.set('page', String(sourcePage));
-    const payload = await fetchHoshikaJson(endpoint.pathname.replace('/api/v1/', '') + endpoint.search);
+    const payload = await fetchHoshikaJson(endpoint.pathname.replace('/api/v1/', '') + endpoint.search, apiKey);
     const root = unwrap(payload ?? {});
     const rawItems = resultsFrom(payload ?? {});
     const items = normalizeCatalogArray(rawItems.length ? rawItems : findCatalogArray(root, ['items', 'results', 'anime', 'catalog']));
@@ -653,8 +655,8 @@ export async function getHoshikaCatalog(options: {
 }
 
 /** Fetch Hoshika's anime genre slugs and display names. */
-export async function getHoshikaGenres(): Promise<Array<{ slug: string; name: string }>> {
-  const payload = await fetchHoshikaJson('genres');
+export async function getHoshikaGenres(apiKey?: string): Promise<Array<{ slug: string; name: string }>> {
+  const payload = await fetchHoshikaJson('genres', apiKey);
   const root = unwrap(payload ?? {});
   const raw = findCatalogArray(root, ['genres', 'items', 'results']);
   const source = raw.length ? raw : (Array.isArray(root) ? root : []);
@@ -677,7 +679,7 @@ export interface HoshikaSeasonFeed {
 }
 
 /** Fetch the current season directly from Hoshika; no third-party catalogue fallback. */
-export async function getHoshikaSeason(): Promise<HoshikaSeasonFeed> {
+export async function getHoshikaSeason(apiKey?: string): Promise<HoshikaSeasonFeed> {
   const payload = await fetchHoshikaJson('season?locale=en');
   const root = obj(payload);
   const data = unwrap(payload ?? {});
