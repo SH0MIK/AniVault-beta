@@ -89,7 +89,15 @@ discoverRoutes.get('/schedule', async (c) => {
       const numeric = Number(value);
       return new Date(numeric < 1e12 ? numeric * 1000 : numeric);
     }
-    return new Date(value);
+    if (typeof value !== 'string' || !value.trim()) return new Date(Number.NaN);
+    const text = value.trim();
+    // Hoshika schedule values without a timezone are Japan-local airing times.
+    // Treat them as JST explicitly instead of letting the Worker/browser runtime
+    // silently interpret them in its own timezone.
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?$/.test(text)) {
+      return new Date(text + '+09:00');
+    }
+    return new Date(text);
   };
   const fmtDay = (value: string) => {
     const date = parseAiringDate(value);
