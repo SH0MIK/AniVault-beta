@@ -40,22 +40,49 @@ browseRoutes.get('/browse', async (c) => {
   let hoshikaSearchItems: Awaited<ReturnType<typeof searchHoshikaAnime>> = [];
   let catalogResult: Awaited<ReturnType<typeof getHoshikaCatalog>> = { items: [], total: 0, totalPages: 1 };
   if (q) {
-    hoshikaSearchItems = await searchHoshikaAnime(q, 50);
-    const norm = (value: unknown) => String(value ?? '').trim().toLowerCase().replace(/[_-]+/g, ' ');
-    if (year) hoshikaSearchItems = hoshikaSearchItems.filter((item: any) => Number(item.year ?? item.raw?.year ?? item.raw?.seasonYear) === year);
-    if (type) hoshikaSearchItems = hoshikaSearchItems.filter((item: any) => {
-      const actual = norm(item.type ?? item.raw?.format);
-      const aliases: Record<string, string[]> = { tv: ['tv', 'tv series', 'television'], movie: ['movie', 'film'], ova: ['ova'], ona: ['ona'], special: ['special'], music: ['music'] };
-      return (aliases[norm(type)] ?? [norm(type)]).some((alias) => actual === alias || actual.includes(alias));
-    });
-    if (status) hoshikaSearchItems = hoshikaSearchItems.filter((item: any) => {
-      const actual = norm(item.status ?? item.raw?.airingStatus);
-      if (status === 'airing') return /releasing|airing|ongoing|currently/.test(actual);
-      if (status === 'complete') return /finished|complete|ended/.test(actual);
-      if (status === 'upcoming') return /upcoming|not yet released|unreleased|planned/.test(actual);
-      return actual === norm(status);
-    });
-    if (selectedGenre) hoshikaSearchItems = hoshikaSearchItems.filter((item: any) => (item.genres ?? []).some((g: any) => norm(typeof g === 'string' ? g : g?.name) === norm(selectedGenre) || norm(typeof g === 'string' ? g : g?.name) === norm(genreList.find((x) => x.slug === selectedGenre)?.name)));
+    const norm = (value: unknown) => String(value ?? '').trim().toLowerCase().replace(/[_-]+/g, ' ').replace(/\\s+/g, ' ');
+    const hasFacets = !!(year || type || status || selectedGenre);
+    if (!hasFacets) {
+      hoshikaSearchItems = await searchHoshikaAnime(q, 50);
+      catalogResult = { items: hoshikaSearchItems, total: hoshikaSearchItems.length, totalPages: 1 };
+    } else {
+      // Hoshika search records often omit genre/year/status metadata. When
+      // filters accompany a query, search within the actual Hoshika-filtered
+      // catalog instead of silently filtering incomplete search records.
+      const firstPage = await getHoshikaCatalog({
+        genre: selectedGenre || undefined,
+        year: year || undefined,
+        sort,
+        page: 1,
+        type: type || undefined,
+        status: status || undefined,
+      });
+      const catalogPages = [firstPage];
+      for (let p = 2; p <= Math.min(firstPage.totalPages, 10); p++) {
+        catalogPages.push(await getHoshikaCatalog({
+          genre: selectedGenre || undefined,
+          year: year || undefined,
+          sort,
+          page: p,
+          type: type || undefined,
+          status: status || undefined,
+        }));
+      }
+      const query = norm(q);
+      const matched = catalogPages.flatMap((result) => result.items).filter((item) => {
+        const titles = [item.title, item.titleEnglish, item.titleRomaji, item.titleJapanese, item.slug]
+          .map(norm).filter(Boolean);
+        return titles.some((title) => title.includes(query));
+      });
+      const unique = [...new Map(matched.map((item) => [item.shortId, item])).values()];
+      const pageSize = 24;
+      catalogResult = {
+        items: unique.slice((page - 1) * pageSize, page * pageSize),
+        total: unique.length,
+        totalPages: Math.max(1, Math.ceil(unique.length / pageSize)),
+      };
+      hoshikaSearchItems = catalogResult.items;
+    }
   }
   else if (sort === 'trending' && !type && !status && !year && genres.length === 0) {
     const trendingPayload: any = await fetch('https://hoshika.app/api/v1/browse?type=anime&sort=trending', { headers: { Accept: 'application/json' } }).then(async (r) => r.ok ? r.json() : null).catch(() => null);
@@ -112,9 +139,9 @@ browseRoutes.get('/browse', async (c) => {
     }
     catalogResult = { items: hoshikaSearchItems, total: hoshikaSearchItems.length, totalPages: 1 };
   } else catalogResult = await getHoshikaCatalog({ genre: selectedGenre, year: year || undefined, sort, page, type: type || undefined, status: status || undefined });
-  const items = q ? hoshikaSearchItems : catalogResult.items;
-  const totalCount = q ? hoshikaSearchItems.length : catalogResult.total;
-  const totalPages = q ? 1 : catalogResult.totalPages;
+  const items = catalogResult.items;
+  const totalCount = catalogResult.total;
+  const totalPages = catalogResult.totalPages;
   const cardMeta = new Map();
 
   const currentUser = auth.check() ? await auth.getCurrentUser() : null;
