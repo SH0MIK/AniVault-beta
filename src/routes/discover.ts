@@ -84,19 +84,26 @@ discoverRoutes.get('/schedule', async (c) => {
       ? `/schedule?year=${year}&week=${weekNo}`
       : '/schedule';
   };
+  const parseAiringDate = (value: any) => {
+    if (typeof value === 'number' || (typeof value === 'string' && /^\\d{10,13}$/.test(value.trim()))) {
+      const numeric = Number(value);
+      return new Date(numeric < 1e12 ? numeric * 1000 : numeric);
+    }
+    return new Date(value);
+  };
   const fmtDay = (value: string) => {
-    const date = new Date(value);
+    const date = parseAiringDate(value);
     if (!Number.isFinite(date.getTime())) return 'Upcoming';
     return new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Tokyo', weekday: 'long', month: 'short', day: 'numeric' }).format(date);
   };
   const fmtTime = (value: string) => {
-    const date = new Date(value);
+    const date = parseAiringDate(value);
     return Number.isFinite(date.getTime())
       ? new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Tokyo', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }).format(date)
       : 'Time TBA';
   };
   const grouped = new Map<string, any[]>();
-  for (const item of [...items].sort((a, b) => Date.parse(a.airingAt ?? '') - Date.parse(b.airingAt ?? ''))) {
+  for (const item of [...items].sort((a, b) => parseAiringDate(a.airingAt ?? '').getTime() - parseAiringDate(b.airingAt ?? '').getTime())) {
     const key = item?.airingAt ? fmtDay(item.airingAt) : 'Time TBA';
     if (!grouped.has(key)) grouped.set(key, []);
     grouped.get(key)!.push(item);
@@ -157,12 +164,15 @@ discoverRoutes.get('/schedule', async (c) => {
           const episode = Number.isFinite(Number(item.episode)) ? Number(item.episode) : null;
           const format = String(item.format || 'TV').trim().toUpperCase();
           const airingAt = String(item.airingAt ?? '');
-          return `<article class="card schedule-episode" data-title="${h(title.toLowerCase())}" data-format="${h(format)}" data-time="${h(airingAt)}" data-airing-ms="${Number.isFinite(Date.parse(airingAt)) ? Date.parse(airingAt) : ''}" data-watch-url="/watch?anime=${id}&ep=${episode ?? ''}" data-popularity="${Number(item.averageScore)||0}" style="display:flex;gap:1rem;padding:.85rem;min-width:0;">
+          const airingDate = parseAiringDate(item.airingAt ?? '');
+          const airingMs = airingDate.getTime();
+          const airingISO = Number.isFinite(airingMs) ? airingDate.toISOString() : '';
+          return `<article class="card schedule-episode" data-title="${h(title.toLowerCase())}" data-format="${h(format)}" data-time="${h(airingISO)}" data-airing-ms="${Number.isFinite(airingMs) ? airingMs : ''}" data-watch-url="/watch?anime=${id}&ep=${episode ?? ''}" data-popularity="${Number(item.averageScore)||0}" style="display:flex;gap:1rem;padding:.85rem;min-width:0;">
             <a class="schedule-cover" href="/anime/hoshika?id=${id}" style="flex:0 0 92px;align-self:flex-start;">
               ${image ? `<img src="${h(image)}" alt="" loading="lazy" style="display:block;width:92px;aspect-ratio:2/3;object-fit:cover;border-radius:8px;">` : '<div class="anime-card-placeholder" style="width:92px;aspect-ratio:2/3;border-radius:8px;"></div>'}
             </a>
             <div class="schedule-episode-content" style="min-width:0;flex:1;">
-              <div class="text-muted schedule-airing-time" data-iso="${h(airingAt)}" style="font-size:.82rem;margin-bottom:.35rem;">${h(fmtTime(airingAt))}</div>
+              <div class="text-muted schedule-airing-time" data-iso="${h(airingISO)}" style="font-size:.82rem;margin-bottom:.35rem;">${h(fmtTime(airingAt))}</div>
               <h3 class="schedule-episode-title" style="font-size:1rem;line-height:1.4;margin:0 0 .4rem;"><a href="/anime/hoshika?id=${id}">${h(title)}</a></h3>
               <div class="text-muted" style="font-size:.85rem;">${episode !== null ? `Episode ${episode}` : 'Episode TBA'} · ${h(format)}</div>
               <div class="schedule-episode-action" style="margin-top:.7rem;"></div>
