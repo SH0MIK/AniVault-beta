@@ -14,7 +14,7 @@ import { Session } from '../lib/session';
 import { Auth, AUTO_SESSION_LIFETIME_SECONDS } from '../lib/auth';
 import type { NormalisedAnime } from '../lib/mal-api';
 import { getHoshikaAnimeById, getHoshikaAnimeEpisodesById } from '../lib/hoshika-api';
-import { findIdentityByHoshikaId, findIdentityByLegacyMalId } from '../lib/anime-identity';
+import { findIdentityByHoshikaId } from '../lib/anime-identity';
 import { Notification } from '../lib/notification';
 import { h, getAnimeTitle } from '../lib/helpers';
 import { icon } from '../lib/icons';
@@ -120,30 +120,19 @@ async function getEpisodeOgImage(
 const PREVIEW_BOT_RE = /facebookexternalhit|Facebot|Twitterbot|Discordbot|Slackbot|TelegramBot|WhatsApp|LinkedInBot|Pinterest|SkypeUriPreview|vkShare|redditbot|Applebot|Google-InspectionTool|W3C_Validator/i;
 
 async function getMappedWatchAnime(db: Db, requestedId: number): Promise<{ anime: NormalisedAnime; shortId: string } | null> {
-  // New public watch URLs use Hoshika short IDs. Try that identity first;
-  // a numeric Hoshika ID must never be rejected just because it is not a MAL ID.
-  const hoshikaIdentity = await findIdentityByHoshikaId(db, requestedId).catch(() => null);
-  const legacyIdentity = hoshikaIdentity
-    ? null
-    : await findIdentityByLegacyMalId(db, requestedId).catch(() => null);
-  const identity = hoshikaIdentity ?? legacyIdentity;
-  const shortId = hoshikaIdentity?.hoshika_short_id
-    ?? (legacyIdentity?.verified === 1 ? legacyIdentity.hoshika_short_id : null)
-    ?? String(requestedId);
+  // Hoshika is the sole catalogue identity. Never reinterpret a requested
+  // Hoshika ID as a legacy MAL ID or borrow metadata from another catalogue.
+  const identity = await findIdentityByHoshikaId(db, requestedId).catch(() => null);
+  const shortId = identity?.hoshika_short_id ?? `hsk-${requestedId}`;
   const hoshika = await getHoshikaAnimeById(shortId).catch(() => null);
   if (!hoshika) return null;
-  // Only use a legacy MAL key when the mapping is explicitly verified.
-  // Unmapped Hoshika titles can still render, without borrowing a guessed MAL ID.
-  const animeKey = identity?.verified === 1 && identity.legacy_mal_id
-    ? identity.legacy_mal_id
-    : requestedId;
   const poster = hoshika.poster || '';
   const status = /airing|ongoing|currently/i.test(hoshika.status) ? 'Currently Airing'
     : /upcoming|not.?yet/i.test(hoshika.status) ? 'Not yet aired'
     : hoshika.status ? hoshika.status : 'Unknown';
   const anime = {
-    mal_id: animeKey,
-    title: hoshika.title || identity?.title || 'Unknown anime',
+    mal_id: requestedId,
+    title: hoshika.title || 'Unknown anime',
     title_english: hoshika.titleEnglish || '',
     title_japanese: hoshika.titleJapanese || '',
     images: { jpg: { image_url: poster, large_image_url: poster } },
@@ -208,8 +197,7 @@ watchRoutes.get('/watch', async (c) => {
   const lifetime = Number(c.env.SESSION_LIFETIME_SECONDS ?? 86400);
   const session = await Session.load(c, db, lifetime);
   const auth = new Auth(db, session, c.env as any, c.req.header('cf-connecting-ip') ?? 'unknown');
-  // Legacy watch URLs are accepted only when the identity map has a verified
-  // MAL-to-Hoshika match. The numeric legacy ID is never sent to Hoshika.
+  // The requested anime ID is interpreted only as a Hoshika numeric ID.
   const mapped = await getMappedWatchAnime(db, animeId);
   if (!mapped) return c.redirect(siteUrl + '/anime?id=' + animeId);
   const anime = mapped.anime;
