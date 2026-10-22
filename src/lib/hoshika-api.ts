@@ -650,10 +650,13 @@ export async function getHoshikaGenres(): Promise<Array<{ slug: string; name: st
   const root = unwrap(payload ?? {});
   const raw = findCatalogArray(root, ['genres', 'items', 'results']);
   const source = raw.length ? raw : (Array.isArray(root) ? root : []);
-  return source.map((item: any) => {
-    if (typeof item === 'string') return { slug: item.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''), name: item };
-    const slug = firstText(item?.slug, item?.id, item?.name).toLowerCase();
-    const name = firstText(item?.name, item?.title, item?.label, slug);
+  const toSlug = (value: unknown) => String(value ?? '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  const sourceItems = source.length ? source : (Array.isArray((payload as any)?.genres) ? (payload as any).genres : []);
+  const mapped = sourceItems.map((item: any) => {
+    if (typeof item === 'string') return { slug: toSlug(item), name: item };
+    const name = firstText(item?.name, item?.title, item?.label, item?.slug, item?.id);
+    const slug = toSlug(firstText(item?.slug, item?.id, name));
     return { slug, name };
   }).filter((item: { slug: string; name: string }) => !!item.slug && !!item.name);
+  return [...new Map(mapped.map((item: { slug: string; name: string }) => [item.slug, item])).values()];
 }
