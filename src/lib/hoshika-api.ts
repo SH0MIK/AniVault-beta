@@ -1,8 +1,8 @@
 /**
  * Public Hoshika catalog adapter.
  *
- * The documented catalog endpoints are searched without credentials. We
- * intentionally do not call user-library endpoints or require an OAuth token.
+ * Catalog requests use the server-side Hoshika partner key when configured.
+ * The key is never sent to browser code, and no OAuth/user-library token is used.
  * Episode metadata and episode stills are loaded from Hoshika's public
  * /api/v1/anime/{shortId}/episodes endpoint when available.
  */
