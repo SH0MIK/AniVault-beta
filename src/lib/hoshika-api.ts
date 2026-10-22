@@ -573,7 +573,7 @@ export async function getHoshikaHomeSections(apiKey?: string): Promise<HoshikaHo
 
 /** Fetch the public trending anime feed directly from Hoshika's browse endpoint. */
 export async function getHoshikaTrending(apiKey?: string): Promise<HoshikaCatalogAnime[]> {
-  const payload = await fetchHoshikaJson('browse?type=anime&sort=trending');
+  const payload = await fetchHoshikaJson('browse?type=anime&sort=trending', apiKey);
   return normalizeCatalogArray(resultsFrom(payload ?? {}));
 }
 
