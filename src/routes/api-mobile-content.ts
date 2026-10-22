@@ -26,7 +26,7 @@ mobileContentRoutes.get('/api/mobile/browse', async (c) => {
     genres: [], source: 'hoshika',
     message: 'Search by title while the Hoshika catalogue filters are being migrated.',
   }, 200, { 'Cache-Control': 'no-store' });
-  const items = await searchHoshikaAnime(q, 50);
+  const items = await searchHoshikaAnime(q, 50, c.env.HOSHIKA_API_KEY);
   const data = items.map((a) => ({
     id: a.shortId, shortId: a.shortId, title: a.title,
     image: a.poster, score: a.score, type: a.type, episodes: a.episodes ?? 0,
@@ -53,7 +53,7 @@ mobileContentRoutes.get('/api/mobile/anime/:id', async (c) => {
     return c.json({ success: false, message: 'This legacy anime ID has no verified Hoshika mapping.', source: 'hoshika' }, 404, { 'Cache-Control': 'no-store' });
   }
   const shortId = isLegacyId ? identity!.hoshika_short_id! : requestedId;
-  const anime = await getHoshikaAnimeById(shortId);
+  const anime = await getHoshikaAnimeById(shortId, c.env.HOSHIKA_API_KEY);
   if (!anime) return c.json({ success: false, message: 'Anime not found in Hoshika.', source: 'hoshika' }, 404, { 'Cache-Control': 'no-store' });
   const mappedLegacyId = identity?.verified === 1 && identity.legacy_mal_id ? Number(identity.legacy_mal_id) : legacyId;
   const currentUser = auth.check() ? await auth.getCurrentUser() : null;
@@ -92,7 +92,7 @@ mobileContentRoutes.get('/api/mobile/anime/:id/episodes', async (c) => {
     return c.json({ success: false, message: 'This legacy anime ID has no verified Hoshika mapping.', source: 'hoshika' }, 404, { 'Cache-Control': 'no-store' });
   }
   const shortId = isLegacyId ? identity!.hoshika_short_id! : requestedId;
-  const episodes = await getHoshikaAnimeEpisodesById(shortId);
+  const episodes = await getHoshikaAnimeEpisodesById(shortId, c.env.HOSHIKA_API_KEY);
   if (!episodes) return c.json({ success: false, message: 'Episode data unavailable from Hoshika.', source: 'hoshika' }, 502, { 'Cache-Control': 'no-store' });
   const data = episodes.map((ep) => ({
     mal_id: ep.number, episode: ep.number, title: ep.title,
@@ -129,7 +129,7 @@ mobileContentRoutes.get('/api/mobile/home', async (c) => {
     watchNow = (await Promise.all(rows.map(async (row) => {
       const identity = await findIdentityByLegacyMalId(db, row.anime_id).catch(() => null);
       if (identity?.verified !== 1 || !identity.hoshika_short_id) return null;
-      const anime = await getHoshikaAnimeById(identity.hoshika_short_id);
+      const anime = await getHoshikaAnimeById(identity.hoshika_short_id, c.env.HOSHIKA_API_KEY);
       if (!anime) return null;
       return { id: anime.shortId, shortId: anime.shortId, legacyId: row.anime_id, title: anime.title, image: anime.poster, score: anime.score, type: anime.type, episodes: anime.episodes ?? 0, source: 'hoshika' };
     }))).filter(Boolean);
@@ -158,7 +158,7 @@ mobileContentRoutes.get('/api/mobile/watch-now', async (c) => {
   const data = (await Promise.all(rows.map(async (row) => {
     const identity = await findIdentityByLegacyMalId(db, row.anime_id).catch(() => null);
     if (identity?.verified !== 1 || !identity.hoshika_short_id) return null;
-    const anime = await getHoshikaAnimeById(identity.hoshika_short_id);
+    const anime = await getHoshikaAnimeById(identity.hoshika_short_id, c.env.HOSHIKA_API_KEY);
     if (!anime) return null;
     return { id: anime.shortId, shortId: anime.shortId, legacyId: row.anime_id, title: anime.title, image: anime.poster, score: anime.score, type: anime.type, episodes: anime.episodes ?? 0, source: 'hoshika' };
   }))).filter(Boolean);
