@@ -38,7 +38,7 @@ adminTurbovidServerRoutes.get('/admin/turbovid_servers.php', async (c) => {
     try {
       const identity = await findIdentityByLegacyMalId(db, Number(row.anime_id));
       if (!identity || identity.verified !== 1 || !identity.hoshika_short_id) throw new Error('Unmapped legacy ID');
-      const a = await getHoshikaAnimeById(identity.hoshika_short_id);
+      const a = await getHoshikaAnimeById(identity.hoshika_short_id, c.env.HOSHIKA_API_KEY);
       return {...row, title:a?.title || identity.title || `Anime #${row.anime_id}`, image:a?.poster || '', totalEps:Number(a?.episodes || 0), status:a?.status || '', type:a?.type || ''};
     } catch {
       return {...row, title:`Anime #${row.anime_id} · mapping required`, image:'', totalEps:0, status:'', type:''};
