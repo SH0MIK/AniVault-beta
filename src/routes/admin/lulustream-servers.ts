@@ -99,7 +99,7 @@ adminLuluStreamServerRoutes.get('/admin/lulustream_servers.php', async (c) => {
     try {
       const identity = await findIdentityByLegacyMalId(db, Number(row.anime_id));
       if (!identity || identity.verified !== 1 || !identity.hoshika_short_id) return;
-      const a = await getHoshikaAnimeById(identity.hoshika_short_id);
+      const a = await getHoshikaAnimeById(identity.hoshika_short_id, c.env.HOSHIKA_API_KEY);
       if (a) metadataById.set(Number(row.anime_id), { ...a, title: a.title || identity.title, images: { jpg: { large_image_url: a.poster, image_url: a.poster } } });
     } catch { /* decorative metadata; preserve stream administration */ }
   }));
