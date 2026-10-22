@@ -47,7 +47,8 @@ animeRoutes.get('/anime', async (c) => {
     HIATUS: 'On Hiatus', CANCELLED: 'Cancelled',
   };
   const genreRows = Array.isArray(raw.genres) ? raw.genres : record.genres.map((name) => ({ name, slug: name.toLowerCase().replace(/[^a-z0-9]+/g, '-') }));
-  const studioRows = Array.isArray(raw.studios) ? raw.studios : Array.isArray(raw.producers) ? raw.producers : [];
+  // Keep the anime page's Studio fields limited to the first studio in the Hoshika response.
+  const studioRows = (Array.isArray(raw.studios) ? raw.studios : Array.isArray(raw.producers) ? raw.producers : []).slice(0, 1);
   const relationRows = Array.isArray(raw.relations) ? raw.relations : Array.isArray(raw.relatedAnime) ? raw.relatedAnime : record.raw?.watchOrder ?? [];
   const anime: any = {
     title: asText(raw.title, record.title, record.titleRomaji, record.titleEnglish),
