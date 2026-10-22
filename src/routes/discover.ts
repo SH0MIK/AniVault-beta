@@ -104,44 +104,93 @@ discoverRoutes.get('/schedule', async (c) => {
     ...banner, siteUrl, siteName: c.env.SITE_NAME, pageTitle: 'Anime Schedule',
     currentPage: 'schedule', currentUser: layoutUser, unreadCount, requestUrl: c.req.url,
   });
+  const dayGroups = [...grouped.entries()];
+  const initialDay = dayGroups.find(([day]) => day === fmtDay(new Date().toISOString()))?.[0] ?? dayGroups[0]?.[0] ?? '';
+  const dayCount = (entries: any[]) => entries.length;
   html += `
-<main class="container section">
-  <div class="flex-between mb-3" style="gap:1rem;flex-wrap:wrap;">
-    <div><h1>Anime Schedule</h1><p class="text-muted">Upcoming episodes · Japan Standard Time (JST)</p></div>
-    <div style="display:flex;gap:.5rem;align-items:center;">
-      <a class="btn btn-ghost" href="${h(weekLink(week.prev))}" aria-label="Previous week">← Previous</a>
-      <a class="btn btn-ghost" href="/schedule">Current week</a>
-      <a class="btn btn-ghost" href="${h(weekLink(week.next))}" aria-label="Next week">Next →</a>
+<main class="container section schedule-page">
+  <div class="flex-between mb-3" style="gap:1rem;flex-wrap:wrap;align-items:flex-start;">
+    <div style="display:flex;gap:.75rem;align-items:center;">
+      <div aria-hidden="true" style="display:grid;place-items:center;width:44px;height:44px;border-radius:14px;background:var(--surface-2,rgba(255,255,255,.06));font-size:1.4rem;">▦</div>
+      <div><h1 style="margin:0;">Schedule</h1><p class="text-muted" style="margin:.2rem 0 0;">This week's anime airings</p></div>
     </div>
+    <button class="btn btn-ghost" id="schedule-filter-toggle" type="button" aria-expanded="false" aria-controls="schedule-filters">☷ Filters</button>
   </div>
-  ${week.year && week.week ? `<p class="text-muted mb-3">Week ${h(String(week.week))}, ${h(String(week.year))}</p>` : ''}
+  <div class="schedule-types" aria-label="Filter by anime type">
+    ${['TV','ONA','Movie','OVA','Special','Music'].map(type => `<button type="button" class="schedule-chip" data-type-filter="${type}">${type}</button>`).join('')}
+  </div>
+  <section id="schedule-filters" class="card card-body" hidden style="margin:1rem 0;display:none;">
+    <div class="schedule-filter-grid">
+      <div><label class="schedule-filter-label">TIME FORMAT</label><div class="schedule-options"><button class="schedule-chip is-active" data-time-format="12" type="button">12H</button><button class="schedule-chip" data-time-format="24" type="button">24H</button></div></div>
+      <div><label class="schedule-filter-label">SORT BY</label><div class="schedule-options"><button class="schedule-chip" data-sort="popularity" type="button">Popularity</button><button class="schedule-chip is-active" data-sort="time" type="button">Time</button><button class="schedule-chip" data-sort="az" type="button">A-Z</button></div></div>
+      <div><label class="schedule-filter-label">IMAGES</label><div class="schedule-options"><button class="schedule-chip is-active" data-images="show" type="button">Show</button><button class="schedule-chip" data-images="hide" type="button">Hide</button></div></div>
+      <div><label class="schedule-filter-label">◎ TIMEZONE</label><select id="schedule-timezone" class="form-control" style="width:100%;"><option value="local">Local</option><option value="Asia/Tokyo">Japan (JST)</option><option value="UTC">UTC</option></select></div>
+    </div>
+  </section>
+  <nav class="schedule-week-nav" aria-label="Schedule week navigation">
+    <a class="btn btn-ghost" href="${h(weekLink(week.prev))}">‹ Prev</a>
+    <div style="text-align:center;"><strong>Week ${h(String(week.week ?? '—'))} · ${h(String(week.year ?? ''))}</strong><div class="text-muted" style="font-size:.82rem;margin-top:.2rem;">${week.startISO ? h(`${new Intl.DateTimeFormat('en-US',{timeZone:'UTC',month:'short',day:'numeric'}).format(new Date(week.startISO))} - ${new Intl.DateTimeFormat('en-US',{timeZone:'UTC',month:'short',day:'numeric'}).format(new Date(Date.parse(week.startISO)+6*86400000))}`) : ''} </div></div>
+    <a class="btn btn-ghost" href="${h(weekLink(week.next))}">Next ›</a>
+  </nav>
+  <nav class="schedule-day-nav" aria-label="Choose airing day">
+    ${dayGroups.map(([day, dayItems], index) => {
+      const date = dayItems.find((item:any) => item.airingAt)?.airingAt;
+      const d = date ? new Date(date) : null;
+      const weekday = d ? new Intl.DateTimeFormat('en-US',{timeZone:'Asia/Tokyo',weekday:'short'}).format(d).toUpperCase() : day.slice(0,3).toUpperCase();
+      const dayNum = d ? new Intl.DateTimeFormat('en-US',{timeZone:'Asia/Tokyo',day:'numeric'}).format(d) : '—';
+      return `<button type="button" class="schedule-day-button ${day===initialDay?'is-active':''}" data-day-target="${h(day)}"><span>${h(weekday)}</span><strong>${h(dayNum)}</strong><small data-day-count>${dayCount(dayItems)}</small></button>`;
+    }).join('')}
+  </nav>
   ${loadError || payload?.ok === false ? '<div class="card card-body"><p>Could not load the schedule from Hoshika right now. Please try again shortly.</p></div>' : ''}
   ${!loadError && items.length === 0 ? '<div class="card card-body"><p>No airing episodes were found for this week.</p></div>' : ''}
-  ${[...grouped.entries()].map(([day, dayItems]) => `
-    <section class="mb-4">
+  <div id="schedule-empty-filtered" class="card card-body" hidden>No episodes match these filters.</div>
+  ${dayGroups.map(([day, dayItems]) => `
+    <section class="schedule-day-section mb-4" data-day-section="${h(day)}" ${day===initialDay?'':'hidden'}>
       <h2 style="font-size:1.15rem;margin-bottom:1rem;">${h(day)}</h2>
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,330px),1fr));gap:1rem;">
+      <div class="schedule-episode-grid">
         ${dayItems.map((item: any) => {
           const title = String(item.titleLocalized || item.titleEnglish || item.titleRomaji || item.slug || 'Untitled anime');
           const image = typeof item.coverImage === 'string' ? item.coverImage : '';
           const id = encodeURIComponent(String(item.shortId ?? item.id ?? ''));
           const episode = Number.isFinite(Number(item.episode)) ? Number(item.episode) : null;
+          const format = String(item.format || 'TV');
           const platforms = Array.isArray(item.platforms) ? item.platforms.filter((p: any) => p && typeof p.url === 'string' && (p.url.startsWith('https://') || p.url.startsWith('http://'))) : [];
-          return `<article class="card" style="display:flex;gap:1rem;padding:.85rem;min-width:0;">
-            <a href="/anime/hoshika?id=${id}" style="flex:0 0 92px;align-self:flex-start;">
+          return `<article class="card schedule-episode" data-title="${h(title.toLowerCase())}" data-format="${h(format)}" data-time="${h(String(item.airingAt ?? ''))}" data-popularity="${Number(item.averageScore)||0}" style="display:flex;gap:1rem;padding:.85rem;min-width:0;">
+            <a class="schedule-cover" href="/anime/hoshika?id=${id}" style="flex:0 0 92px;align-self:flex-start;">
               ${image ? `<img src="${h(image)}" alt="" loading="lazy" style="display:block;width:92px;aspect-ratio:2/3;object-fit:cover;border-radius:8px;">` : '<div class="anime-card-placeholder" style="width:92px;aspect-ratio:2/3;border-radius:8px;"></div>'}
             </a>
             <div style="min-width:0;flex:1;">
-              <div class="text-muted" style="font-size:.82rem;margin-bottom:.35rem;">${h(fmtTime(String(item.airingAt ?? '')))}</div>
+              <div class="text-muted schedule-airing-time" data-iso="${h(String(item.airingAt ?? ''))}" style="font-size:.82rem;margin-bottom:.35rem;">${h(fmtTime(String(item.airingAt ?? '')))}</div>
               <h3 style="font-size:1rem;line-height:1.4;margin:0 0 .4rem;"><a href="/anime/hoshika?id=${id}">${h(title)}</a></h3>
-              <div class="text-muted" style="font-size:.85rem;">${episode !== null ? `Episode ${episode}` : 'Episode TBA'}${item.format ? ` · ${h(String(item.format))}` : ''}</div>
+              <div class="text-muted" style="font-size:.85rem;">${episode !== null ? `Episode ${episode}` : 'Episode TBA'} · ${h(format)}</div>
               ${platforms.length ? `<div style="display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.7rem;">${platforms.slice(0,4).map((p: any) => `<a class="btn btn-ghost" style="font-size:.78rem;padding:.3rem .5rem;" href="${h(p.url)}" target="_blank" rel="noopener noreferrer">${h(String(p.name || 'Watch'))}</a>`).join('')}</div>` : ''}
             </div>
           </article>`;
         }).join('')}
       </div>
     </section>`).join('')}
-</main>`;
+</main>
+<style>
+.schedule-types,.schedule-options{display:flex;gap:.45rem;flex-wrap:wrap}.schedule-chip{border:1px solid var(--border-color,rgba(255,255,255,.12));background:transparent;color:inherit;border-radius:999px;padding:.35rem .8rem;font:inherit;font-size:.82rem;cursor:pointer}.schedule-chip.is-active{border-color:var(--accent-color,#bda16c);background:rgba(189,161,108,.12);color:var(--accent-color,#d7bd8a)}.schedule-week-nav{display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:.7rem 1rem;margin:1rem 0;border:1px solid var(--border-color,rgba(255,255,255,.1));border-radius:999px;background:var(--surface-1,rgba(255,255,255,.025))}.schedule-day-nav{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:.45rem;margin:1.2rem 0 1.5rem}.schedule-day-button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.15rem;min-height:72px;border:1px solid var(--border-color,rgba(255,255,255,.1));border-radius:22px;background:var(--surface-1,rgba(255,255,255,.025));color:inherit;cursor:pointer}.schedule-day-button span{font-size:.72rem;font-weight:600}.schedule-day-button strong{font-size:1.1rem}.schedule-day-button small{font-size:.68rem;color:var(--text-muted,#999)}.schedule-day-button.is-active{border-color:var(--accent-color,#bda16c);background:rgba(189,161,108,.1)}.schedule-filter-grid{display:grid;grid-template-columns:1fr 1fr;gap:1.2rem}.schedule-filter-label{display:block;font-size:.72rem;color:var(--text-muted,#999);margin-bottom:.55rem}.schedule-episode-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,330px),1fr));gap:1rem}.schedule-page [hidden]{display:none!important}@media(max-width:600px){.schedule-day-nav{gap:.25rem}.schedule-day-button{min-height:64px;border-radius:14px}.schedule-day-button span{font-size:.62rem}.schedule-day-button strong{font-size:1rem}.schedule-day-button small{font-size:.62rem}.schedule-filter-grid{grid-template-columns:1fr}.schedule-week-nav{border-radius:18px;padding:.6rem}.schedule-week-nav .btn{padding:.35rem .5rem}}
+</style>
+<script>
+(function(){
+ const root=document.querySelector('.schedule-page');if(!root)return;
+ const filterButton=root.querySelector('#schedule-filter-toggle'),filters=root.querySelector('#schedule-filters');
+ filterButton?.addEventListener('click',()=>{const open=filters.hidden;filters.hidden=!open;filters.style.display=open?'block':'none';filterButton.setAttribute('aria-expanded',String(open));});
+ let selectedType='';let sort='time';let timeFormat='12';let timezone='local';let images='show';
+ const buttons=[...root.querySelectorAll('[data-day-target]')],sections=[...root.querySelectorAll('[data-day-section]')];
+ function apply(){let visible=0;sections.forEach(section=>{const active=buttons.find(b=>b.classList.contains('is-active'))?.dataset.dayTarget;const show=section.dataset.daySection===active;section.hidden=!show;const cards=[...section.querySelectorAll('.schedule-episode')];cards.forEach(card=>{const match=!selectedType||card.dataset.format===selectedType;card.hidden=!match;if(match)visible++;const cover=card.querySelector('.schedule-cover');if(cover)cover.hidden=images==='hide';});const grid=section.querySelector('.schedule-episode-grid');if(grid){cards.sort((a,b)=>sort==='az'?a.dataset.title.localeCompare(b.dataset.title):sort==='popularity'?Number(b.dataset.popularity)-Number(a.dataset.popularity):Date.parse(a.dataset.time)-Date.parse(b.dataset.time)).forEach(card=>grid.appendChild(card));}});const empty=root.querySelector('#schedule-empty-filtered');if(empty)empty.hidden=visible>0;root.querySelectorAll('.schedule-airing-time').forEach(el=>{const date=new Date(el.dataset.iso);if(!Number.isFinite(date.getTime()))return;const zone=timezone==='local'?undefined:timezone;el.textContent=new Intl.DateTimeFormat('en-US',{timeZone:zone,hour:'numeric',minute:'2-digit',timeZoneName:'short',hour12:timeFormat==='12'}).format(date);});}
+ buttons.forEach(button=>button.addEventListener('click',()=>{buttons.forEach(b=>b.classList.toggle('is-active',b===button));apply();}));
+ root.querySelectorAll('[data-type-filter]').forEach(button=>button.addEventListener('click',()=>{selectedType=selectedType===button.dataset.typeFilter?'':button.dataset.typeFilter;root.querySelectorAll('[data-type-filter]').forEach(b=>b.classList.toggle('is-active',b.dataset.typeFilter===selectedType));apply();}));
+ root.querySelectorAll('[data-sort]').forEach(button=>button.addEventListener('click',()=>{sort=button.dataset.sort;root.querySelectorAll('[data-sort]').forEach(b=>b.classList.toggle('is-active',b===button));apply();}));
+ root.querySelectorAll('[data-time-format]').forEach(button=>button.addEventListener('click',()=>{timeFormat=button.dataset.timeFormat;root.querySelectorAll('[data-time-format]').forEach(b=>b.classList.toggle('is-active',b===button));apply();}));
+ root.querySelectorAll('[data-images]').forEach(button=>button.addEventListener('click',()=>{images=button.dataset.images;root.querySelectorAll('[data-images]').forEach(b=>b.classList.toggle('is-active',b===button));apply();}));
+ root.querySelector('#schedule-timezone')?.addEventListener('change',event=>{timezone=event.target.value;apply();});
+ apply();
+})();
+</script>`;
+
   html += renderFooter({ siteUrl, currentUser: layoutUser });
   await session.save(c, lifetime);
   return c.html(html);
