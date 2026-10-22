@@ -101,7 +101,7 @@ adminHomeBannersRoutes.on(['GET', 'POST'], '/admin/home_banners.php', async (c) 
 
         const identity = await findIdentityByLegacyMalId(db, animeId);
         if (!identity || identity.verified !== 1 || !identity.hoshika_short_id) throw new Error('This legacy ID has no verified Hoshika mapping yet. Search for the title in Browse and map it before adding a hero slide.');
-        const fetched = await getHoshikaAnimeById(identity.hoshika_short_id);
+        const fetched = await getHoshikaAnimeById(identity.hoshika_short_id, c.env.HOSHIKA_API_KEY);
         if (!fetched) throw new Error(`Hoshika details are unavailable for ID ${animeId}.`);
         if (!title) title = fetched.titleEnglish || fetched.title || identity.title || '';
         const logoUrl = '';
