@@ -40,6 +40,34 @@ animeRoutes.get('/anime', async (c) => {
     ? Number(identity.legacy_mal_id) : null;
   const raw: any = record.raw ?? {};
   const asText = (...values: any[]) => values.find((v) => typeof v === 'string' && v.trim()) ?? '';
+  const dateText = (value: any): string => {
+    if (typeof value === 'string' && value.trim()) return value.trim();
+    if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+    if (value && typeof value === 'object') {
+      if (typeof value.string === 'string' && value.string.trim()) return value.string.trim();
+      const year = value.year ?? value.y;
+      const month = value.month ?? value.m;
+      const day = value.day ?? value.d;
+      if (year != null) {
+        const y = String(year);
+        if (month == null) return y;
+        const m = String(month).padStart(2, '0');
+        if (day == null) return `${y}-${m}`;
+        return `${y}-${m}-${String(day).padStart(2, '0')}`;
+      }
+      return asText(value.date, value.iso, value.value, value.label);
+    }
+    return '';
+  };
+  const startDateText = dateText(raw.startDate ?? raw.start_date ?? raw.aired?.from ?? raw.aired?.start ?? raw.aired?.startDate);
+  const endDateText = dateText(raw.endDate ?? raw.end_date ?? raw.aired?.to ?? raw.aired?.end ?? raw.aired?.endDate);
+  const airedText = asText(
+    typeof raw.aired === 'string' ? raw.aired : '',
+    raw.airedString,
+    raw.aired?.string,
+    raw.aired?.text,
+    raw.aired?.label,
+  ) || (startDateText ? (endDateText ? `${startDateText} to ${endDateText}` : startDateText) : '');
   const statusRaw = String(raw.status ?? record.status ?? '');
   const statusMap: Record<string, string> = {
     FINISHED: 'Finished Airing', FINISHED_AIRING: 'Finished Airing', RELEASING: 'Currently Airing',
@@ -61,13 +89,13 @@ animeRoutes.get('/anime', async (c) => {
     type: asText(raw.format, raw.type, record.type),
     episodes: record.episodes ?? 0,
     duration_mins: Number(raw.episodeDuration ?? raw.episode_duration ?? raw.durationMins ?? 0) || null,
-    duration: asText(raw.duration, raw.episodeDurationText),
-    start_date: typeof (raw.startDate ?? raw.start_date) === 'string' ? (raw.startDate ?? raw.start_date) : (record.year ? String(record.year) + '-01-01' : null),
+    duration: asText(raw.duration, raw.episodeDurationText, raw.episodeDurationLabel, raw.durationText, raw.duration_text) || (Number(raw.episodeDuration ?? raw.episode_duration ?? raw.durationMins ?? raw.duration_mins) > 0 ? `${Number(raw.episodeDuration ?? raw.episode_duration ?? raw.durationMins ?? raw.duration_mins)} min per episode` : ''),
+    start_date: startDateText || (record.year ? String(record.year) + '-01-01' : null),
     status: statusMap[statusRaw.toUpperCase().replace(/\s+/g, '_')] ?? statusRaw,
     genres: genreRows.map((g: any) => ({ name: typeof g === 'string' ? g : asText(g?.name, g?.title), slug: g?.slug ?? g?.name ?? '' })),
     studios: studioRows.map((s: any) => typeof s === 'string' ? { name: s } : { name: asText(s?.name, s?.title) }),
     source: asText(raw.source),
-    aired: { string: asText(raw.aired, raw.airedString, raw.aired?.string) },
+    aired: { string: airedText },
     rating: asText(raw.rating, raw.contentRating),
     themes: Array.isArray(raw.themes) ? raw.themes.map((t: any) => typeof t === 'string' ? { name: t } : t) : [],
     related_anime: relationRows.map((rel: any) => ({
