@@ -91,11 +91,11 @@ export const AnimeTracker = {
   },
 
   /** Save genres only from a verified Hoshika identity; never infer IDs. */
-  async fetchGenresJson(db: Db, animeId: number): Promise<string | null> {
+  async fetchGenresJson(db: Db, animeId: number, apiKey?: string): Promise<string | null> {
     try {
       const identity = await findIdentityByLegacyMalId(db, animeId);
       if (!identity || identity.verified !== 1 || !identity.hoshika_short_id) return null;
-      const anime = await getHoshikaAnimeById(identity.hoshika_short_id);
+      const anime = await getHoshikaAnimeById(identity.hoshika_short_id, apiKey);
       const names = anime?.genres ?? [];
       return names.length ? JSON.stringify(names) : null;
     } catch {
@@ -103,7 +103,7 @@ export const AnimeTracker = {
     }
   },
 
-  async addOrUpdate(db: Db, userId: number, data: Record<string, any>): Promise<{ success: boolean; message: string }> {
+  async addOrUpdate(db: Db, userId: number, data: Record<string, any>, apiKey?: string): Promise<{ success: boolean; message: string }> {
     const animeId = parseInt(data.anime_id ?? '0', 10) || 0;
     if (!animeId) return { success: false, message: 'Invalid anime ID.' };
 
@@ -125,7 +125,7 @@ export const AnimeTracker = {
       let genresUpdate = '';
       const extraParams: unknown[] = [];
       if (!existing.genres) {
-        const genresJson = await this.fetchGenresJson(db, animeId);
+        const genresJson = await this.fetchGenresJson(db, animeId, apiKey);
         if (genresJson) { genresUpdate = ', genres=?'; extraParams.push(genresJson); }
       }
       const completedAtExpr = status === 'completed' ? "date('now')" : 'completed_at';
