@@ -34,8 +34,8 @@ episodeOverrideRoutes.on(['GET', 'POST'], '/api/episode_override.php', async (c)
       const hoshikaId = identity?.verified === 1 ? identity.hoshika_short_id : null;
       const [animeData, hoshikaEpisodes] = hoshikaId
         ? await Promise.all([
-            getHoshikaAnimeById(hoshikaId),
-            getHoshikaAnimeEpisodesById(hoshikaId),
+            getHoshikaAnimeById(hoshikaId, c.env.HOSHIKA_API_KEY),
+            getHoshikaAnimeEpisodesById(hoshikaId, c.env.HOSHIKA_API_KEY),
           ])
         : [null, null];
       const totalEps = hoshikaEpisodes?.length || animeData?.episodes || 0;
@@ -69,7 +69,7 @@ episodeOverrideRoutes.on(['GET', 'POST'], '/api/episode_override.php', async (c)
     if (!thumbnail) {
       const identity = await findIdentityByLegacyMalId(db, animeId).catch(() => null);
       if (identity?.verified === 1) {
-        const episodes = await getHoshikaAnimeEpisodesById(identity.hoshika_short_id);
+        const episodes = await getHoshikaAnimeEpisodesById(identity.hoshika_short_id, c.env.HOSHIKA_API_KEY);
         thumbnail = episodes?.find((ep) => ep.number === epNum)?.thumbnail || null;
       }
     }
