@@ -126,7 +126,7 @@ discoverRoutes.get('/schedule', async (c) => {
           const image = typeof item.coverImage === 'string' ? item.coverImage : '';
           const id = encodeURIComponent(String(item.shortId ?? item.id ?? ''));
           const episode = Number.isFinite(Number(item.episode)) ? Number(item.episode) : null;
-          const platforms = Array.isArray(item.platforms) ? item.platforms.filter((p: any) => p && typeof p.url === 'string' && /^https?:\\/\\//i.test(p.url)) : [];
+          const platforms = Array.isArray(item.platforms) ? item.platforms.filter((p: any) => p && typeof p.url === 'string' && (p.url.startsWith('https://') || p.url.startsWith('http://'))) : [];
           return `<article class="card" style="display:flex;gap:1rem;padding:.85rem;min-width:0;">
             <a href="/anime/hoshika?id=${id}" style="flex:0 0 92px;align-self:flex-start;">
               ${image ? `<img src="${h(image)}" alt="" loading="lazy" style="display:block;width:92px;aspect-ratio:2/3;object-fit:cover;border-radius:8px;">` : '<div class="anime-card-placeholder" style="width:92px;aspect-ratio:2/3;border-radius:8px;"></div>'}
