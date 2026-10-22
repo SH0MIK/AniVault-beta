@@ -265,7 +265,7 @@ export async function getHoshikaAnimeEpisodesById(shortIdValue: string | number,
       url.searchParams.set('locale', 'en');
       url.searchParams.set('limit', '100');
       if (after) url.searchParams.set('after', after);
-      const response = await fetch(url.toString(), { headers: { Accept: 'application/json' } });
+      const response = await fetch(url.toString(), { headers: { Accept: 'application/json', ...(apiKey ? { 'X-Hoshika-Key': apiKey } : {}) } });
       if (!response.ok) return episodes.length ? episodes : null;
       const payload: any = await response.json();
       if (payload?.ok === false || !Array.isArray(payload?.items)) return episodes.length ? episodes : null;
@@ -321,7 +321,7 @@ export async function getHoshikaAnimeMetadata(
     const url = new URL('https://hoshika.app/api/v1/search');
     url.searchParams.set('q', title);
     const response = await fetch(url.toString(), {
-      headers: { Accept: 'application/json' },
+      headers: { Accept: 'application/json', ...(apiKey ? { 'X-Hoshika-Key': apiKey } : {}) },
     });
     if (!response.ok) return null;
     const payload: any = await response.json();
@@ -441,7 +441,7 @@ export async function searchHoshikaAnime(query: string, limit = 20, apiKey?: str
   try {
     const url = new URL('https://hoshika.app/api/v1/search');
     url.searchParams.set('q', q);
-    const response = await fetch(url.toString(), { headers: { Accept: 'application/json' } });
+    const response = await fetch(url.toString(), { headers: { Accept: 'application/json', ...(apiKey ? { 'X-Hoshika-Key': apiKey } : {}) } });
     if (!response.ok) return [];
     const payload: any = await response.json();
     if (payload?.ok === false) return [];
@@ -462,7 +462,7 @@ export async function getHoshikaAnimeById(shortId: string | number, apiKey?: str
   try {
     const response = await fetch(
       `https://hoshika.app/api/v1/anime/${encodeURIComponent(id)}`,
-      { headers: { Accept: 'application/json' } },
+      { headers: { Accept: 'application/json', ...(apiKey ? { 'X-Hoshika-Key': apiKey } : {}) } },
     );
     if (!response.ok) return null;
     const payload: any = await response.json();
