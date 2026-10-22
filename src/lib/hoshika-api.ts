@@ -583,14 +583,18 @@ export async function getHoshikaCatalog(options: {
   const pageSize = 24;
   const maxSourcePages = 10;
   const fetchPage = async (sourcePage: number) => {
-    const url = new URL('https://hoshika.app/api/v1/catalog');
-    url.searchParams.set('type', 'anime');
+    // Hoshika's dedicated genre endpoint returns genuinely genre-filtered
+    // records. The general catalog endpoint can return the same broad feed
+    // even when a genre query parameter is present, so do not use it for genres.
+    const endpoint = options.genre
+      ? new URL(`https://hoshika.app/api/v1/genre/${encodeURIComponent(options.genre)}`)
+      : new URL('https://hoshika.app/api/v1/catalog');
+    endpoint.searchParams.set('type', 'anime');
     const catalogSort = options.sort === 'trending' ? 'popular' : (options.sort || 'popular');
-    url.searchParams.set('sort', catalogSort);
-    if (options.genre) url.searchParams.set('genre', options.genre);
-    if (options.year) url.searchParams.set('year', String(options.year));
-    url.searchParams.set('page', String(sourcePage));
-    const payload = await fetchHoshikaJson(url.pathname.replace('/api/v1/', '') + url.search);
+    endpoint.searchParams.set('sort', catalogSort);
+    if (options.year) endpoint.searchParams.set('year', String(options.year));
+    endpoint.searchParams.set('page', String(sourcePage));
+    const payload = await fetchHoshikaJson(endpoint.pathname.replace('/api/v1/', '') + endpoint.search);
     const root = unwrap(payload ?? {});
     const rawItems = resultsFrom(payload ?? {});
     const items = normalizeCatalogArray(rawItems.length ? rawItems : findCatalogArray(root, ['items', 'results', 'anime', 'catalog']));
