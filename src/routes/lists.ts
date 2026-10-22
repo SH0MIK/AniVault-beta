@@ -321,7 +321,7 @@ listRoutes.get('/history', async (c) => {
       if (!anime) {
         const identity = await findIdentityByLegacyMalId(db, Number(row.anime_id));
         if (identity?.hoshika_short_id) {
-          anime = await getHoshikaAnimeById(identity.hoshika_short_id).catch(() => null);
+          anime = await getHoshikaAnimeById(identity.hoshika_short_id, c.env.HOSHIKA_API_KEY).catch(() => null);
         }
       }
       if (anime?.poster) historyPosters[Number(row.anime_id)] = anime.poster;
@@ -352,7 +352,7 @@ listRoutes.get('/history', async (c) => {
         if (!episodes) {
           const identity = await findIdentityByLegacyMalId(db, Number(row.anime_id));
           if (identity?.hoshika_short_id) {
-            episodes = await getHoshikaAnimeEpisodesById(identity.hoshika_short_id);
+            episodes = await getHoshikaAnimeEpisodesById(identity.hoshika_short_id, c.env.HOSHIKA_API_KEY);
           }
         }
         const episode = episodes?.find((item) => item.number === Number(row.episode_num));
