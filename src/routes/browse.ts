@@ -36,7 +36,7 @@ browseRoutes.get('/browse', async (c) => {
   let hoshikaSearchItems: Awaited<ReturnType<typeof searchHoshikaAnime>> = [];
   if (q) {
     // All title search is Hoshika-only; no MAL/Jikan fallback on errors or empty results.
-    hoshikaSearchItems = await searchHoshikaAnime(q, 50);
+    hoshikaSearchItems = await searchHoshikaAnime(q, 50, c.env.HOSHIKA_API_KEY);
     result = { data: [], pagination: { items: { total: hoshikaSearchItems.length }, last_visible_page: 1 } };
   } else {
     // Hoshika currently exposes search/details/episodes, not a verified
@@ -253,7 +253,7 @@ browseRoutes.get('/api/search_suggest.php', async (c) => {
   try {
     // Search suggestions now come from Hoshika only. Hoshika shortId is
     // returned separately so it cannot be mistaken for a legacy MAL ID.
-    const items = await searchHoshikaAnime(q, 4);
+    const items = await searchHoshikaAnime(q, 4, c.env.HOSHIKA_API_KEY);
     const out = items.map((a) => ({
       shortId: a.shortId,
       title: a.title,
