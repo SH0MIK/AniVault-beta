@@ -85,7 +85,7 @@ discoverRoutes.get('/schedule', async (c) => {
       : '/schedule';
   };
   const parseAiringDate = (value: any) => {
-    if (typeof value === 'number' || (typeof value === 'string' && /^\\d{10,13}$/.test(value.trim()))) {
+    if (typeof value === 'number' || (typeof value === 'string' && /^\d{10,13}$/.test(value.trim()))) {
       const numeric = Number(value);
       return new Date(numeric < 1e12 ? numeric * 1000 : numeric);
     }
@@ -206,8 +206,8 @@ discoverRoutes.get('/schedule', async (c) => {
     const episode=Number((watchUrl||'').split('&ep=')[1]);
     action.innerHTML=Number.isFinite(episode)&&episode>0?'<a class="schedule-watch-button" href="'+watchUrl+'">▶ Watch Episode '+episode+'</a>':'<span class="schedule-countdown">Episode aired</span>';
    }else{
-    const totalSeconds=Math.floor(remaining/1000);const days=Math.floor(totalSeconds/86400);const hours=Math.floor((totalSeconds%86400)/3600);const minutes=Math.floor((totalSeconds%3600)/60);const seconds=totalSeconds%60;
-    action.innerHTML='<span class="schedule-countdown">Releases in '+(days?days+'d ':'')+String(hours).padStart(2,'0')+':'+String(minutes).padStart(2,'0')+':'+String(seconds).padStart(2,'0')+'</span>';
+    const totalSeconds=Math.floor(remaining/1000);const totalHours=Math.floor(totalSeconds/3600);const minutes=Math.floor((totalSeconds%3600)/60);const seconds=totalSeconds%60;
+    action.innerHTML='<span class="schedule-countdown">Releases in '+String(totalHours).padStart(2,'0')+':'+String(minutes).padStart(2,'0')+':'+String(seconds).padStart(2,'0')+'</span>';
    }
   });
  }
