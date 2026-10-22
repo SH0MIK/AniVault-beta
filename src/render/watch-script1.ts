@@ -79,11 +79,6 @@ window.addEventListener('error', function(e) {
     _showFatalClientError((msg || 'Unknown script error') + where);
 });
 
-function buildMegaplayUrl(audio) {
-    let url = \`https://megaplay.buzz/stream/mal/${animeId}/${epNum}/\${audio}\`;
-    if (resumeTime) url += \`?t=\${resumeTime}\`;
-    return url;
-}
 
 // Stops whatever is currently playing so its audio can't keep going in
 // the background while we fetch the next server (or while an error is
