@@ -585,7 +585,8 @@ export async function getHoshikaCatalog(options: {
   const fetchPage = async (sourcePage: number) => {
     const url = new URL('https://hoshika.app/api/v1/catalog');
     url.searchParams.set('type', 'anime');
-    url.searchParams.set('sort', options.sort || 'popular');
+    const catalogSort = options.sort === 'trending' ? 'popular' : (options.sort || 'popular');
+    url.searchParams.set('sort', catalogSort);
     if (options.genre) url.searchParams.set('genre', options.genre);
     if (options.year) url.searchParams.set('year', String(options.year));
     url.searchParams.set('page', String(sourcePage));
