@@ -609,7 +609,7 @@ export async function getHoshikaCatalog(options: {
   for (const item of allItems) unique.set(item.shortId, item);
   let items = [...unique.values()];
 
-  const normalize = (value: unknown) => String(value ?? '').trim().toLowerCase();
+  const normalize = (value: unknown) => String(value ?? '').trim().toLowerCase().replace(/[_-]+/g, ' ');
   const typeAliases: Record<string, string[]> = {
     tv: ['tv', 'tv series', 'television', 'tv anime'],
     movie: ['movie', 'film', 'anime movie'],
