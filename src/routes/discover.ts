@@ -146,7 +146,7 @@ discoverRoutes.get('/schedule', async (c) => {
   ${!loadError && items.length === 0 ? '<div class="card card-body"><p>No airing episodes were found for this week.</p></div>' : ''}
   <div id="schedule-empty-filtered" class="card card-body" hidden>No episodes match these filters.</div>
   ${dayGroups.map(([day, dayItems]) => `
-    <section class="schedule-day-section mb-4" data-day-section="${h(day)}" ${day===initialDay?'':'hidden'}>
+    <section class="schedule-day-section mb-4" data-day-section="${h(day)}" data-day-iso="${h(String(dayItems.find((item:any) => item.airingAt)?.airingAt ?? ''))}" ${day===initialDay?'':'hidden'}>
       <h2 style="font-size:1.15rem;margin-bottom:1rem;">${h(day)}</h2>
       <div class="schedule-episode-grid">
         ${dayItems.map((item: any) => {
@@ -181,6 +181,9 @@ discoverRoutes.get('/schedule', async (c) => {
  filterButton?.addEventListener('click',()=>{const open=filters.hidden;filters.hidden=!open;filters.style.display=open?'block':'none';filterButton.setAttribute('aria-expanded',String(open));});
  let selectedType='';let sort='time';let timeFormat='12';let timezone='local';let images='show';
  const buttons=[...root.querySelectorAll('[data-day-target]')],sections=[...root.querySelectorAll('[data-day-section]')];
+ const todayKey=new Date().toLocaleDateString('en-CA');
+ const todaySection=sections.find(section=>{const iso=section.dataset.dayIso;if(!iso)return false;return new Date(iso).toLocaleDateString('en-CA')===todayKey;});
+ if(todaySection)buttons.forEach(button=>button.classList.toggle('is-active',button.dataset.dayTarget===todaySection.dataset.daySection));
  function apply(){let visible=0;sections.forEach(section=>{const active=buttons.find(b=>b.classList.contains('is-active'))?.dataset.dayTarget;const show=section.dataset.daySection===active;section.hidden=!show;const cards=[...section.querySelectorAll('.schedule-episode')];cards.forEach(card=>{const match=!selectedType||card.dataset.format===selectedType;card.hidden=!match;if(match)visible++;const cover=card.querySelector('.schedule-cover');if(cover)cover.hidden=images==='hide';});const grid=section.querySelector('.schedule-episode-grid');if(grid){cards.sort((a,b)=>sort==='az'?a.dataset.title.localeCompare(b.dataset.title):sort==='popularity'?Number(b.dataset.popularity)-Number(a.dataset.popularity):Date.parse(a.dataset.time)-Date.parse(b.dataset.time)).forEach(card=>grid.appendChild(card));}});const empty=root.querySelector('#schedule-empty-filtered');if(empty)empty.hidden=visible>0;root.querySelectorAll('.schedule-airing-time').forEach(el=>{const date=new Date(el.dataset.iso);if(!Number.isFinite(date.getTime()))return;const zone=timezone==='local'?undefined:timezone;el.textContent=new Intl.DateTimeFormat('en-US',{timeZone:zone,hour:'numeric',minute:'2-digit',timeZoneName:'short',hour12:timeFormat==='12'}).format(date);});}
  buttons.forEach(button=>button.addEventListener('click',()=>{buttons.forEach(b=>b.classList.toggle('is-active',b===button));apply();}));
  root.querySelectorAll('[data-type-filter]').forEach(button=>button.addEventListener('click',()=>{selectedType=selectedType===button.dataset.typeFilter?'':button.dataset.typeFilter;root.querySelectorAll('[data-type-filter]').forEach(b=>b.classList.toggle('is-active',b.dataset.typeFilter===selectedType));apply();}));
