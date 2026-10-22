@@ -139,7 +139,7 @@ browseRoutes.get('/browse', async (c) => {
             <div class="filter-section-label">Sort</div>
             <select class="form-control" name="sort">
               <option value="popular" ${sort === "popular" ? "selected" : ""}>Popular</option>
-              <option value="trending" ${sort === "trending" ? "selected" : ""}>Trending</option>
+              <option value="trending" ${sort === "trending" || !sort ? "selected" : ""}>Trending</option>
               <option value="recent" ${sort === "recent" ? "selected" : ""}>Recently Added</option>
               <option value="top" ${sort === "top" ? "selected" : ""}>Top Rated</option>
               <option value="revelation" ${sort === "revelation" ? "selected" : ""}>Revelation</option>
@@ -324,7 +324,7 @@ export function renderPagination(q: string, type: string, status: string, genres
   if (q) qs.set('q', q);
   if (type) qs.set('type', type);
   if (status) qs.set('status', status);
-  if (sort !== 'popular') qs.set('sort', sort);
+  if (sort !== 'trending') qs.set('sort', sort);
   if (year) qs.set('year', String(year));
   let base = `/browse?${qs.toString()}`;
   for (const g of genres) base += `&genres[]=${g}`;
