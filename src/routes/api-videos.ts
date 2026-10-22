@@ -113,7 +113,7 @@ apiVideosRoutes.on(['GET', 'POST'], '/api/videos.php', async (c) => {
     try {
       const identity = await findIdentityByLegacyMalId(db, animeId);
       if (identity?.verified === 1 && identity.hoshika_short_id) {
-        const animeData = await getHoshikaAnimeById(identity.hoshika_short_id);
+        const animeData = await getHoshikaAnimeById(identity.hoshika_short_id, c.env.HOSHIKA_API_KEY);
         if (animeData) {
           animeTitle = animeData.title || identity.title || '';
           animeSynopsis = animeData.synopsis || '';
