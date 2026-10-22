@@ -569,6 +569,12 @@ export async function getHoshikaHomeSections(): Promise<HoshikaHomeSections> {
   return { trending, recent, top: top.length ? top : trending, seasonal };
 }
 
+/** Fetch the public trending anime feed directly from Hoshika's browse endpoint. */
+export async function getHoshikaTrending(): Promise<HoshikaCatalogAnime[]> {
+  const payload = await fetchHoshikaJson('browse?type=anime&sort=trending');
+  return normalizeCatalogArray(resultsFrom(payload ?? {}));
+}
+
 /** Hoshika's paginated, filterable anime catalog. */
 export async function getHoshikaCatalog(options: {
   genre?: string; year?: number; sort?: string; page?: number; type?: string; status?: string;
