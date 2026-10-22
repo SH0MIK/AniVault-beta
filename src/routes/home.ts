@@ -150,7 +150,7 @@ homeRoutes.get('/', async (c) => {
       try {
         // New watch-history rows may already use Hoshika IDs, so try the
         // current catalog ID directly before consulting the legacy-ID mapping.
-        let anime = await getHoshikaAnimeById(String(row.anime_id)).catch(() => null);
+        let anime = await getHoshikaAnimeById(String(row.anime_id), c.env.HOSHIKA_API_KEY).catch(() => null);
         if (!anime) {
           const identity = await findIdentityByLegacyMalId(db, row.anime_id);
           if (identity?.hoshika_short_id) {
@@ -184,7 +184,7 @@ homeRoutes.get('/', async (c) => {
           if (!episodes) {
             const identity = await findIdentityByLegacyMalId(db, Number(row.anime_id));
             if (identity?.hoshika_short_id) {
-              episodes = await getHoshikaAnimeEpisodesById(identity.hoshika_short_id);
+              episodes = await getHoshikaAnimeEpisodesById(identity.hoshika_short_id, c.env.HOSHIKA_API_KEY);
             }
           }
           const episode = episodes?.find((item) => item.number === Number(row.episode_num));
