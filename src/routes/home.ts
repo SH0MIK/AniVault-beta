@@ -348,6 +348,13 @@ ${heroSliderScript(heroPool.length)}
       </section>`;
   }
 
+  if (upcomingList.length > 0) {
+    html += `
+      <section class="content-section">
+        ${sectionHeader('Current Season', 'row-upcoming', `${siteUrl}/browse?sort=trending`)}
+        <div class="scroll-row" id="row-upcoming">${upcomingList.map((a) => renderHoshikaHomeCard(a, siteUrl)).join('')}</div>
+      </section>`;
+  }
   if (topList.length > 0) {
     html += `
       <section class="content-section">
@@ -363,20 +370,6 @@ ${heroSliderScript(heroPool.length)}
       </section>`;
   }
 
-  if (upcomingList.length > 0) {
-    html += `
-      <section class="content-section">
-        ${sectionHeader('Current Season', 'row-upcoming', `${siteUrl}/browse?sort=trending`)}
-        <div class="scroll-row" id="row-upcoming">${upcomingList.map((a) => renderHoshikaHomeCard(a, siteUrl)).join('')}</div>
-      </section>`;
-  }
-  if (recentList.length > 0) {
-    html += `
-      <section class="content-section">
-        ${sectionHeader('Recently Added', 'row-recent', `${siteUrl}/browse?sort=recent`)}
-        <div class="scroll-row" id="row-recent">${recentList.map((a) => renderHoshikaHomeCard(a, siteUrl)).join('')}</div>
-      </section>`;
-  }
 
   html += `
     </div>
