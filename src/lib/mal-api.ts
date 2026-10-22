@@ -717,7 +717,7 @@ export class MalAPI {
     const resolved = await Promise.all(items.map(async (anime) => {
       const title = anime.title_english || anime.title || anime.title_japanese || '';
       const metadata = title
-        ? await getHoshikaAnimeMetadata(anime.mal_id, title, this.kv, true).catch(() => null)
+        ? await getHoshikaAnimeMetadata(anime.mal_id, title, this.kv, true, this.env.HOSHIKA_API_KEY).catch(() => null)
         : null;
       return { anime, poster: metadata?.poster || '', cover: metadata?.cover || '' };
     }));
