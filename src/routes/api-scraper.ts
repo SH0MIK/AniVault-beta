@@ -153,6 +153,7 @@ scraperRoutes.get('/api/animeheaven_stream.php', async (c) => {
 // it was the biggest contributor to the D1 session-row write pileup.
 scraperRoutes.get('/api/anikoto_stream.php', async (c) => {
   const animeId = parseInt(c.req.query('anime') ?? '0', 10) || 0;
+  const hoshikaId = (c.req.query('hoshikaId') ?? '').trim();
   const epNum = parseInt(c.req.query('ep') ?? '0', 10) || 0;
   const audio = ['sub', 'dub', 'raw'].includes(c.req.query('audio') ?? '') ? c.req.query('audio')! : 'sub';
   const server = (c.req.query('server') ?? '').trim();
@@ -162,7 +163,7 @@ scraperRoutes.get('/api/anikoto_stream.php', async (c) => {
 
   // Anikoto moved from the anivault-scraper Railway service to the same
   // one senshi_stream.php uses, and now expects a "mal-" prefixed ID.
-  let watchUrl = `${base}/api/watch/anikoto/mal-${animeId}/${epNum}/${audio}`;
+  let watchUrl = `${base}/api/watch/anikoto/${hoshikaId || `mal-${animeId}`}/${epNum}/${audio}`;
   if (server !== '') watchUrl += `?server=${encodeURIComponent(server)}`;
 
   const { ok, code, data } = await fetchJson(watchUrl, 23000, c.env.SCRAPER_API_KEY || '');
@@ -186,6 +187,7 @@ scraperRoutes.get('/api/anikoto_stream.php', async (c) => {
 // back in a plain iframe instead of the custom player).
 scraperRoutes.get('/api/desidub_stream.php', async (c) => {
   const animeId = parseInt(c.req.query('anime') ?? '0', 10) || 0;
+  const hoshikaId = (c.req.query('hoshikaId') ?? '').trim();
   const epNum = parseInt(c.req.query('ep') ?? '0', 10) || 0;
   const audio = ['dub', 'raw'].includes(c.req.query('audio') ?? '') ? c.req.query('audio')! : 'dub';
   const server = (c.req.query('server') ?? '').trim();
@@ -193,7 +195,7 @@ scraperRoutes.get('/api/desidub_stream.php', async (c) => {
   const base = getScraperBase(c.env);
   if (!base) return c.json({ error: 'Scraper API not configured' }, 500);
 
-  let watchUrl = `${base}/api/watch/desidub/mal-${animeId}/${epNum}/${audio}`;
+  let watchUrl = `${base}/api/watch/desidub/${hoshikaId || `mal-${animeId}`}/${epNum}/${audio}`;
   if (server !== '') watchUrl += `?server=${encodeURIComponent(server)}`;
 
   const { ok, code, data } = await fetchJson(watchUrl, 23000, c.env.SCRAPER_API_KEY || '');
@@ -213,6 +215,7 @@ scraperRoutes.get('/api/desidub_stream.php', async (c) => {
 // ReAnime now resolves directly in the Worker; no external scraper API call.
 scraperRoutes.get('/api/reanime_stream.php', async (c) => {
   const animeId = parseInt(c.req.query('anime') ?? '0', 10) || 0;
+  const hoshikaId = (c.req.query('hoshikaId') ?? '').trim();
   const epNum = parseInt(c.req.query('ep') ?? '0', 10) || 0;
   const audio = ['sub', 'dub', 'raw'].includes(c.req.query('audio') ?? '') ? c.req.query('audio')! : 'sub';
   const server = (c.req.query('server') ?? '').trim();
@@ -342,6 +345,7 @@ scraperRoutes.get('/api/reanime_hls/:token', async (c) => {
 // English-dub-only source. Same shape as reanime_stream.php above.
 scraperRoutes.get('/api/animenosub_stream.php', async (c) => {
   const animeId = parseInt(c.req.query('anime') ?? '0', 10) || 0;
+  const hoshikaId = (c.req.query('hoshikaId') ?? '').trim();
   const epNum = parseInt(c.req.query('ep') ?? '0', 10) || 0;
   const audio = ['sub', 'dub', 'raw'].includes(c.req.query('audio') ?? '') ? c.req.query('audio')! : 'sub';
   const server = (c.req.query('server') ?? '').trim();
@@ -349,7 +353,7 @@ scraperRoutes.get('/api/animenosub_stream.php', async (c) => {
   const base = getScraperBase(c.env);
   if (!base) return c.json({ error: 'Scraper API not configured' }, 500);
 
-  let watchUrl = `${base}/api/watch/animenosub/mal-${animeId}/${epNum}/${audio}`;
+  let watchUrl = `${base}/api/watch/animenosub/${hoshikaId || `mal-${animeId}`}/${epNum}/${audio}`;
   if (server !== '') watchUrl += `?server=${encodeURIComponent(server)}`;
 
   const { ok, code, data } = await fetchJson(watchUrl, 23000, c.env.SCRAPER_API_KEY || '');
@@ -370,6 +374,7 @@ scraperRoutes.get('/api/animenosub_stream.php', async (c) => {
 // English-dub-only source. Same shape as reanime_stream.php above.
 scraperRoutes.get('/api/aniwaves_stream.php', async (c) => {
   const animeId = parseInt(c.req.query('anime') ?? '0', 10) || 0;
+  const hoshikaId = (c.req.query('hoshikaId') ?? '').trim();
   const epNum = parseInt(c.req.query('ep') ?? '0', 10) || 0;
   const audio = ['sub', 'dub', 'raw'].includes(c.req.query('audio') ?? '') ? c.req.query('audio')! : 'sub';
   const server = (c.req.query('server') ?? '').trim();
@@ -377,7 +382,7 @@ scraperRoutes.get('/api/aniwaves_stream.php', async (c) => {
   const base = getScraperBase(c.env);
   if (!base) return c.json({ error: 'Scraper API not configured' }, 500);
 
-  let watchUrl = `${base}/api/watch/aniwaves/mal-${animeId}/${epNum}/${audio}`;
+  let watchUrl = `${base}/api/watch/aniwaves/${hoshikaId || `mal-${animeId}`}/${epNum}/${audio}`;
   if (server !== '') watchUrl += `?server=${encodeURIComponent(server)}`;
 
   const { ok, code, data } = await fetchJson(watchUrl, 23000, c.env.SCRAPER_API_KEY || '');
@@ -404,6 +409,7 @@ scraperRoutes.get('/api/aniwaves_stream.php', async (c) => {
 // to disambiguate same-named servers across languages.
 scraperRoutes.get('/api/anizone_stream.php', async (c) => {
   const animeId = parseInt(c.req.query('anime') ?? '0', 10) || 0;
+  const hoshikaId = (c.req.query('hoshikaId') ?? '').trim();
   const epNum = parseInt(c.req.query('ep') ?? '0', 10) || 0;
   const audio = ['sub', 'dub', 'raw'].includes(c.req.query('audio') ?? '') ? c.req.query('audio')! : 'sub';
   const server = (c.req.query('server') ?? '').trim();
@@ -413,14 +419,14 @@ scraperRoutes.get('/api/anizone_stream.php', async (c) => {
   if (!base) return c.json({ error: 'Scraper API not configured' }, 500);
 
   if (server === '') {
-    const listUrl = `${base}/api/servers?malId=${animeId}&ep=${epNum}&type=${audio}&source=anizone`;
+    const listUrl = `${base}/api/servers?hoshikaId=${encodeURIComponent(hoshikaId || `mal-${animeId}`)}&ep=${epNum}&type=${audio}&source=anizone`;
     const { ok, code, data } = await fetchJson(listUrl, 28000, c.env.SCRAPER_API_KEY || '');
     if (!ok) return c.json({ error: data?.error ?? `AniZone list failed HTTP ${code}` });
     const servers = (data?.servers ?? []).map((s: any) => ({ name: s.name, type: s.type, lang: String(s.lang ?? '').toLowerCase() }));
     return c.json({ servers });
   }
 
-  let watchUrl = `${base}/api/watch/anizone/mal-${animeId}/${epNum}/${audio}?server=${encodeURIComponent(server)}`;
+  let watchUrl = `${base}/api/watch/anizone/${hoshikaId || `mal-${animeId}`}/${epNum}/${audio}?server=${encodeURIComponent(server)}`;
   if (lang !== '') watchUrl += `&lang=${encodeURIComponent(lang)}`;
 
   const { ok, code, data } = await fetchJson(watchUrl, 23000, c.env.SCRAPER_API_KEY || '');
@@ -441,6 +447,7 @@ scraperRoutes.get('/api/anizone_stream.php', async (c) => {
 // and reasoning as anizone_stream.php above.
 scraperRoutes.get('/api/watchanimeworld_stream.php', async (c) => {
   const animeId = parseInt(c.req.query('anime') ?? '0', 10) || 0;
+  const hoshikaId = (c.req.query('hoshikaId') ?? '').trim();
   const epNum = parseInt(c.req.query('ep') ?? '0', 10) || 0;
   const audio = ['sub', 'dub', 'raw'].includes(c.req.query('audio') ?? '') ? c.req.query('audio')! : 'sub';
   const server = (c.req.query('server') ?? '').trim();
@@ -450,14 +457,14 @@ scraperRoutes.get('/api/watchanimeworld_stream.php', async (c) => {
   if (!base) return c.json({ error: 'Scraper API not configured' }, 500);
 
   if (server === '') {
-    const listUrl = `${base}/api/servers?malId=${animeId}&ep=${epNum}&type=${audio}&source=watchanimeworld`;
+    const listUrl = `${base}/api/servers?hoshikaId=${encodeURIComponent(hoshikaId || `mal-${animeId}`)}&ep=${epNum}&type=${audio}&source=watchanimeworld`;
     const { ok, code, data } = await fetchJson(listUrl, 28000, c.env.SCRAPER_API_KEY || '');
     if (!ok) return c.json({ error: data?.error ?? `WatchAnimeWorld list failed HTTP ${code}` });
     const servers = (data?.servers ?? []).map((s: any) => ({ name: s.name, type: s.type, lang: String(s.lang ?? '').toLowerCase() }));
     return c.json({ servers });
   }
 
-  let watchUrl = `${base}/api/watch/watchanimeworld/mal-${animeId}/${epNum}/${audio}?server=${encodeURIComponent(server)}`;
+  let watchUrl = `${base}/api/watch/watchanimeworld/${hoshikaId || `mal-${animeId}`}/${epNum}/${audio}?server=${encodeURIComponent(server)}`;
   if (lang !== '') watchUrl += `&lang=${encodeURIComponent(lang)}`;
 
   const { ok, code, data } = await fetchJson(watchUrl, 23000, c.env.SCRAPER_API_KEY || '');
@@ -693,6 +700,7 @@ scraperRoutes.post('/api/dub_report.php', async (c) => {
 scraperRoutes.get('/api/embed.php', async (c) => {
   const siteUrl = c.env.SITE_URL;
   const animeId = parseInt(c.req.query('anime') ?? '0', 10) || 0;
+  const hoshikaId = (c.req.query('hoshikaId') ?? '').trim();
   const epNum = parseInt(c.req.query('ep') ?? '0', 10) || 0;
   if (!animeId || !epNum) return c.text('Not found', 404);
 
@@ -821,6 +829,7 @@ scraperRoutes.get('/api/ep_count.php', async (c) => {
 // can still render numbered stubs for videos already stored in D1.
 scraperRoutes.get('/api/anime_episodes.php', async (c) => {
   const animeId = parseInt(c.req.query('anime') ?? '0', 10) || 0;
+  const hoshikaId = (c.req.query('hoshikaId') ?? '').trim();
   const page = parseInt(c.req.query('page') ?? '1', 10) || 1;
   if (!animeId) return c.json({ error: 'Missing anime' }, 400);
   const db = new Db(c.env.DB);
@@ -856,6 +865,7 @@ for (const [path, label] of [
 ] as const) {
   scraperRoutes.get(path, (c) => {
     const animeId = parseInt(c.req.query('anime') ?? '0', 10) || 0;
+  const hoshikaId = (c.req.query('hoshikaId') ?? '').trim();
     if (!animeId) return c.json({ error: 'Missing anime' }, 400);
     return c.json({ data: [], unavailable: true, message: label + ' is not available from the confirmed Hoshika API.' }, 501);
   });
