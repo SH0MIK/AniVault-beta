@@ -667,3 +667,24 @@ export async function getHoshikaGenres(): Promise<Array<{ slug: string; name: st
   }).filter((item: { slug: string; name: string }) => !!item.slug && !!item.name);
   return [...new Map(mapped.map((item: { slug: string; name: string }) => [item.slug, item])).values()];
 }
+
+
+export interface HoshikaSeasonFeed {
+  season: string;
+  year: number | null;
+  items: HoshikaCatalogAnime[];
+}
+
+/** Fetch the current season directly from Hoshika; no third-party catalogue fallback. */
+export async function getHoshikaSeason(): Promise<HoshikaSeasonFeed> {
+  const payload = await fetchHoshikaJson('season?locale=en');
+  const root = obj(payload);
+  const data = unwrap(payload ?? {});
+  const seasonInfo = obj(root.season ?? data?.season);
+  const rawItems = Array.isArray(root.items) ? root.items : resultsFrom(payload ?? {});
+  return {
+    season: firstText(seasonInfo.season, data?.seasonName, data?.season, root.seasonName),
+    year: numberOrNull(seasonInfo.year ?? data?.year ?? root.year),
+    items: normalizeCatalogArray(rawItems),
+  };
+}
