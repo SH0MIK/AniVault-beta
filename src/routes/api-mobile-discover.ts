@@ -21,7 +21,7 @@ function unavailable(c: any, view: string) {
 mobileDiscoverRoutes.get('/api/mobile/seasonal', async (c) => {
   const q = (c.req.query('q') ?? '').trim();
   if (!q) return unavailable(c, 'seasonal');
-  const data = await searchHoshikaAnime(q, 50);
+  const data = await searchHoshikaAnime(q, 50, c.env.HOSHIKA_API_KEY);
   return c.json({
     success: true, source: 'hoshika', season: c.req.query('season') === 'upcoming' ? 'upcoming' : 'now',
     data: data.map((a) => ({
@@ -36,7 +36,7 @@ mobileDiscoverRoutes.get('/api/mobile/seasonal', async (c) => {
 mobileDiscoverRoutes.get('/api/mobile/top', async (c) => {
   const q = (c.req.query('q') ?? '').trim();
   if (!q) return unavailable(c, 'top');
-  const data = await searchHoshikaAnime(q, 50);
+  const data = await searchHoshikaAnime(q, 50, c.env.HOSHIKA_API_KEY);
   return c.json({
     success: true, source: 'hoshika', filter: c.req.query('filter') ?? 'bypopularity',
     data: data.map((a) => ({
