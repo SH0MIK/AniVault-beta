@@ -39,7 +39,7 @@ watchNowRoutes.get('/watch-now', async (c) => {
   const animeList = (await Promise.all(rows.map(async (row): Promise<NormalisedAnime | null> => {
     const identity = await findIdentityByLegacyMalId(db, row.anime_id).catch(() => null);
     if (!identity || identity.verified !== 1 || !identity.hoshika_short_id) return null;
-    const anime = await getHoshikaAnimeById(identity.hoshika_short_id);
+    const anime = await getHoshikaAnimeById(identity.hoshika_short_id, c.env.HOSHIKA_API_KEY);
     if (!anime) return null;
     const poster = anime.poster || '';
     return {
