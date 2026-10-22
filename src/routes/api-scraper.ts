@@ -528,7 +528,7 @@ scraperRoutes.get('/api/embed.php', async (c) => {
   const identity = await findIdentityByLegacyMalId(db, animeId).catch(() => null);
   const hoshikaId = identity?.verified === 1 ? identity.hoshika_short_id : null;
   const [animeData, episodes] = hoshikaId
-    ? await Promise.all([getHoshikaAnimeById(hoshikaId), getHoshikaAnimeEpisodesById(hoshikaId)])
+    ? await Promise.all([getHoshikaAnimeById(hoshikaId, c.env.HOSHIKA_API_KEY), getHoshikaAnimeEpisodesById(hoshikaId, c.env.HOSHIKA_API_KEY)])
     : [null, null];
   const title = animeData?.titleEnglish || animeData?.title || 'Anime';
   const image = animeData?.poster || '';
@@ -632,8 +632,8 @@ scraperRoutes.get('/api/ep_count.php', async (c) => {
   if (identity?.verified !== 1) return c.json({ aired: null, total: null });
 
   const [anime, episodes] = await Promise.all([
-    getHoshikaAnimeById(identity.hoshika_short_id),
-    getHoshikaAnimeEpisodesById(identity.hoshika_short_id),
+    getHoshikaAnimeById(identity.hoshika_short_id, c.env.HOSHIKA_API_KEY),
+    getHoshikaAnimeEpisodesById(identity.hoshika_short_id, c.env.HOSHIKA_API_KEY),
   ]);
   const total = anime?.episodes ?? episodes?.length ?? null;
   const aired = episodes?.length ?? null;
@@ -654,7 +654,7 @@ scraperRoutes.get('/api/anime_episodes.php', async (c) => {
   if (identity?.verified !== 1) {
     return c.json({ data: [], pagination: { last_visible_page: 1, has_next_page: false } });
   }
-  const episodes = await getHoshikaAnimeEpisodesById(identity.hoshika_short_id);
+  const episodes = await getHoshikaAnimeEpisodesById(identity.hoshika_short_id, c.env.HOSHIKA_API_KEY);
   const data = (episodes ?? []).map((episode) => ({
     mal_id: episode.number,
     title: episode.title,
