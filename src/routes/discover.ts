@@ -102,12 +102,12 @@ discoverRoutes.get('/schedule', async (c) => {
   const fmtDay = (value: string) => {
     const date = parseAiringDate(value);
     if (!Number.isFinite(date.getTime())) return 'Upcoming';
-    return new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Tokyo', weekday: 'long', month: 'short', day: 'numeric' }).format(date);
+    return new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Dhaka', weekday: 'long', month: 'short', day: 'numeric' }).format(date);
   };
   const fmtTime = (value: string) => {
     const date = parseAiringDate(value);
     return Number.isFinite(date.getTime())
-      ? new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Tokyo', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }).format(date)
+      ? new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Dhaka', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }).format(date)
       : 'Time TBA';
   };
   const grouped = new Map<string, any[]>();
@@ -153,8 +153,8 @@ discoverRoutes.get('/schedule', async (c) => {
     ${dayGroups.map(([day, dayItems], index) => {
       const date = dayItems.find((item:any) => item.airingAt)?.airingAt;
       const d = date ? new Date(date) : null;
-      const weekday = d ? new Intl.DateTimeFormat('en-US',{timeZone:'Asia/Tokyo',weekday:'short'}).format(d).toUpperCase() : day.slice(0,3).toUpperCase();
-      const dayNum = d ? new Intl.DateTimeFormat('en-US',{timeZone:'Asia/Tokyo',day:'numeric'}).format(d) : '—';
+      const weekday = d ? new Intl.DateTimeFormat('en-US',{timeZone:'Asia/Dhaka',weekday:'short'}).format(d).toUpperCase() : day.slice(0,3).toUpperCase();
+      const dayNum = d ? new Intl.DateTimeFormat('en-US',{timeZone:'Asia/Dhaka',day:'numeric'}).format(d) : '—';
       return `<button type="button" class="schedule-day-button ${day===initialDay?'is-active':''}" data-day-target="${h(day)}"><span>${h(weekday)}</span><strong>${h(dayNum)}</strong><small data-day-count>${dayCount(dayItems)}</small></button>`;
     }).join('')}
   </nav>
