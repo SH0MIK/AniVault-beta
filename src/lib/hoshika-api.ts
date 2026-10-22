@@ -576,34 +576,73 @@ export async function getHoshikaHomeSections(): Promise<HoshikaHomeSections> {
 export async function getHoshikaCatalog(options: {
   genre?: string; year?: number; sort?: string; page?: number; type?: string; status?: string;
 } = {}): Promise<{ items: HoshikaCatalogAnime[]; total: number; totalPages: number }> {
-  // Fetch the base catalogue without optional facets first. Hoshika's public
-  // catalogue does not consistently apply format/status/year query params;
-  // filtering locally avoids an empty result caused by unsupported values.
-  const url = new URL('https://hoshika.app/api/v1/catalog');
-  url.searchParams.set('type', 'anime');
-  if (options.genre) url.searchParams.set('genre', options.genre);
-  url.searchParams.set('sort', options.sort || 'popular');
-  url.searchParams.set('page', String(Math.max(1, options.page || 1)));
-  const payload = await fetchHoshikaJson(url.pathname.replace('/api/v1/', '') + url.search);
-  const root = unwrap(payload ?? {});
-  const rawItems = resultsFrom(payload ?? {});
-  let items = normalizeCatalogArray(rawItems.length ? rawItems : findCatalogArray(root, ['items', 'results', 'anime', 'catalog']));
+  // Hoshika deployments differ in which facet parameters they honor. Fetch a
+  // bounded window of catalogue pages, then apply all facets consistently
+  // against normalized Hoshika records before slicing the requested page.
+  const requestedPage = Math.max(1, Math.trunc(options.page || 1));
+  const pageSize = 24;
+  const maxSourcePages = 10;
+  const fetchPage = async (sourcePage: number) => {
+    const url = new URL('https://hoshika.app/api/v1/catalog');
+    url.searchParams.set('type', 'anime');
+    url.searchParams.set('sort', options.sort || 'popular');
+    url.searchParams.set('page', String(sourcePage));
+    const payload = await fetchHoshikaJson(url.pathname.replace('/api/v1/', '') + url.search);
+    const root = unwrap(payload ?? {});
+    const rawItems = resultsFrom(payload ?? {});
+    const items = normalizeCatalogArray(rawItems.length ? rawItems : findCatalogArray(root, ['items', 'results', 'anime', 'catalog']));
+    const total = numberOrNull(root?.total ?? root?.pagination?.total ?? root?.pagination?.items?.total ?? root?.items?.total ?? payload?.total);
+    const totalPages = numberOrNull(root?.totalPages ?? root?.total_pages ?? root?.lastPage ?? root?.last_page ?? root?.last_visible_page ?? root?.pagination?.totalPages ?? root?.pagination?.total_pages ?? root?.pagination?.lastPage ?? root?.pagination?.last_page ?? root?.pagination?.last_visible_page ?? payload?.totalPages);
+    return { items, total, totalPages };
+  };
 
-  const wantedType = (options.type ?? '').trim().toLowerCase();
-  const wantedStatus = (options.status ?? '').trim().toLowerCase();
-  if (options.year) items = items.filter((item: any) => Number(item.year ?? item.seasonYear ?? item.season_year) === options.year);
-  if (wantedType) items = items.filter((item: any) => String(item.type ?? item.format ?? item.mediaType ?? '').toLowerCase() === wantedType);
-  if (wantedStatus) items = items.filter((item: any) => {
-    const status = String(item.status ?? item.airingStatus ?? '').toLowerCase();
-    if (wantedStatus === 'airing') return status.includes('airing') || status.includes('ongoing');
-    if (wantedStatus === 'complete') return status.includes('complete') || status.includes('finished');
-    if (wantedStatus === 'upcoming') return status.includes('upcoming') || status.includes('not yet');
-    return status === wantedStatus;
-  });
+  const first = await fetchPage(1);
+  const sourcePages = Math.max(1, Math.min(maxSourcePages, first.totalPages ?? (first.total ? Math.ceil(first.total / Math.max(first.items.length, 1)) : 1)));
+  const rest = sourcePages > 1
+    ? await Promise.all(Array.from({ length: sourcePages - 1 }, (_, index) => fetchPage(index + 2)))
+    : [];
+  const allItems = [...first.items, ...rest.flatMap((result) => result.items)];
+  const unique = new Map<string, HoshikaCatalogAnime>();
+  for (const item of allItems) unique.set(item.shortId, item);
+  let items = [...unique.values()];
 
-  const total = numberOrNull(root?.total ?? root?.pagination?.total ?? root?.pagination?.items?.total ?? root?.items?.total ?? payload?.total) ?? items.length;
-  const totalPages = numberOrNull(root?.totalPages ?? root?.total_pages ?? root?.lastPage ?? root?.last_page ?? root?.last_visible_page ?? root?.pagination?.totalPages ?? root?.pagination?.total_pages ?? root?.pagination?.lastPage ?? root?.pagination?.last_page ?? root?.pagination?.last_visible_page ?? payload?.totalPages) ?? (total ? Math.max(1, Math.ceil(total / Math.max(items.length, 1))) : 1);
-  return { items, total: items.length === total ? total : items.length, totalPages: items.length === total ? totalPages : 1 };
+  const normalize = (value: unknown) => String(value ?? '').trim().toLowerCase();
+  const typeAliases: Record<string, string[]> = {
+    tv: ['tv', 'tv series', 'television', 'tv anime'],
+    movie: ['movie', 'film', 'anime movie'],
+    ova: ['ova', 'original video animation'],
+    ona: ['ona', 'original net animation', 'web'],
+    special: ['special', 'tv special'],
+    music: ['music', 'music video'],
+  };
+  if (options.year) items = items.filter((item) => item.year === options.year);
+  if (options.type) {
+    const wanted = normalize(options.type);
+    const aliases = typeAliases[wanted] ?? [wanted];
+    items = items.filter((item) => {
+      const actual = normalize(item.type || item.raw?.format || item.raw?.mediaType);
+      return aliases.some((alias) => actual === alias || actual.includes(alias));
+    });
+  }
+  if (options.status) {
+    const wanted = normalize(options.status);
+    items = items.filter((item) => {
+      const actual = normalize(item.status || item.raw?.airingStatus);
+      if (wanted === 'airing') return /airing|ongoing|currently/.test(actual);
+      if (wanted === 'complete') return /complete|finished|ended/.test(actual);
+      if (wanted === 'upcoming') return /upcoming|not yet|unreleased|planned/.test(actual);
+      return actual === wanted;
+    });
+  }
+  if (options.genre) {
+    const wanted = normalize(options.genre).replace(/-/g, ' ');
+    items = items.filter((item) => item.genres.some((genre) => normalize(genre).replace(/-/g, ' ') === wanted));
+  }
+
+  const total = items.length;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const startIndex = (requestedPage - 1) * pageSize;
+  return { items: items.slice(startIndex, startIndex + pageSize), total, totalPages };
 }
 
 /** Fetch Hoshika's anime genre slugs and display names. */
