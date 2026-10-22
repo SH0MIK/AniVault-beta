@@ -123,7 +123,7 @@ adminHomeBannersRoutes.on(['GET', 'POST'], '/admin/home_banners.php', async (c) 
           for (const row of rows) {
             const identity = await findIdentityByLegacyMalId(db, Number(row.anime_id));
             if (!identity || identity.verified !== 1 || !identity.hoshika_short_id) { skipped++; continue; }
-            const fetched = await getHoshikaAnimeById(identity.hoshika_short_id);
+            const fetched = await getHoshikaAnimeById(identity.hoshika_short_id, c.env.HOSHIKA_API_KEY);
             if (!fetched) { skipped++; continue; }
             const title = fetched.titleEnglish || fetched.title || identity.title || null;
             await db.query(
