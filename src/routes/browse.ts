@@ -59,7 +59,7 @@ browseRoutes.get('/browse', async (c) => {
     currentUser: layoutUser, unreadCount, requestUrl: c.req.url,
   });
 
-  const heading = q ? `🔍 Results for "${h(q)}"` : '🌐 Browse Anime';
+  const heading = q ? `🔍 Results for \"${h(q)}\"` : (sort === 'popular' && !type && !status && !year && genres.length === 0 ? '🔥 Most Popular Series' : '🌐 Browse Anime');
 
   const activeFilterCount = (type ? 1 : 0) + (status ? 1 : 0) + (sort !== 'popular' ? 1 : 0) + (year ? 1 : 0) + genres.length + (q ? 1 : 0);
   const hasAnyFilter = activeFilterCount > 0;
