@@ -19,7 +19,7 @@ function unavailable(c: any, view: string) {
 
 mobileDiscoverRoutes.get('/api/mobile/seasonal', async (c) => {
   const q = (c.req.query('q') ?? '').trim().toLowerCase();
-  const feed = await getHoshikaSeason();
+  const feed = await getHoshikaSeason(c.env.HOSHIKA_API_KEY);
   const items = q ? feed.items.filter((a) => [a.title, a.titleEnglish, a.titleRomaji, a.slug].some((value) => value.toLowerCase().includes(q))) : feed.items;
   return c.json({
     success: true, source: 'hoshika', season: feed.season, year: feed.year,
@@ -34,7 +34,7 @@ mobileDiscoverRoutes.get('/api/mobile/seasonal', async (c) => {
 mobileDiscoverRoutes.get('/api/mobile/top', async (c) => {
   const q = (c.req.query('q') ?? '').trim();
   if (!q) return unavailable(c, 'top');
-  const data = await searchHoshikaAnime(q, 50);
+  const data = await searchHoshikaAnime(q, 50, c.env.HOSHIKA_API_KEY);
   return c.json({
     success: true, source: 'hoshika', filter: c.req.query('filter') ?? 'bypopularity',
     data: data.map((a) => ({
@@ -53,7 +53,7 @@ mobileDiscoverRoutes.get('/api/mobile/schedule', async (c) => {
   if (Number.isInteger(year) && year >= 1900 && year <= 2200) url.searchParams.set('year', String(year));
   if (Number.isInteger(week) && week >= 1 && week <= 53) url.searchParams.set('week', String(week));
   try {
-    const response = await fetch(url.toString(), { headers: { Accept: 'application/json' } });
+    const response = await fetch(url.toString(), { headers: { Accept: 'application/json', ...(c.env.HOSHIKA_API_KEY ? { 'X-Hoshika-Key': c.env.HOSHIKA_API_KEY } : {}) } });
     if (!response.ok) {
       return c.json({ success: false, source: 'hoshika', view: 'schedule', message: 'Hoshika schedule is temporarily unavailable.', data: [] }, 502, { 'Cache-Control': 'no-store' });
     }
