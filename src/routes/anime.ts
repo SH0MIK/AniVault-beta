@@ -67,7 +67,7 @@ animeRoutes.get('/anime', async (c) => {
     raw.aired?.string,
     raw.aired?.text,
     raw.aired?.label,
-  ) || (startDateText ? (endDateText ? `${startDateText} to ${endDateText}` : startDateText) : '');
+  ) || (startDateText ? (endDateText ? `${startDateText} to ${endDateText}` : startDateText) : (record.year ? String(record.year) : ''));
   const statusRaw = String(raw.status ?? record.status ?? '');
   const statusMap: Record<string, string> = {
     FINISHED: 'Finished Airing', FINISHED_AIRING: 'Finished Airing', RELEASING: 'Currently Airing',
