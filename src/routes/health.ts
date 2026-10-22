@@ -82,7 +82,7 @@ healthRoutes.get('/healthz', async (c) => {
 
   // Hoshika is the only anime catalog source in the migration branch.
   const hoshika = await probeExternal('https://hoshika.app/api/v1/search?q=Naruto&limit=1', {
-    headers: { Accept: 'application/json' },
+    headers: { Accept: 'application/json', ...(env.HOSHIKA_API_KEY ? { 'X-Hoshika-Key': env.HOSHIKA_API_KEY } : {}) },
   });
   externalChecks.hoshika = { ...hoshika, label: 'Hoshika API', configured: true, critical: false };
 
