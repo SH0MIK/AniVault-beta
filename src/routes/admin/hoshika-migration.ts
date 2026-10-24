@@ -52,17 +52,17 @@ adminHoshikaMigrationRoutes.on(['GET', 'POST'], '/admin/hoshika_migration.php', 
         return c.json({ ok: true, message: 'Verified mapping saved: ' + legacyId + ' → ' + shortId + ' (' + anime.title + ').' });
       }
       if (body.action === 'apply') {
-        const mappings = await db.fetchAll<{ legacy_mal_id: number; hoshika_short_id: string }>(
-          'SELECT legacy_mal_id, hoshika_short_id FROM anime_identity_map WHERE verified=1 AND legacy_mal_id IS NOT NULL AND CAST(legacy_mal_id AS TEXT) != hoshika_short_id AND (EXISTS (SELECT 1 FROM anime_list a WHERE CAST(a.anime_id AS TEXT)=CAST(anime_identity_map.legacy_mal_id AS TEXT)) OR EXISTS (SELECT 1 FROM watch_history w WHERE CAST(w.anime_id AS TEXT)=CAST(anime_identity_map.legacy_mal_id AS TEXT)) OR EXISTS (SELECT 1 FROM favorites f WHERE CAST(f.anime_id AS TEXT)=CAST(anime_identity_map.legacy_mal_id AS TEXT))) ORDER BY legacy_mal_id LIMIT 100');
+        const mappings = await db.fetchAll<{ legacy_mal_id: number; hoshika_short_id: string; title: string }>(
+          'SELECT legacy_mal_id, hoshika_short_id, title FROM anime_identity_map WHERE verified=1 AND legacy_mal_id IS NOT NULL AND title IS NOT NULL AND title != \'\' AND CAST(legacy_mal_id AS TEXT) != hoshika_short_id AND (EXISTS (SELECT 1 FROM anime_list a WHERE CAST(a.anime_id AS TEXT)=CAST(anime_identity_map.legacy_mal_id AS TEXT)) OR EXISTS (SELECT 1 FROM watch_history w WHERE CAST(w.anime_id AS TEXT)=CAST(anime_identity_map.legacy_mal_id AS TEXT)) OR EXISTS (SELECT 1 FROM favorites f WHERE CAST(f.anime_id AS TEXT)=CAST(anime_identity_map.legacy_mal_id AS TEXT))) ORDER BY legacy_mal_id LIMIT 100');
         let listUpdated = 0, historyUpdated = 0, favoritesUpdated = 0;
         for (const m of mappings) {
-          const oldId = Number(m.legacy_mal_id), newId = Number(m.hoshika_short_id);
+          const oldId = Number(m.legacy_mal_id), newId = Number(m.hoshika_short_id), verifiedTitle = String(m.title || '').trim();
           if (!Number.isSafeInteger(oldId) || !Number.isSafeInteger(newId) || oldId <= 0 || newId <= 0) continue;
-          const list = await db.query('UPDATE anime_list SET anime_id=? WHERE anime_id=? AND NOT EXISTS (SELECT 1 FROM anime_list target WHERE target.user_id=anime_list.user_id AND target.anime_id=?)', [newId, oldId, newId]);
+          const list = await db.query('UPDATE anime_list SET anime_id=? WHERE anime_id=? AND LOWER(TRIM(anime_title))=LOWER(TRIM(?)) AND NOT EXISTS (SELECT 1 FROM anime_list target WHERE target.user_id=anime_list.user_id AND target.anime_id=?)', [newId, oldId, verifiedTitle, newId]);
           listUpdated += Number(list.meta?.changes ?? 0);
-          const hist = await db.query('UPDATE watch_history SET anime_id=? WHERE anime_id=? AND NOT EXISTS (SELECT 1 FROM watch_history target WHERE target.user_id=watch_history.user_id AND target.anime_id=?)', [newId, oldId, newId]);
+          const hist = await db.query('UPDATE watch_history SET anime_id=? WHERE anime_id=? AND LOWER(TRIM(anime_title))=LOWER(TRIM(?)) AND NOT EXISTS (SELECT 1 FROM watch_history target WHERE target.user_id=watch_history.user_id AND target.anime_id=?)', [newId, oldId, verifiedTitle, newId]);
           historyUpdated += Number(hist.meta?.changes ?? 0);
-          const fav = await db.query('UPDATE favorites SET anime_id=? WHERE anime_id=? AND NOT EXISTS (SELECT 1 FROM favorites target WHERE target.user_id=favorites.user_id AND target.anime_id=?)', [newId, oldId, newId]);
+          const fav = await db.query('UPDATE favorites SET anime_id=? WHERE anime_id=? AND LOWER(TRIM(anime_title))=LOWER(TRIM(?)) AND NOT EXISTS (SELECT 1 FROM favorites target WHERE target.user_id=favorites.user_id AND target.anime_id=?)', [newId, oldId, verifiedTitle, newId]);
           favoritesUpdated += Number(fav.meta?.changes ?? 0);
         }
         await session.save(c, lifetime);
@@ -108,7 +108,7 @@ adminHoshikaMigrationRoutes.on(['GET', 'POST'], '/admin/hoshika_migration.php', 
  <div class="hm-stat"><b>${Number(counts?.unmapped||0).toLocaleString()}</b><span>IDs needing review</span></div>
 </div>
 <div class="card card-body mb-3"><h2>Hoshika candidate review</h2><p class="hm-muted">Searches using the saved title. Nothing changes until you approve a candidate.</p><div id="hm-results"></div></div>
-<div class="card card-body mb-3"><h2>Apply verified mappings</h2><p class="hm-muted">Updates anime_list, watch_history and favorites, up to 100 mappings per click. Duplicate list/favorite entries are skipped.</p><button class="btn btn-danger" id="hm-apply">Apply verified mappings</button><p id="hm-apply-status" class="hm-muted"></p></div>
+<div class="card card-body mb-3"><h2>Apply verified mappings</h2><p class="hm-muted">Updates anime_list, watch_history and favorites for rows whose saved title matches the verified Hoshika title. Up to 100 mappings per click; duplicate rows and title mismatches are skipped.</p><button class="btn btn-danger" id="hm-apply">Apply verified mappings</button><p id="hm-apply-status" class="hm-muted"></p></div>
 <div class="card card-body"><h2>Unmapped anime IDs</h2><p class="hm-muted">Page ${page} · showing ${rows.length} IDs, ordered by number of records.</p>
 ${rows.map((r:any)=>`<div class="hm-row"><div><strong>${h(r.title||'Unknown title')}</strong><div class="hm-muted">ID ${h(String(r.anime_id))} · ${Number(r.uses||0)} references</div></div><button class="btn btn-secondary btn-sm hm-find" data-id="${h(String(r.anime_id))}" data-title="${h(String(r.title||''))}">Search Hoshika</button></div>`).join('')}
 <div style="display:flex;gap:8px;margin-top:14px">${page>1?`<a class="btn btn-ghost" href="?page=${page-1}">Previous</a>`:''}<a class="btn btn-ghost" href="?page=${page+1}">Next page</a></div></div>
