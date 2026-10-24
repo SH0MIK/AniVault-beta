@@ -101,10 +101,10 @@ animeRoutes.get('/anime', async (c) => {
     related_anime: relationRows.map((rel: any) => {
       // Hoshika is the canonical catalog. Only use a numeric shortId for
       // public anime links; Hoshika UUIDs must never be treated as page IDs.
-      const relatedId = String(rel?.shortId ?? rel?.short_id ?? rel?.anime?.shortId ?? rel?.relatedAnime?.shortId ?? (typeof rel?.id === 'number' || /^\\d+$/.test(String(rel?.id ?? '')) ? rel.id : '') ?? '').trim();
+      const relatedId = String(rel?.shortId ?? rel?.short_id ?? rel?.anime?.shortId ?? rel?.relatedAnime?.shortId ?? (typeof rel?.id === 'number' || /^\d+$/.test(String(rel?.id ?? '')) ? rel.id : '') ?? '').trim();
       return {
         relation_type_formatted: asText(rel?.relationType, rel?.relation_type, rel?.type, rel?.current ? 'Current' : ''),
-        entry: { mal_id: /^\\d+$/.test(relatedId) ? Number(relatedId) : 0, title: asText(rel?.title, rel?.name, rel?.anime?.title, rel?.relatedAnime?.title) },
+        entry: { mal_id: /^\d+$/.test(relatedId) ? Number(relatedId) : 0, title: asText(rel?.title, rel?.name, rel?.anime?.title, rel?.relatedAnime?.title) },
       };
     }),
     cover_image: record.cover || asText(raw.bannerImage, raw.banner_image, raw.banner),
