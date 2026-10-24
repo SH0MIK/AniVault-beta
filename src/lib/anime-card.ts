@@ -11,7 +11,7 @@ const STATUS_LABELS: Record<string, string> = { watching: 'Watching', completed:
 const STATUS_CLASSES: Record<string, string> = { watching: 'badge-watching', completed: 'badge-completed', plan_to_watch: 'badge-ptw', dropped: 'badge-dropped', on_hold: 'badge-onhold' };
 export const LANG_CODE: Record<string, string> = { english: 'EN', hindi: 'HI', spanish: 'ES', german: 'DE', french: 'FR', portuguese: 'PT', italian: 'IT', korean: 'KO' };
 
-export interface AnimeCardMeta { airedInfo?: AiredInfo | null; dubbedLangs?: string[]; hoshikaShortId?: string; }
+export interface AnimeCardMeta { airedInfo?: AiredInfo | null; dubbedLangs?: string[]; }
 
 /** One bulk lookup covering a whole page of cards — every route with a
  *  grid should call this once and pass the result to renderAnimeCard per
@@ -23,18 +23,8 @@ export async function buildCardMetaMap(db: Db, items: NormalisedAnime[]): Promis
   if (!ids.length) return out;
   // Do not consult legacy Jikan/scraper episode-count caches while the
   // catalog is migrating to Hoshika. Keep user/admin-maintained dub status.
-  const legacyIds = ids.filter((id) => id > 0);
-  const [dubMap, identityRows] = await Promise.all([
-    DubStatus.getForMany(db, ids),
-    legacyIds.length
-      ? db.fetchAll<{ legacy_mal_id: number; hoshika_short_id: string }>(
-          `SELECT legacy_mal_id, hoshika_short_id FROM anime_identity_map WHERE verified = 1 AND legacy_mal_id IN (${legacyIds.map(() => '?').join(',')})`,
-          legacyIds,
-        ).catch(() => [])
-      : Promise.resolve([] as { legacy_mal_id: number; hoshika_short_id: string }[]),
-  ]);
-  const hoshikaIds = new Map(identityRows.map((row) => [Number(row.legacy_mal_id), String(row.hoshika_short_id)]));
-  for (const id of ids) out.set(id, { airedInfo: null, dubbedLangs: dubMap.get(id) ?? [], hoshikaShortId: hoshikaIds.get(id) });
+  const dubMap = await DubStatus.getForMany(db, ids);
+  for (const id of ids) out.set(id, { airedInfo: null, dubbedLangs: dubMap.get(id) ?? [] });
   return out;
 }
 
@@ -74,7 +64,7 @@ export function renderAnimeCard(a: NormalisedAnime, siteUrl: string, userStatus:
   const atype = a.type ?? '';
   const aeps = a.episodes ?? 0;
   // Catalog detail pages use Hoshika shortIds; keep the legacy ID only for user-list actions/status.
-  const hoshikaId = meta?.hoshikaShortId || (a as NormalisedAnime & { hoshika_short_id?: string }).hoshika_short_id;
+  const hoshikaId = (a as NormalisedAnime & { hoshika_short_id?: string }).hoshika_short_id;
   const aurl = `${siteUrl}/anime?id=${encodeURIComponent(hoshikaId || String(aid))}`;
 
   const jTitle = JSON.stringify(atitle);
