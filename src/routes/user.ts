@@ -15,6 +15,7 @@ import { h, timeAgo, statusBadge } from '../lib/helpers';
 import { icon } from '../lib/icons';
 import { renderAnimeCard, buildCardMetaMap } from '../lib/anime-card';
 import { renderHeader, renderFooter, CurrentUser } from '../render/layout';
+import { getHoshikaAnimeById } from '../lib/hoshika-api';
 import { getBannerData } from '../lib/settings';
 import { buildSocialLinks, platformColor } from '../lib/social';
 // Anime list IDs now store Hoshika numeric shortIds directly.
@@ -125,7 +126,8 @@ userRoutes.get('/u/:username', async (c) => {
   const recentList = await AnimeTracker.getUserList(db, profileId, filterStatus, listPage);
   const currentlyWatching = await AnimeTracker.getUserList(db, profileId, 'watching', 1);
   // Anime IDs in these user tables are Hoshika numeric shortIds now.
-  // Use them directly for CDN covers; the old MAL identity map is not relevant.
+  // Fetch the real coverImage URL from Hoshika: some covers include a versioned
+  // path segment, so constructing a URL from shortId alone is not reliable.
   const profileAnimeIds = [...new Set([
     ...wrappedTopAnime.map((item: any) => Number(item.anime_id)),
     ...favs.map((item: any) => Number(item.anime_id)),
@@ -133,9 +135,26 @@ userRoutes.get('/u/:username', async (c) => {
     ...currentlyWatching.items.map((item: any) => Number(item.anime_id)),
   ].filter((id: number) => Number.isSafeInteger(id) && id > 0))];
   const hoshikaImageById = new Map<number, string>();
-  for (const shortId of profileAnimeIds) {
-    hoshikaImageById.set(shortId, `https://cdn.hoshika.app/catalog/covers/anime/${shortId}.webp`);
-  }
+  await Promise.all(profileAnimeIds.map(async (shortId: number) => {
+    const cacheKey = `hoshika:cover-image:${shortId}`;
+    try {
+      const cached = await c.env.API_CACHE.get(cacheKey);
+      if (cached && /^https:\/\/cdn\.hoshika\.app\//i.test(cached)) {
+        hoshikaImageById.set(shortId, cached);
+        return;
+      }
+      const anime = await getHoshikaAnimeById(shortId, c.env.HOSHIKA_API_KEY);
+      const coverImage = String(anime?.raw?.coverImage ?? anime?.poster ?? '');
+      if (coverImage && /^https:\/\/cdn\.hoshika\.app\//i.test(coverImage)) {
+        hoshikaImageById.set(shortId, coverImage);
+        await c.env.API_CACHE.put(cacheKey, coverImage, { expirationTtl: 60 * 60 * 24 * 30 });
+      } else {
+        hoshikaImageById.set(shortId, '');
+      }
+    } catch {
+      hoshikaImageById.set(shortId, '');
+    }
+  }));
   // Override only in-memory display values; user tracking data remains untouched.
   for (const entry of [...wrappedEntries, ...favs, ...recentList.items, ...currentlyWatching.items]) {
     const id = Number(entry.anime_id);
