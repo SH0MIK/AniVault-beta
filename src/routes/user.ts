@@ -103,7 +103,8 @@ userRoutes.get('/u/:username', async (c) => {
   ).catch(() => []);
   const wrappedScored = wrappedEntries.filter((entry:any) => entry.score !== null && entry.score !== undefined && entry.score !== '');
   const wrappedTopAnime = [...wrappedScored].sort((a:any,b:any) => Number(b.score)-Number(a.score)).slice(0,5);
-  // Wrapped artwork is refreshed from Hoshika below; saved artwork is ignored.\n  const wrappedAverage = wrappedScored.length ? (wrappedScored.reduce((sum:number,entry:any)=>sum+Number(entry.score||0),0)/wrappedScored.length).toFixed(1) : '—';
+  // Wrapped artwork is refreshed from Hoshika below; saved artwork is ignored.
+  const wrappedAverage = wrappedScored.length ? (wrappedScored.reduce((sum:number,entry:any)=>sum+Number(entry.score||0),0)/wrappedScored.length).toFixed(1) : '—';
   const wrappedCompleted = wrappedEntries.filter((entry:any)=>entry.status==='completed').length;
   const wrappedMinutes = Number((stats as any).total_episodes || 0) * 21;
   const wrappedWatchTime = Math.floor(wrappedMinutes/60) + 'h ' + (wrappedMinutes%60) + 'm';
