@@ -17,7 +17,7 @@ import { renderAnimeCard, buildCardMetaMap } from '../lib/anime-card';
 import { renderHeader, renderFooter, CurrentUser } from '../render/layout';
 import { getBannerData } from '../lib/settings';
 import { buildSocialLinks, platformColor } from '../lib/social';
-import { findIdentityByLegacyMalId } from '../lib/anime-identity';
+// Anime list IDs now store Hoshika numeric shortIds directly.
 
 export const userRoutes = new Hono<{ Bindings: Env }>();
 
@@ -124,36 +124,22 @@ userRoutes.get('/u/:username', async (c) => {
   const favs = await AnimeTracker.getFavorites(db, profileId);
   const recentList = await AnimeTracker.getUserList(db, profileId, filterStatus, listPage);
   const currentlyWatching = await AnimeTracker.getUserList(db, profileId, 'watching', 1);
-  // Profile artwork is resolved from Hoshika at request time. Never prefer
-  // cached anime_images/anime_list/favorites artwork, and never guess ID matches.
+  // Anime IDs in these user tables are Hoshika numeric shortIds now.
+  // Use them directly for CDN covers; the old MAL identity map is not relevant.
   const profileAnimeIds = [...new Set([
     ...wrappedTopAnime.map((item: any) => Number(item.anime_id)),
     ...favs.map((item: any) => Number(item.anime_id)),
     ...recentList.items.map((item: any) => Number(item.anime_id)),
     ...currentlyWatching.items.map((item: any) => Number(item.anime_id)),
   ].filter((id: number) => Number.isSafeInteger(id) && id > 0))];
-  const hoshikaImageByLegacyId = new Map<number, string>();
-  await Promise.all(profileAnimeIds.map(async (legacyId: number) => {
-    try {
-      const identity = await findIdentityByLegacyMalId(db, legacyId);
-      if (!identity || identity.verified !== 1 || !identity.hoshika_short_id) {
-        hoshikaImageByLegacyId.set(legacyId, '');
-        return;
-      }
-      // Hoshika's catalog cover URL is keyed by its canonical shortId.
-      // The legacy ID is only used after a verified identity-map lookup.
-      hoshikaImageByLegacyId.set(
-        legacyId,
-        `https://cdn.hoshika.app/catalog/covers/anime/${encodeURIComponent(identity.hoshika_short_id)}.webp`,
-      );
-    } catch {
-      hoshikaImageByLegacyId.set(legacyId, '');
-    }
-  }));
-  // Override only the in-memory display values; user tracking data is untouched.
+  const hoshikaImageById = new Map<number, string>();
+  for (const shortId of profileAnimeIds) {
+    hoshikaImageById.set(shortId, `https://cdn.hoshika.app/catalog/covers/anime/${shortId}.webp`);
+  }
+  // Override only in-memory display values; user tracking data remains untouched.
   for (const entry of [...wrappedEntries, ...favs, ...recentList.items, ...currentlyWatching.items]) {
     const id = Number(entry.anime_id);
-    if (hoshikaImageByLegacyId.has(id)) entry.anime_image = hoshikaImageByLegacyId.get(id) || '';
+    if (hoshikaImageById.has(id)) entry.anime_image = hoshikaImageById.get(id) || '';
   }
   const watchRange = '7d';
   const watchHistory = await db.fetchAll<{activity_date:string;episodes_watched:number}>(
