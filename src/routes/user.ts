@@ -17,7 +17,6 @@ import { renderAnimeCard, buildCardMetaMap } from '../lib/anime-card';
 import { renderHeader, renderFooter, CurrentUser } from '../render/layout';
 import { getBannerData } from '../lib/settings';
 import { buildSocialLinks, platformColor } from '../lib/social';
-import { getHoshikaAnimeById } from '../lib/hoshika-api';
 import { findIdentityByLegacyMalId } from '../lib/anime-identity';
 
 export const userRoutes = new Hono<{ Bindings: Env }>();
@@ -140,8 +139,12 @@ userRoutes.get('/u/:username', async (c) => {
         hoshikaImageByLegacyId.set(legacyId, '');
         return;
       }
-      const anime = await getHoshikaAnimeById(identity.hoshika_short_id, c.env.HOSHIKA_API_KEY);
-      hoshikaImageByLegacyId.set(legacyId, anime?.poster || '');
+      // Hoshika's catalog cover URL is keyed by its canonical shortId.
+      // The legacy ID is only used after a verified identity-map lookup.
+      hoshikaImageByLegacyId.set(
+        legacyId,
+        `https://cdn.hoshika.app/catalog/covers/anime/${encodeURIComponent(identity.hoshika_short_id)}.webp`,
+      );
     } catch {
       hoshikaImageByLegacyId.set(legacyId, '');
     }
