@@ -63,7 +63,9 @@ export function renderAnimeCard(a: NormalisedAnime, siteUrl: string, userStatus:
   const ascore = a.score;
   const atype = a.type ?? '';
   const aeps = a.episodes ?? 0;
-  const aurl = `${siteUrl}/anime?id=${aid}`;
+  // Catalog detail pages use Hoshika shortIds; keep the legacy ID only for user-list actions/status.
+  const hoshikaId = (a as NormalisedAnime & { hoshika_short_id?: string }).hoshika_short_id;
+  const aurl = `${siteUrl}/anime?id=${encodeURIComponent(hoshikaId || String(aid))}`;
 
   const jTitle = JSON.stringify(atitle);
   const jImage = JSON.stringify(aimg);
