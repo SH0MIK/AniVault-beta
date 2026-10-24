@@ -44,6 +44,7 @@ watchNowRoutes.get('/watch-now', async (c) => {
     const poster = anime.poster || '';
     return {
       mal_id: row.anime_id,
+      hoshika_short_id: identity.hoshika_short_id,
       title: anime.title || identity.title || 'Unknown anime',
       title_english: anime.titleEnglish || '',
       title_japanese: anime.titleJapanese || '',
