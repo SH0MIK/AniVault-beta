@@ -53,14 +53,14 @@ adminHoshikaMigrationRoutes.on(['GET', 'POST'], '/admin/hoshika_migration.php', 
       }
       if (body.action === 'apply') {
         const mappings = await db.fetchAll<{ legacy_mal_id: number; hoshika_short_id: string }>(
-          'SELECT legacy_mal_id, hoshika_short_id FROM anime_identity_map WHERE verified=1 AND legacy_mal_id IS NOT NULL AND CAST(legacy_mal_id AS TEXT) != hoshika_short_id ORDER BY legacy_mal_id LIMIT 100');
+          'SELECT legacy_mal_id, hoshika_short_id FROM anime_identity_map WHERE verified=1 AND legacy_mal_id IS NOT NULL AND CAST(legacy_mal_id AS TEXT) != hoshika_short_id AND (EXISTS (SELECT 1 FROM anime_list a WHERE CAST(a.anime_id AS TEXT)=CAST(anime_identity_map.legacy_mal_id AS TEXT)) OR EXISTS (SELECT 1 FROM watch_history w WHERE CAST(w.anime_id AS TEXT)=CAST(anime_identity_map.legacy_mal_id AS TEXT)) OR EXISTS (SELECT 1 FROM favorites f WHERE CAST(f.anime_id AS TEXT)=CAST(anime_identity_map.legacy_mal_id AS TEXT))) ORDER BY legacy_mal_id LIMIT 100');
         let listUpdated = 0, historyUpdated = 0, favoritesUpdated = 0;
         for (const m of mappings) {
           const oldId = Number(m.legacy_mal_id), newId = Number(m.hoshika_short_id);
           if (!Number.isSafeInteger(oldId) || !Number.isSafeInteger(newId) || oldId <= 0 || newId <= 0) continue;
           const list = await db.query('UPDATE anime_list SET anime_id=? WHERE anime_id=? AND NOT EXISTS (SELECT 1 FROM anime_list target WHERE target.user_id=anime_list.user_id AND target.anime_id=?)', [newId, oldId, newId]);
           listUpdated += Number(list.meta?.changes ?? 0);
-          const hist = await db.query('UPDATE watch_history SET anime_id=? WHERE anime_id=?', [newId, oldId]);
+          const hist = await db.query('UPDATE watch_history SET anime_id=? WHERE anime_id=? AND NOT EXISTS (SELECT 1 FROM watch_history target WHERE target.user_id=watch_history.user_id AND target.anime_id=?)', [newId, oldId, newId]);
           historyUpdated += Number(hist.meta?.changes ?? 0);
           const fav = await db.query('UPDATE favorites SET anime_id=? WHERE anime_id=? AND NOT EXISTS (SELECT 1 FROM favorites target WHERE target.user_id=favorites.user_id AND target.anime_id=?)', [newId, oldId, newId]);
           favoritesUpdated += Number(fav.meta?.changes ?? 0);
