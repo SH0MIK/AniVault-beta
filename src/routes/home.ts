@@ -119,7 +119,8 @@ homeRoutes.get('/', async (c) => {
       const identity = await findIdentityByLegacyMalId(db, anime_id).catch(() => null);
       if (!identity || identity.verified !== 1 || !identity.hoshika_short_id) return null;
       const anime = await getHoshikaAnimeById(identity.hoshika_short_id, c.env.HOSHIKA_API_KEY);
-      return toHoshikaNormalisedAnime(anime, anime_id);
+      const normalized = toHoshikaNormalisedAnime(anime, anime_id);
+      return normalized ? Object.assign(normalized, { hoshika_short_id: identity.hoshika_short_id }) : null;
     }));
     watchNowList = resolved.filter((anime): anime is NormalisedAnime => anime !== null);
   } catch {
