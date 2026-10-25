@@ -668,7 +668,9 @@ export async function getHoshikaGenres(apiKey?: string): Promise<Array<{ slug: s
     const slug = toSlug(firstText(item?.slug, item?.id, name));
     return { slug, name };
   }).filter((item: { slug: string; name: string }) => !!item.slug && !!item.name);
-  return [...new Map(mapped.map((item: { slug: string; name: string }) => [item.slug, item])).values()];
+  const unique = new Map<string, { slug: string; name: string }>();
+  for (const item of mapped as Array<{ slug: string; name: string }>) unique.set(item.slug, item);
+  return [...unique.values()];
 }
 
 
