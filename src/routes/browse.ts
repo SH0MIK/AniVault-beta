@@ -103,6 +103,7 @@ browseRoutes.get('/browse', async (c) => {
       episodes: Number.isFinite(Number(item.episodes ?? item.episodeCount)) ? Number(item.episodes ?? item.episodeCount) : null,
       score: Number.isFinite(Number(item.averageScore ?? item.score ?? item.rating)) ? Number(item.averageScore ?? item.score ?? item.rating) : null,
       status: String(item.status ?? ''),
+      season: String(item.season ?? item.seasonName ?? item.season_name ?? ''),
       type: String(item.type ?? item.format ?? 'TV'),
       year: Number.isFinite(Number(item.year ?? item.seasonYear)) ? Number(item.year ?? item.seasonYear) : null,
       genres: Array.isArray(item.genres) ? item.genres.map((g: any) => typeof g === 'string' ? g : String(g?.name ?? '')).filter(Boolean) : [],
