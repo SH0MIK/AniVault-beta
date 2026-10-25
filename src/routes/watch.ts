@@ -119,14 +119,14 @@ async function getEpisodeOgImage(
 // episode/character/AniList calls.
 const PREVIEW_BOT_RE = /facebookexternalhit|Facebot|Twitterbot|Discordbot|Slackbot|TelegramBot|WhatsApp|LinkedInBot|Pinterest|SkypeUriPreview|vkShare|redditbot|Applebot|Google-InspectionTool|W3C_Validator/i;
 
-async function getMappedWatchAnime(db: Db, requestedId: string | number): Promise<{ anime: NormalisedAnime; shortId: string } | null> {
+async function getMappedWatchAnime(db: Db, requestedId: string | number, apiKey?: string): Promise<{ anime: NormalisedAnime; shortId: string } | null> {
   // Hoshika is the sole catalogue identity. Never reinterpret a requested
   // Hoshika ID as a legacy MAL ID or borrow metadata from another catalogue.
   const rawId = String(requestedId ?? '').trim();
   const hoshikaLookupId = rawId.replace(/^hsk-/i, '');
   const identity = await findIdentityByHoshikaId(db, hoshikaLookupId).catch(() => null);
   const shortId = identity?.hoshika_short_id ?? hoshikaLookupId;
-  const hoshika = await getHoshikaAnimeById(shortId, c.env.HOSHIKA_API_KEY).catch(() => null);
+  const hoshika = await getHoshikaAnimeById(shortId, apiKey).catch(() => null);
   if (!hoshika) return null;
   const poster = hoshika.poster || '';
   const status = /airing|ongoing|currently/i.test(hoshika.status) ? 'Currently Airing'
@@ -176,7 +176,7 @@ watchRoutes.get('/watch', async (c) => {
   const ua = c.req.header('user-agent') ?? '';
   if (PREVIEW_BOT_RE.test(ua)) {
     const db = new Db(c.env.DB);
-    const mapped = await getMappedWatchAnime(db, hoshikaParam);
+    const mapped = await getMappedWatchAnime(db, hoshikaParam, c.env.HOSHIKA_API_KEY);
     if (!mapped) return c.text('Anime not found in Hoshika. Please check the Hoshika ID.', 404);
     const anime = mapped.anime;
     const title = getAnimeTitle(anime);
