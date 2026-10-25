@@ -122,7 +122,7 @@ homeRoutes.get('/', async (c) => {
       const normalized = toHoshikaNormalisedAnime(anime, anime_id);
       return normalized ? Object.assign(normalized, { hoshika_short_id: identity.hoshika_short_id }) : null;
     }));
-    watchNowList = resolved.filter((anime): anime is NormalisedAnime => anime !== null);
+    watchNowList = resolved.filter((anime) => anime !== null) as NormalisedAnime[];
   } catch {
     watchNowList = [];
   }
