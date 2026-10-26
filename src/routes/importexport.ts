@@ -278,9 +278,15 @@ document.getElementById('import-form')?.addEventListener('submit', async functio
     const result = await response.json();
     clearInterval(progressInterval);
     if (result.success) {
-      updateProgress(100, '✅ Import complete!', \`Imported \${result.imported} entries. \${result.skipped} skipped, \${result.errors} errors.\`);
-      showToast(\`Import complete! \${result.imported} entries added.\`, 'success');
-      setTimeout(() => { window.location.href = '/importexport?imported=1'; }, 2000);
+      const unresolved = Number(result.unmapped || 0);
+      updateProgress(100, '✅ Import finished', `Imported ${result.imported} entries with Hoshika IDs. ${unresolved} unmapped, ${result.errors} errors.`);
+      if (unresolved > 0) {
+        const titles = (result.unmappedEntries || []).map(item => item.title + ' (MAL ID ' + item.id + ')').join('\\n');
+        const extra = unresolved > 100 ? '\\nOnly the first 100 unresolved titles are shown.' : '';
+        alert('These entries were NOT imported because no verified Hoshika mapping with an exact title match exists:\\n\\n' + titles + extra + '\\n\\nMap them at /admin/hoshika_migration.php, then import the XML again.');
+      }
+      showToast(`Import finished: ${result.imported} mapped entries; ${unresolved} need mapping.`, unresolved ? 'error' : 'success');
+      setTimeout(() => { window.location.href = '/importexport?imported=1'; }, 2500);
     } else {
       updateProgress(0, '❌ Import failed', result.message || 'Unknown error occurred');
       showToast(result.message || 'Import failed', 'error');
@@ -303,6 +309,29 @@ document.getElementById('import-form')?.addEventListener('submit', async functio
   await session.save(c, lifetime);
   return c.html(html);
 });
+
+// Resolve MAL export IDs only through verified identity-map entries. Never write a MAL ID
+// into anime_list: unresolved entries are skipped and reported back to the user.
+async function resolveVerifiedMalIds(db: Db, entries: ParsedMalEntry[]): Promise<Map<number, { shortId: number; title: string }>> {
+  const ids = [...new Set(entries.map((entry) => entry.animeId).filter((id) => Number.isSafeInteger(id) && id > 0))];
+  const resolved = new Map<number, { shortId: number; title: string }>();
+  for (let i = 0; i < ids.length; i += 100) {
+    const chunk = ids.slice(i, i + 100);
+    const placeholders = chunk.map(() => '?').join(',');
+    const rows = await db.fetchAll<{ legacy_mal_id: number; hoshika_short_id: string; title: string }>(
+      `SELECT legacy_mal_id, hoshika_short_id, title FROM anime_identity_map
+       WHERE verified=1 AND legacy_mal_id IN (${placeholders})
+         AND legacy_mal_id IS NOT NULL AND hoshika_short_id IS NOT NULL
+         AND title IS NOT NULL AND TRIM(title) != ''`, chunk);
+    for (const row of rows) {
+      const legacyId = Number(row.legacy_mal_id), shortId = Number(row.hoshika_short_id);
+      if (Number.isSafeInteger(legacyId) && legacyId > 0 && Number.isSafeInteger(shortId) && shortId > 0) {
+        resolved.set(legacyId, { shortId, title: String(row.title).trim() });
+      }
+    }
+  }
+  return resolved;
+}
 
 // ── Minimal MAL-XML extractor for the known <anime>...</anime> schema ──────
 interface ParsedMalEntry {
@@ -364,35 +393,44 @@ importExportRoutes.post('/pages/import_ajax.php', async (c) => {
   if (ext === 'xml') {
     const entries = parseMalXml(content);
     total = entries.length;
+    const verifiedMappings = await resolveVerifiedMalIds(db, entries);
+    const unmappedEntries: Array<{ id: number; title: string }> = [];
     for (const entry of entries) {
       if (!entry.animeId || !entry.title) { skipped++; continue; }
+      const mapping = verifiedMappings.get(entry.animeId);
+      if (!mapping || mapping.title.toLocaleLowerCase() !== entry.title.trim().toLocaleLowerCase()) {
+        skipped++;
+        unmappedEntries.push({ id: entry.animeId, title: entry.title });
+        continue;
+      }
+      const animeId = mapping.shortId;
       const status = MAL_TO_STATUS[entry.status] ?? 'plan_to_watch';
       const scoreVal = entry.score > 0 ? entry.score : null;
       const startVal = entry.started && entry.started !== '0000-00-00' ? entry.started : null;
       const finishVal = entry.finished && entry.finished !== '0000-00-00' ? entry.finished : null;
       try {
-        const animeImage = await getLocalAnimeImage(db, entry.animeId);
-        const existing = await db.fetchOne<{ id: number }>('SELECT id FROM anime_list WHERE user_id=? AND anime_id=?', [userId, entry.animeId]);
+        const animeImage = await getLocalAnimeImage(db, animeId);
+        const existing = await db.fetchOne<{ id: number }>('SELECT id FROM anime_list WHERE user_id=? AND anime_id=?', [userId, animeId]);
         if (existing) {
           if (animeImage) {
             await db.query(
               `UPDATE anime_list SET anime_title=?, anime_image=CASE WHEN anime_image IS NULL OR anime_image='' THEN ? ELSE anime_image END,
                status=?, episodes_watched=?, score=?, review=?, started_at=?, completed_at=?, updated_at=datetime('now')
                WHERE user_id=? AND anime_id=?`,
-              [entry.title, animeImage, status, entry.watched, scoreVal, entry.review || null, startVal, finishVal, userId, entry.animeId]
+              [entry.title, animeImage, status, entry.watched, scoreVal, entry.review || null, startVal, finishVal, userId, animeId]
             );
           } else {
             await db.query(
               `UPDATE anime_list SET anime_title=?, status=?, episodes_watched=?, score=?, review=?, started_at=?, completed_at=?, updated_at=datetime('now')
                WHERE user_id=? AND anime_id=?`,
-              [entry.title, status, entry.watched, scoreVal, entry.review || null, startVal, finishVal, userId, entry.animeId]
+              [entry.title, status, entry.watched, scoreVal, entry.review || null, startVal, finishVal, userId, animeId]
             );
           }
         } else {
           await db.insert(
             `INSERT INTO anime_list (user_id, anime_id, anime_title, anime_image, anime_episodes, status, episodes_watched, score, review, started_at, completed_at)
              VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
-            [userId, entry.animeId, entry.title, animeImage, entry.episodes, status, entry.watched, scoreVal, entry.review || null, startVal, finishVal]
+            [userId, animeId, entry.title, animeImage, entry.episodes, status, entry.watched, scoreVal, entry.review || null, startVal, finishVal]
           );
         }
         imported++;
@@ -400,9 +438,13 @@ importExportRoutes.post('/pages/import_ajax.php', async (c) => {
         errors++;
       }
     }
-    await Logger.log(db, userId, 'import_xml', `Imported ${imported} entries from MAL XML`);
+    await Logger.log(db, userId, 'import_xml', `Imported ${imported} mapped entries from MAL XML; skipped ${unmappedEntries.length} unmapped or title-mismatched entries`);
     await session.save(c, lifetime);
-    return c.json({ success: true, imported, skipped, errors, total, message: `Imported ${imported} entries` });
+    return c.json({
+      success: true, imported, skipped, errors, total, unmapped: unmappedEntries.length,
+      unmappedEntries: unmappedEntries.slice(0, 100),
+      message: `Imported ${imported} entries using verified Hoshika IDs; ${unmappedEntries.length} entries need mapping`,
+    });
   }
 
   if (ext === 'json') {
