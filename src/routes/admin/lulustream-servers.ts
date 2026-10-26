@@ -54,7 +54,13 @@ function esc(value: unknown): string {
   return String(value ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
-adminLuluStreamServerRoutes.get('/admin/lulustream_servers.php', (c) => {\n  const target = new URL(c.req.url);\n  target.pathname = target.pathname.replace('/admin/lulustream_servers.php', '/admin/self-host.php');\n  return c.redirect(target.toString(), 301);\n});\n\nadminLuluStreamServerRoutes.get('/admin/self-host.php', async (c) => {
+adminLuluStreamServerRoutes.get('/admin/lulustream_servers.php', (c) => {
+  const target = new URL(c.req.url);
+  target.pathname = target.pathname.replace('/admin/lulustream_servers.php', '/admin/self-host.php');
+  return c.redirect(target.toString(), 301);
+});
+
+adminLuluStreamServerRoutes.get('/admin/self-host.php', async (c) => {
   const ctx = await buildAdminCtx(c);
   const siteUrl = c.env.SITE_URL;
   if (!ctx) return c.redirect(siteUrl + '/');
