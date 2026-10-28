@@ -11,7 +11,7 @@ export const vdohideCacheRoutes = new Hono<{ Bindings: Env }>();
 vdohideCacheRoutes.get('/api/vdohide_stream.php', async (c) => {
   const hoshikaId = (c.req.query('hoshikaId') || '').trim();
   const episode = Number(c.req.query('ep') || 0);
-  if (!/^\\d+$/.test(hoshikaId) || !Number.isInteger(episode) || episode < 1) return c.json({ error: 'Missing Hoshika ID or valid episode.' }, 400);
+  if (!/^\d+$/.test(hoshikaId) || !Number.isInteger(episode) || episode < 1) return c.json({ error: 'Missing Hoshika ID or valid episode.' }, 400);
   const row = await c.env.DB.prepare('SELECT embed_url, resolved_json FROM vdohide_stream_cache WHERE hoshika_short_id=? AND episode_num=?').bind(hoshikaId, episode).first<any>();
   if (!row) return c.json({ error: 'No VdoHide source saved for this series/episode.' }, 404);
   if (c.req.query('refresh') !== '1') {
