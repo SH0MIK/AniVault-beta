@@ -55,3 +55,4 @@ invocation_logs = true
 #   wrangler secret put TMDB_API_KEY
 #   wrangler secret put SCRAPER_API_BASE   (base URL of your private scraper backend, no trailing slash)
 #   wrangler secret put SCRAPER_API_KEY    (same random value as Railway ANIVAULT_API_KEY)
+#   Set VDOHIDE_RESOLVER_BASE as a Worker variable to the deployed resolver's base URL (no trailing slash).
