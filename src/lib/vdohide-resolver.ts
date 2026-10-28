@@ -47,7 +47,7 @@ function parseMasterPlaylist(text: string, base: string) {
   let pending: any = null;
   for (const line of lines) {
     if (line.startsWith('#EXT-X-MEDIA:') && /TYPE=AUDIO/i.test(line)) {
-      const attrs = Object.fromEntries([...line.matchAll(/([\w-]+)=("(?:[^"]*)"|[^,]*)/g)].map(m => [m[1], m[2].replace(/^"|"$ /g, '').replace(/^"|"$/g, '')]));
+      const attrs = Object.fromEntries([...line.matchAll(/([\w-]+)=("(?:[^"]*)"|[^,]*)/g)].map(m => [m[1], m[2].replace(/^"|"$/g, '')]));
       audioTracks.push({ name: attrs.NAME || attrs.LANGUAGE || 'Audio', lang: attrs.LANGUAGE || attrs.NAME || 'und', default: attrs.DEFAULT === 'YES', ...(attrs.URI ? { url: safeVdoUrl(attrs.URI, base).href } : {}) });
     } else if (line.startsWith('#EXT-X-STREAM-INF:')) {
       const attrs = Object.fromEntries([...line.matchAll(/([\w-]+)=("(?:[^"]*)"|[^,]*)/g)].map(m => [m[1], m[2].replace(/^"|"$/g, '')]));
