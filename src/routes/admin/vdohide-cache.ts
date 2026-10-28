@@ -4,6 +4,7 @@ import { buildAdminCtx } from '../../lib/admin-ctx';
 import { searchHoshikaAnime, getHoshikaAnimeById } from '../../lib/hoshika-api';
 import { renderAdminHeader, renderAdminFooter } from '../../render/admin-layout';
 import { h } from '../../lib/helpers';
+import { resolveVdoHideEmbed, proxyVdoHideRequest } from '../../lib/vdohide-resolver';
 
 export const vdohideCacheRoutes = new Hono<{ Bindings: Env }>();
 
@@ -20,21 +21,32 @@ async function resolveEmbed(env: Env, embedUrl: string): Promise<any> {
 vdohideCacheRoutes.get('/api/vdohide_stream.php', async (c) => {
   const hoshikaId = (c.req.query('hoshikaId') || '').trim();
   const episode = Number(c.req.query('ep') || 0);
-  if (!hoshikaId || !Number.isInteger(episode) || episode < 1) return c.json({ error: 'Missing Hoshika ID or valid episode.' }, 400);
+  if (!/^\\d+$/.test(hoshikaId) || !Number.isInteger(episode) || episode < 1) return c.json({ error: 'Missing Hoshika ID or valid episode.' }, 400);
   const row = await c.env.DB.prepare('SELECT embed_url, resolved_json FROM vdohide_stream_cache WHERE hoshika_short_id=? AND episode_num=?').bind(hoshikaId, episode).first<any>();
   if (!row) return c.json({ error: 'No VdoHide source saved for this series/episode.' }, 404);
   if (c.req.query('refresh') !== '1') {
-    try { return c.json({ success: true, cached: true, data: JSON.parse(row.resolved_json) }); } catch {}
+    try {
+      const cached = JSON.parse(row.resolved_json || '{}');
+      if (cached?.ok && cached?.masterUrl) return c.json({ success: true, cached: true, data: cached });
+    } catch {}
   }
   try {
-    const data = await resolveEmbed(c.env, String(row.embed_url));
+    const data = await resolveVdoHideEmbed(String(row.embed_url));
     await c.env.DB.prepare("UPDATE vdohide_stream_cache SET resolved_json=?, updated_at=datetime('now') WHERE hoshika_short_id=? AND episode_num=?").bind(JSON.stringify(data), hoshikaId, episode).run();
     return c.json({ success: true, cached: false, refreshed: true, data });
   } catch (e) {
-    // A refresh was explicitly requested because the cached URL failed. Do not
-    // leave a known-bad resolution in place if the fresh resolve also fails.
-    await c.env.DB.prepare('DELETE FROM vdohide_stream_cache WHERE hoshika_short_id=? AND episode_num=?').bind(hoshikaId, episode).run();
-    return c.json({ error: e instanceof Error ? e.message : String(e), cacheCleared: true }, 502);
+    // Keep the original embed permanently. A future playback attempt can resolve it again.
+    return c.json({ error: e instanceof Error ? e.message : String(e), embedPreserved: true }, 502);
+  }
+});
+
+vdohideCacheRoutes.get('/api/vdohide_proxy.php', async (c) => {
+  try {
+    const url = c.req.query('url') || '';
+    const referer = c.req.query('referer') || 'https://fembed.co/';
+    return await proxyVdoHideRequest(url, referer, c.env.SITE_URL);
+  } catch (e) {
+    return c.text('VdoHide proxy error: ' + (e instanceof Error ? e.message : String(e)), 502);
   }
 });
 
@@ -84,11 +96,16 @@ vdohideCacheRoutes.post('/admin/vdohide.php', async (c) => {
   try { parsed = new URL(embedUrl); } catch { return c.json({error:'Enter a valid embed URL.'},400); }
   const host = parsed.hostname.toLowerCase();
   if (parsed.protocol !== 'https:' || !['fembed.co','vdohide.com','vdohls.com'].some(root=>host===root||host.endsWith('.'+root))) return c.json({error:'Use an HTTPS Fembed/VdoHide embed URL.'},400);
+  // Persist the embed FIRST. If upstream resolution fails now, the source is still
+  // saved and can be resolved again on the next playback attempt.
+  await ctx.db.query("INSERT INTO vdohide_stream_cache (hoshika_short_id,episode_num,embed_url,resolved_json,updated_at) VALUES (?,?,?,'{}',datetime('now')) ON CONFLICT(hoshika_short_id,episode_num) DO UPDATE SET embed_url=excluded.embed_url,updated_at=datetime('now')",[hoshikaId,episode,embedUrl]);
   try {
-    const data = await resolveEmbed(c.env, embedUrl);
-    await ctx.db.query("INSERT INTO vdohide_stream_cache (hoshika_short_id,episode_num,embed_url,resolved_json,updated_at) VALUES (?,?,?,?,datetime('now')) ON CONFLICT(hoshika_short_id,episode_num) DO UPDATE SET embed_url=excluded.embed_url,resolved_json=excluded.resolved_json,updated_at=datetime('now')",[hoshikaId,episode,embedUrl,JSON.stringify(data)]);
+    const data = await resolveVdoHideEmbed(embedUrl);
+    await ctx.db.query("UPDATE vdohide_stream_cache SET resolved_json=?,updated_at=datetime('now') WHERE hoshika_short_id=? AND episode_num=?",[JSON.stringify(data),hoshikaId,episode]);
     return c.json({success:true,qualities:data.qualities?.length||0,audioTracks:data.audioTracks?.length||0,subtitles:data.subtitles?.length||0});
-  } catch(e) { return c.json({error:'Could not resolve stream: '+(e instanceof Error?e.message:String(e))},502); }
+  } catch(e) {
+    return c.json({success:true,embedSaved:true,resolved:false,message:'Embed saved; resolving can be retried during playback.',error:e instanceof Error?e.message:String(e)});
+  }
 });
 
 vdohideCacheRoutes.delete('/admin/vdohide.php', async (c) => {
