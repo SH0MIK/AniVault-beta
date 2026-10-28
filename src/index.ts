@@ -62,6 +62,7 @@ import { bugReportRoutes } from './routes/bug-reports';
 import { healthRoutes } from './routes/health';
 import { hoshikaApiRoutes } from './routes/api-hoshika';
 import { hoshikaAnimeRoutes } from './routes/anime-hoshika';
+import { vdohideCacheRoutes } from './routes/admin/vdohide-cache';
 
 export interface Env {
   DB: D1Database;
@@ -150,6 +151,7 @@ app.route('/', adminTurbovidRoutes);
 app.route('/', adminTurbovidServerRoutes);
 app.route('/', adminLuluStreamRoutes);
 app.route('/', adminLuluStreamServerRoutes);
+app.route('/', vdohideCacheRoutes);
 app.route('/', turbovidApiRoutes);
 app.route('/', luluStreamApiRoutes);
 app.route('/', scraperRoutes);

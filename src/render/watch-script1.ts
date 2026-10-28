@@ -854,6 +854,57 @@ function ensureInitialAvPlayback() {
     attempt();
 }
 
+function switchToVdoHide(audio, forceRefresh) {
+    const pw = document.getElementById('watch-player-wrap');
+    if (!pw) return;
+    stopCurrentVideo();
+    clearDynQualityRow();
+    preparePlayerShell();
+    if (window.SenshiPlayer) window.SenshiPlayer.destroy();
+    const spinEl = document.getElementById('sp-spinner');
+    const errEl = document.getElementById('sp-error');
+    if (spinEl) spinEl.classList.remove('hide');
+    if (errEl) errEl.classList.remove('show');
+    const endpoint = SITE_URL + '/api/vdohide_stream.php?hoshikaId=' + encodeURIComponent(HOSHIKA_ID) + '&ep=' + epNum + (forceRefresh ? '&refresh=1' : '');
+    fetch(endpoint).then(r => r.json()).then(d => {
+        if (d.error || !d.data || !d.data.masterUrl) throw new Error(d.error || 'VdoHide did not return a stream.');
+        const data = d.data;
+        const proxy = url => SITE_URL + '/api/vdohide_proxy.php?url=' + encodeURIComponent(url) + '&referer=' + encodeURIComponent(data.embedUrl || 'https://fembed.co/');
+        const master = proxy(data.masterUrl);
+        const subs = (data.subtitles || []).map(t => ({ label: t.label || t.lang || 'Subtitle', lang: t.lang || 'und', default: !!t.default, url: proxy(t.url) }));
+        const vid = document.getElementById('sp-video');
+        let refreshed = !!forceRefresh;
+        let playbackStarted = false;
+        const startTimer = setTimeout(function() { if (!playbackStarted && !refreshed) { refreshed = true; switchToVdoHide(audio, true); } }, 15000);
+        if (vid) {
+            vid.onerror = function() {
+                if (refreshed) return;
+                refreshed = true;
+                switchToVdoHide(audio, true);
+            };
+        }
+        const badge = document.getElementById('sp-hls-badge');
+        if (badge) badge.textContent = 'HLS';
+        if (window.SenshiPlayer && window.SenshiPlayer.loadWithSubs) {
+            window.SenshiPlayer.loadWithSubs(master, subs);
+        } else if (window.SenshiPlayer) {
+            window.SenshiPlayer.load(master);
+        } else if (vid) {
+            vid.src = master;
+            vid.load();
+            vid.play().catch(() => {});
+        } else {
+            throw new Error('Player video element not found.');
+        }
+        if (vid) vid.addEventListener('playing', function() { playbackStarted = true; clearTimeout(startTimer); if (spinEl) spinEl.classList.add('hide'); }, { once: true });
+    }).catch(e => {
+        if (spinEl) spinEl.classList.add('hide');
+        const msg = document.getElementById('sp-err-msg');
+        if (msg) msg.textContent = 'VdoHide: ' + (e.message || 'Resolve failed') + (forceRefresh ? '' : ' — tap Retry to resolve again.');
+        if (errEl) errEl.classList.add('show');
+    });
+}
+
 function switchToServer(serverName, audio = currentAudio, displayKey, luluTrackKey) {
     const pw = document.getElementById('watch-player-wrap');
     if (!pw) return;
@@ -871,6 +922,15 @@ function switchToServer(serverName, audio = currentAudio, displayKey, luluTrackK
     // ── Saved TurboVid sources ───────────────────────────────────────────
     if (serverName.startsWith('turbovid:')) {
         switchToTurboVid(serverName.slice('turbovid:'.length), audio);
+        currentServer = serverName;
+        currentDisplayServer = dKey;
+        currentAudio = audio;
+        updateActiveServerButton(dKey, audio);
+        return;
+    }
+
+    if (serverName === 'vdohide') {
+        switchToVdoHide(audio, false);
         currentServer = serverName;
         currentDisplayServer = dKey;
         currentAudio = audio;
@@ -945,7 +1005,9 @@ window.retryCurrentServer = function() {
 
     if (window._anikotoCache) window._anikotoCache = {};
     if (window._animeheavenReq) window._animeheavenReq = {};
-    if (currentServer && typeof switchToServer === 'function') {
+    if (currentServer === 'vdohide' && typeof switchToVdoHide === 'function') {
+        switchToVdoHide(currentAudio, true);
+    } else if (currentServer && typeof switchToServer === 'function') {
         switchToServer(currentServer, currentAudio, currentDisplayServer);
     } else {
         const activeBtn = document.querySelector('.server-tab-panel.active .server-btn.active') || document.querySelector('.server-btn.active');
