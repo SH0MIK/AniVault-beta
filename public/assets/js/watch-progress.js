@@ -202,9 +202,9 @@ const WatchProgress = (() => {
     _saveTimer = setInterval(save, SAVE_INTERVAL);
 
     // Save on tab close / navigate away
-    window.addEventListener('beforeunload', save);
+    window.addEventListener('beforeunload', () => save(true));
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'hidden') save();
+      if (document.visibilityState === 'hidden') save(true);
     });
 
     // Start polling the player iframe
