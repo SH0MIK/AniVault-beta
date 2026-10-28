@@ -62,6 +62,7 @@ import { bugReportRoutes } from './routes/bug-reports';
 import { healthRoutes } from './routes/health';
 import { hoshikaApiRoutes } from './routes/api-hoshika';
 import { hoshikaAnimeRoutes } from './routes/anime-hoshika';
+import { vdohideCacheRoutes } from './routes/admin/vdohide-cache';
 
 export interface Env {
   DB: D1Database;
@@ -93,6 +94,7 @@ export interface Env {
   HOSHIKA_API_KEY?: string;
   SCRAPER_API_BASE?: string;
   SCRAPER_API_KEY?: string;
+  VDOHIDE_RESOLVER_BASE?: string;
 }
 
 const app = new Hono<{ Bindings: Env }>();
@@ -150,6 +152,7 @@ app.route('/', adminTurbovidRoutes);
 app.route('/', adminTurbovidServerRoutes);
 app.route('/', adminLuluStreamRoutes);
 app.route('/', adminLuluStreamServerRoutes);
+app.route('/', vdohideCacheRoutes);
 app.route('/', turbovidApiRoutes);
 app.route('/', luluStreamApiRoutes);
 app.route('/', scraperRoutes);
