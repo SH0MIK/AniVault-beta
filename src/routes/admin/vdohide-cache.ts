@@ -8,16 +8,6 @@ import { resolveVdoHideEmbed, proxyVdoHideRequest } from '../../lib/vdohide-reso
 
 export const vdohideCacheRoutes = new Hono<{ Bindings: Env }>();
 
-async function resolveEmbed(env: Env, embedUrl: string): Promise<any> {
-  const base = (env.VDOHIDE_RESOLVER_BASE || '').replace(/\/+$/, '');
-  if (!base) throw new Error('VDOHIDE_RESOLVER_BASE is not configured.');
-  const endpoint = base + '/api/resolve?url=' + encodeURIComponent(embedUrl);
-  const response = await fetch(endpoint, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(25000) });
-  const data: any = await response.json().catch(() => null);
-  if (!response.ok || !data?.ok || !data?.masterUrl) throw new Error(data?.error || 'Resolver failed to return a playable HLS master URL.');
-  return data;
-}
-
 vdohideCacheRoutes.get('/api/vdohide_stream.php', async (c) => {
   const hoshikaId = (c.req.query('hoshikaId') || '').trim();
   const episode = Number(c.req.query('ep') || 0);
