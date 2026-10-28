@@ -874,6 +874,8 @@ function switchToVdoHide(audio, forceRefresh) {
         const subs = (data.subtitles || []).map(t => ({ label: t.label || t.lang || 'Subtitle', lang: t.lang || 'und', default: !!t.default, url: proxy(t.url) }));
         const vid = document.getElementById('sp-video');
         let refreshed = !!forceRefresh;
+        let playbackStarted = false;
+        const startTimer = setTimeout(function() { if (!playbackStarted && !refreshed) { refreshed = true; switchToVdoHide(audio, true); } }, 15000);
         if (vid) {
             vid.onerror = function() {
                 if (refreshed) return;
@@ -894,13 +896,7 @@ function switchToVdoHide(audio, forceRefresh) {
         } else {
             throw new Error('Player video element not found.');
         }
-        if (vid) vid.addEventListener('playing', function() { if (spinEl) spinEl.classList.add('hide'); }, { once: true });
-        if (Array.isArray(data.qualities) && data.qualities.length > 1) {
-            renderQualityRow(data.qualities, function(q) {
-                const url = q.url ? proxy(q.url) : null;
-                if (url && window.SenshiPlayer) window.SenshiPlayer.loadWithSubs(url, subs);
-            });
-        }
+        if (vid) vid.addEventListener('playing', function() { playbackStarted = true; clearTimeout(startTimer); if (spinEl) spinEl.classList.add('hide'); }, { once: true });
     }).catch(e => {
         if (spinEl) spinEl.classList.add('hide');
         const msg = document.getElementById('sp-err-msg');
@@ -1009,7 +1005,9 @@ window.retryCurrentServer = function() {
 
     if (window._anikotoCache) window._anikotoCache = {};
     if (window._animeheavenReq) window._animeheavenReq = {};
-    if (currentServer && typeof switchToServer === 'function') {
+    if (currentServer === 'vdohide' && typeof switchToVdoHide === 'function') {
+        switchToVdoHide(currentAudio, true);
+    } else if (currentServer && typeof switchToServer === 'function') {
         switchToServer(currentServer, currentAudio, currentDisplayServer);
     } else {
         const activeBtn = document.querySelector('.server-tab-panel.active .server-btn.active') || document.querySelector('.server-btn.active');
