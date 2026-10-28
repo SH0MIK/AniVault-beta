@@ -277,6 +277,8 @@ watchRoutes.get('/watch', async (c) => {
     ? await db.fetchAll<TurboVidServerRow>(`SELECT id,anime_id,episode_num,audio_group,language,label,embed_url,is_active FROM turbovid_servers WHERE anime_id ${animeLookupSql} AND episode_num=? AND is_active=1 ORDER BY audio_group, language, id`,[...animeLookupIds,epNum])
     : [];
   const lulustreamServers = await db.fetchAll<LuluStreamServerRow>(`SELECT id,anime_id,episode_num,label,embed_url,audio_tracks,is_active FROM lulustream_servers WHERE anime_id ${animeLookupSql} AND episode_num=? AND is_active=1 ORDER BY id`,[...animeLookupIds,epNum]);
+  // Saved VdoHide embeds are keyed by canonical Hoshika ID; expired resolutions can be rebuilt from the stored embed.
+  const vdohideSaved = await c.env.DB.prepare('SELECT embed_url FROM vdohide_stream_cache WHERE hoshika_short_id=? AND episode_num=?').bind(mapped.shortId, epNum).first<{embed_url:string}>().catch(() => null);
 
   const anilistId = 0;
 
@@ -394,7 +396,7 @@ watchRoutes.get('/watch', async (c) => {
   html += renderWatchBody({
     anime, image, coverSm, title, animeId, hoshikaId: mapped.shortId, epNum, totalEps, video, qSub, hasMegaplayFallback,
     isLoggedIn: auth.check(), prevEp, nextEp, currentEpInfo, chars, allEps, allVideos,
-    videoEpNumSet, resumeT, layoutUser, siteUrl, episodesWatched, dubbedLangs, turbovidServers, lulustreamServers,
+    videoEpNumSet, resumeT, layoutUser, siteUrl, episodesWatched, dubbedLangs, turbovidServers, lulustreamServers, vdohideSaved: !!vdohideSaved,
   });
 
   // Senshi player is emitted before the startup scripts so the player DOM
@@ -485,12 +487,13 @@ interface WatchBodyParams {
   dubbedLangs: string[];
   turbovidServers: TurboVidServerRow[];
   lulustreamServers: LuluStreamServerRow[];
+  vdohideSaved: boolean;
 }
 
 export function renderWatchBody(p: WatchBodyParams): string {
   const { anime, image, coverSm, title, animeId, hoshikaId, epNum, totalEps, video, qSub, hasMegaplayFallback,
     isLoggedIn, prevEp, nextEp, currentEpInfo, chars, allEps, allVideos, videoEpNumSet, resumeT, layoutUser, siteUrl,
-    episodesWatched, dubbedLangs, turbovidServers, lulustreamServers } = p;
+    episodesWatched, dubbedLangs, turbovidServers, lulustreamServers, vdohideSaved } = p;
 
   const genres = (anime.genres ?? []).slice(0, 6);
   const score = anime.score;
@@ -501,13 +504,14 @@ export function renderWatchBody(p: WatchBodyParams): string {
   const hasRealVideo = !!video && (qSub.length > 0 || !!video.video_url);
   const hasTurboVid = turbovidServers.length > 0;
   const hasLuluStream = lulustreamServers.length > 0;
+  const hasVdoHide = vdohideSaved;
 
   let playerHtml: string;
   if (hasRealVideo) {
     playerHtml = isLoggedIn
       ? `<div class="wp-player-shell" id="watch-player-wrap">${qSub.length > 0 ? qSub[0].embed : `<iframe id="main-player-iframe" src="${h(video!.video_url ?? '')}" allow="accelerometer;autoplay;clipboard-write;encrypted-media;gyroscope;picture-in-picture;web-share" allowfullscreen loading="lazy"></iframe>`}</div><div class="wp-player-accent-line"></div>`
       : renderSignInGate(image, 'wg-play', 'wg-signin', 'wg-signup');
-  } else if (hasMegaplayFallback || hasTurboVid || hasLuluStream) {
+  } else if (hasMegaplayFallback || hasTurboVid || hasLuluStream || hasVdoHide) {
     // Keep the player shell present whenever a saved TurboVid source exists.
     // The old "Finding the best server" gate could remain visible while the
     // AV source was already playing because watchScript1 ran before the
@@ -519,7 +523,7 @@ export function renderWatchBody(p: WatchBodyParams): string {
     playerHtml = `<div class="wp-no-video"><div class="nv-icon">🎬</div><p>No video available yet.<br>Check back later or explore other episodes.</p><a href="${animePage}" class="btn btn-ghost btn-sm" style="margin-top:.25rem">← Back to Anime</a></div>`;
   }
 
-  const serverControlsHtml = (isLoggedIn && (video || hasMegaplayFallback || hasTurboVid || hasLuluStream)) ? `
+  const serverControlsHtml = (isLoggedIn && (video || hasMegaplayFallback || hasTurboVid || hasLuluStream || hasVdoHide)) ? `
         <div class="wp-controls">
           ${qSub.length > 0 ? `
           <div class="wp-quality-row">
@@ -541,6 +545,7 @@ export function renderWatchBody(p: WatchBodyParams): string {
                   <div class="server-btn-row" id="servers-sub-body">
 ${renderLuluTrackButtons(lulustreamServers, 'sub', siteUrl)}
                     ${renderTurboTrackButtons(turbovidServers, 'sub', siteUrl)}
+                    ${hasVdoHide ? '<button type="button" class="server-btn av-server vdohide-server-btn" data-server="vdohide" title="VdoHide — saved embed with automatic re-resolution"><img class="av-server-logo" src="' + siteUrl + '/assets/img/site-img/icon.png" alt="" aria-hidden="true"><span class="av-server-label" style="margin-left:4px;">VdoHide</span></button>' : ''}
                     ${SUB_PROVIDERS.map(p => fixedServerBtn('sub', p.source, p.provider, p.label)).join('')}
                   </div>
                 </div>
