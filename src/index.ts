@@ -94,7 +94,6 @@ export interface Env {
   HOSHIKA_API_KEY?: string;
   SCRAPER_API_BASE?: string;
   SCRAPER_API_KEY?: string;
-  VDOHIDE_RESOLVER_BASE?: string;
 }
 
 const app = new Hono<{ Bindings: Env }>();
