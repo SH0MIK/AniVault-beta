@@ -31,7 +31,10 @@ vdohideCacheRoutes.get('/api/vdohide_stream.php', async (c) => {
     await c.env.DB.prepare("UPDATE vdohide_stream_cache SET resolved_json=?, updated_at=datetime('now') WHERE hoshika_short_id=? AND episode_num=?").bind(JSON.stringify(data), hoshikaId, episode).run();
     return c.json({ success: true, cached: false, refreshed: true, data });
   } catch (e) {
-    return c.json({ error: e instanceof Error ? e.message : String(e) }, 502);
+    // A refresh was explicitly requested because the cached URL failed. Do not
+    // leave a known-bad resolution in place if the fresh resolve also fails.
+    await c.env.DB.prepare('DELETE FROM vdohide_stream_cache WHERE hoshika_short_id=? AND episode_num=?').bind(hoshikaId, episode).run();
+    return c.json({ error: e instanceof Error ? e.message : String(e), cacheCleared: true }, 502);
   }
 });
 
