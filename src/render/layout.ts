@@ -316,24 +316,56 @@ ${bannerBlock}
   </div>
 </div>
 
-<nav class="navbar">
-  <button class="nav-hamburger" id="nav-hamburger" aria-label="Menu" aria-expanded="false"><span></span><span></span><span></span></button>
-  <a href="${o.siteUrl}/" class="nav-logo">Ani<span>Vault</span></a>
-  <ul class="nav-links">
-    <li><a href="${o.siteUrl}/" class="${active('index')}">${icon('home', 'icon-small')} Home</a></li>
-    <li><a href="${o.siteUrl}/browse" class="${active('browse')}">${icon('search', 'icon-small')} Browse</a></li>
-    <li><a href="${o.siteUrl}/seasonal" class="${active('seasonal')}">${icon('fire', 'icon-small')} Seasonal</a></li>
-    <li><a href="${o.siteUrl}/top" class="${active('top')}">${icon('trophy', 'icon-small')} Top</a></li>
-    <li><a href="${o.siteUrl}/schedule" class="${active('schedule')}">${icon('calendar', 'icon-small')} Schedule</a></li>
-
-  </ul>
-  <form id="nav-search-form" class="nav-search">
-    <input type="text" placeholder="Search anime..." name="q" autocomplete="off">
-    <button type="submit">${icon('search', 'icon-small')}</button>
+<aside class="av-sidebar" id="av-sidebar" aria-label="Main navigation">
+  <div class="av-sidebar-brand">
+    <a href="${o.siteUrl}/" class="av-brand-link" aria-label="AniVault home">
+      <img src="${o.siteUrl}/assets/img/site-img/favicon.svg" alt="" width="30" height="30">
+      <span class="av-brand-word">Ani<span>Vault</span></span>
+    </a>
+    <button type="button" class="av-sidebar-toggle" id="av-sidebar-toggle" aria-label="Collapse sidebar" title="Collapse sidebar">${icon('chevron-left','icon-medium')}</button>
+  </div>
+  <nav class="av-side-nav">
+    <span class="av-nav-label">DISCOVER</span>
+    <a href="${o.siteUrl}/" class="av-side-link ${active('index')}" title="Home">${icon('home','icon-medium')}<span>Home</span></a>
+    <a href="${o.siteUrl}/browse" class="av-side-link ${active('browse')}" title="Browse">${icon('search','icon-medium')}<span>Browse</span></a>
+    <a href="${o.siteUrl}/seasonal" class="av-side-link ${active('seasonal')}" title="Seasonal">${icon('fire','icon-medium')}<span>Seasonal</span></a>
+    <a href="${o.siteUrl}/top" class="av-side-link ${active('top')}" title="Top Anime">${icon('trophy','icon-medium')}<span>Top Anime</span></a>
+    <a href="${o.siteUrl}/schedule" class="av-side-link ${active('schedule')}" title="Schedule">${icon('calendar','icon-medium')}<span>Schedule</span></a>
+    <div class="av-nav-divider"></div>
+    <span class="av-nav-label">YOUR VAULT</span>
+    ${cu ? `
+    <a href="${o.siteUrl}/mylist" class="av-side-link ${active('mylist')}" title="My List">${icon('list','icon-medium')}<span>My List</span></a>
+    <a href="${o.siteUrl}/favorites" class="av-side-link ${active('favorites')}" title="Favorites">${icon('heart','icon-medium')}<span>Favorites</span></a>
+    <a href="${o.siteUrl}/points" class="av-side-link ${active('points')}" title="Points Store">${icon('sparkles','icon-medium')}<span>Points Store</span></a>
+    <a href="${o.siteUrl}/u/${h(cu.username)}" class="av-side-link" title="My Profile">${icon('user','icon-medium')}<span>My Profile</span></a>
+    ` : `
+    <button type="button" class="av-side-link av-side-action" onclick="requireLogin('login')">${icon('login','icon-medium')}<span>Sign in to your Vault</span></button>
+    `}
+    <div class="av-nav-spacer"></div>
+    <div class="av-nav-divider"></div>
+    <a href="${o.siteUrl}/announcements" class="av-side-link ${active('announcements')}" title="Announcements">${icon('megaphone','icon-medium')}<span>Announcements</span></a>
+    <a href="https://discord.gg/QK2dAVgK2a" class="av-side-link" target="_blank" rel="noopener" title="Discord">${icon('discord','icon-medium')}<span>Discord</span><span class="av-side-badge">JOIN</span></a>
+    <a href="${o.siteUrl}/profile" class="av-side-link ${active('profile')}" title="Settings">${icon('settings','icon-medium')}<span>Settings</span></a>
+    ${cu && (cu.role === 'admin' || cu.role === 'owner') ? `<a href="${o.siteUrl}/admin/index.php" class="av-side-link ${active('admin')}" title="Admin Panel">${icon('shield','icon-medium')}<span>Admin Panel</span></a>` : ''}
+  </nav>
+  <div class="av-sidebar-bottom">
+    <button type="button" class="av-side-link av-collapse-bottom" id="av-sidebar-collapse">${icon('panel-left-close','icon-medium')}<span>Collapse sidebar</span></button>
+  </div>
+</aside>
+<div class="av-sidebar-scrim" id="av-sidebar-scrim"></div>
+<header class="av-topbar">
+  <button type="button" class="av-mobile-menu-btn" id="av-mobile-menu-btn" aria-label="Open navigation" aria-expanded="false">${icon('menu','icon-medium')}</button>
+  <form id="nav-search-form" class="nav-search av-top-search">
+    <span class="av-search-leading">${icon('search','icon-small')}</span>
+    <input type="text" placeholder="Search anime..." name="q" autocomplete="off" aria-label="Search anime">
+    <kbd>Ctrl K</kbd>
+    <button type="submit" aria-label="Search">${icon('arrow-right','icon-small')}</button>
   </form>
-  <button class="nav-search-icon" id="nav-search-icon" aria-label="Search">${icon('search', 'icon-small')}</button>
-  <div class="nav-user">${userNavBlock}</div>
-</nav>
+  <div class="av-top-actions">
+    <button type="button" class="av-top-icon av-mobile-search-btn" id="nav-search-icon" aria-label="Search">${icon('search','icon-medium')}</button>
+    <div class="nav-user">${userNavBlock}</div>
+  </div>
+</header>
 
 <script>
 window.__loggedIn = ${cu ? 'true' : 'false'};
