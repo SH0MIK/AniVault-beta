@@ -16,6 +16,15 @@ import type { Env } from '../index';
 export const legacyRedirectRoutes = new Hono<{ Bindings: Env }>();
 
 // simple 1:1 page renames
+// Keep old bookmarks working after the profile page becomes /settings.
+legacyRedirectRoutes.get('/profile', (c) => {
+  const siteUrl = c.env.SITE_URL;
+  const qs = c.req.query();
+  const search = Object.keys(qs).length ? '?' + new URLSearchParams(qs).toString() : '';
+  return c.redirect(`${siteUrl}/settings${search}`, 301);
+});
+legacyRedirectRoutes.post('/profile', (c) => c.redirect(`${c.env.SITE_URL}/settings`, 307));
+
 const SIMPLE_MAP: Record<string, string> = {
   '/pages/anime.php': '/anime',
   '/pages/character.php': '/character',
@@ -31,7 +40,7 @@ const SIMPLE_MAP: Record<string, string> = {
   '/pages/mylist.php': '/mylist',
   '/pages/notifications.php': '/notifications',
   '/pages/announcements.php': '/announcements',
-  '/pages/profile.php': '/profile',
+  '/pages/profile.php': '/settings',
   '/pages/importexport.php': '/importexport',
   '/pages/privacy.php': '/privacy',
   '/pages/terms.php': '/terms',
@@ -81,7 +90,7 @@ const BARE_MAP: Record<string, string> = {
   '/mylist.php': '/mylist',
   '/notifications.php': '/notifications',
   '/announcements.php': '/announcements',
-  '/profile.php': '/profile',
+  '/profile.php': '/settings',
   '/importexport.php': '/importexport',
   '/privacy.php': '/privacy',
   '/terms.php': '/terms',
