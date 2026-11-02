@@ -114,7 +114,7 @@ ${og.type === 'video.episode' ? `
     </div>
     <div class="dropdown">
       <div class="nav-avatar" title="${h(cu.username)}">
-        ${cu.avatar_url ? `<img src="${h(cu.avatar_url)}" alt="avatar">` : icon('user', 'icon-medium')}
+        ${cu.avatar_url ? `<img src="${h(cu.avatar_url)}" alt="avatar">` : icon('settings', 'icon-medium')}
       </div>
       <div class="dropdown-menu">
         <a href="${o.siteUrl}/u/${h(cu.username)}">${icon('user', 'icon-small')} My Profile</a>
