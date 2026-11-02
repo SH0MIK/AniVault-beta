@@ -345,7 +345,7 @@ ${bannerBlock}
     <div class="av-nav-divider"></div>
     <a href="${o.siteUrl}/announcements" class="av-side-link ${active('announcements')}" title="Announcements">${icon('megaphone','icon-medium')}<span>Announcements</span></a>
     <a href="https://discord.gg/QK2dAVgK2a" class="av-side-link" target="_blank" rel="noopener" title="Discord">${icon('discord','icon-medium')}<span>Discord</span><span class="av-side-badge">JOIN</span></a>
-    <a href="${o.siteUrl}/profile" class="av-side-link ${active('profile')}" title="Settings">${icon('settings','icon-medium')}<span>Settings</span></a>
+    <a href="${o.siteUrl}/profile" class="av-side-link ${active('profile')}" title="Edit Profile">${icon('user','icon-medium')}<span>Edit Profile</span></a>
     ${cu && (cu.role === 'admin' || cu.role === 'owner') ? `<a href="${o.siteUrl}/admin/index.php" class="av-side-link ${active('admin')}" title="Admin Panel">${icon('shield','icon-medium')}<span>Admin Panel</span></a>` : ''}
   </nav>
   <div class="av-sidebar-bottom">
