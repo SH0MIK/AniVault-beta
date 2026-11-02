@@ -92,6 +92,13 @@ export const PROFILE_CSS = `
 .social-input-static { flex: 1; font-size: .85rem; color: var(--text-secondary); background: rgba(255,255,255,.03); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 9px 12px; display: flex; align-items: center; gap: 6px; }
 .social-input-static svg.icon { color: var(--accent); }
 
+.av-settings-banner-row{align-items:flex-start;gap:18px}
+.av-settings-banner-row .settings-row-label{flex:1;min-width:0}
+.av-settings-banner-preview{width:min(100%,420px);height:104px;margin-top:12px;border:1px solid var(--border);border-radius:9px;background-color:rgba(255,255,255,.035);background-position:center;background-size:cover}
+.av-settings-banner-preview.is-empty{display:flex;align-items:center;justify-content:center}
+.av-settings-banner-preview.is-empty:after{content:'No banner uploaded';color:var(--text-muted);font-size:.76rem}
+.av-settings-banner-actions{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+@media(max-width:540px){.av-settings-banner-row{flex-direction:column;align-items:stretch}.av-settings-banner-actions{justify-content:flex-start}}
 /* Settings page refresh */
 .av-settings-page{max-width:1180px;padding-top:34px;padding-bottom:64px}
 .av-settings-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;margin:0 0 24px}
