@@ -2829,7 +2829,6 @@ body.av-sidebar-collapsed .av-collapse-bottom .icon { transform:rotate(180deg); 
   .av-top-search { width:min(430px,calc(100vw - 190px)); margin:0 auto; }
   .av-top-actions { position:static; margin-left:auto; }
   .page-content,.footer { margin-left:0; width:100%; }
-  body.av-sidebar-collapsed { --av-sidebar-width:0px; }
 }
 @media (max-width: 560px) {
   .av-topbar { height:58px; gap:9px; padding:0 11px; }
