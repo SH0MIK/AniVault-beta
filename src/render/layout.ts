@@ -349,7 +349,7 @@ ${bannerBlock}
     ${cu && (cu.role === 'admin' || cu.role === 'owner') ? `<a href="${o.siteUrl}/admin/index.php" class="av-side-link ${active('admin')}" title="Admin Panel">${icon('shield','icon-medium')}<span>Admin Panel</span></a>` : ''}
   </nav>
   <div class="av-sidebar-bottom">
-    <button type="button" class="av-side-link av-collapse-bottom" id="av-sidebar-collapse">${icon('panel-left-close','icon-medium')}<span>Collapse sidebar</span></button>
+    <button type="button" class="av-side-link av-collapse-bottom" id="av-sidebar-collapse">${icon('chevron-left','icon-medium')}<span>Collapse sidebar</span></button>
   </div>
 </aside>
 <div class="av-sidebar-scrim" id="av-sidebar-scrim"></div>
@@ -372,32 +372,6 @@ window.__loggedIn = ${cu ? 'true' : 'false'};
 window.__siteUrl  = '${o.siteUrl}';
 window.__currentPage = '${o.currentPage}';
 </script>
-
-<div class="mobile-menu" id="mobile-menu">
-  <form class="mobile-search" id="mobile-search-form">
-    <input type="text" placeholder="Search anime..." name="q" autocomplete="off">
-    <button type="submit">${icon('search', 'icon-small')}</button>
-  </form>
-  <a href="${o.siteUrl}/" class="${active('index')}">${icon('home', 'icon-small')} Home</a>
-  <a href="${o.siteUrl}/browse" class="${active('browse')}">${icon('search', 'icon-small')} Browse</a>
-  <a href="${o.siteUrl}/seasonal" class="${active('seasonal')}">${icon('fire', 'icon-small')} Seasonal</a>
-  <a href="${o.siteUrl}/top" class="${active('top')}">${icon('trophy', 'icon-small')} Top Anime</a>
-  <a href="${o.siteUrl}/schedule" class="${active('schedule')}">${icon('calendar', 'icon-small')} Schedule</a>
-  ${cu ? `
-  <a href="${o.siteUrl}/mylist" class="${active('mylist')}">${icon('list', 'icon-small')} My List</a>
-  <a href="${o.siteUrl}/points" class="${active('points')}"><span aria-hidden="true" style="display:inline-block;width:1.1em;text-align:center">✦</span> Points Store</a>
-  <div class="mobile-menu-divider"></div>
-  <a href="${o.siteUrl}/u/${h(cu.username)}">${icon('user', 'icon-small')} My Profile</a>
-  <a href="${o.siteUrl}/profile">${icon('edit', 'icon-small')} Edit Profile</a>
-  <a href="${o.siteUrl}/favorites">${icon('heart', 'icon-small')} Favorites</a>
-  <a href="${o.siteUrl}/importexport">${icon('box', 'icon-small')} Import / Export</a>
-  ${(cu.role === 'admin' || cu.role === 'owner') ? `<div class="mobile-menu-divider"></div><a href="${o.siteUrl}/admin/index.php">${icon('shield', 'icon-small')} Admin Panel</a>` : ''}
-  <div class="mobile-menu-divider"></div>
-  <a href="${o.siteUrl}/logout">${icon('logout', 'icon-small')} Logout</a>` : `
-  <div class="mobile-menu-divider"></div>
-  <button onclick="requireLogin('login');document.getElementById('mobile-menu').classList.remove('open');" class="btn btn-ghost" style="text-align:left;justify-content:flex-start;gap:0.5rem;width:100%;border-radius:0;padding:0.9rem 1.25rem;">${icon('login', 'icon-small')} Login</button>
-  <button onclick="requireLogin('signup');document.getElementById('mobile-menu').classList.remove('open');" class="btn btn-primary" style="text-align:left;justify-content:flex-start;gap:0.5rem;width:100%;border-radius:0;padding:0.9rem 1.25rem;">${icon('plus', 'icon-small')} Sign Up</button>`}
-</div>
 
 <div class="search-popup-overlay" id="search-popup-overlay">
   <div class="search-popup" id="search-popup">
