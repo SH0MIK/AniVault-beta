@@ -274,7 +274,7 @@ async function renderProfilePage(c: any, db: Db, session: Session, lifetime: num
       </div><span class="av-settings-avatar-edit">${icon('camera','icon-small')}</span>
     </div>
     <input type="file" id="avatar-file-input" accept="image/jpeg,image/png,image/gif,image/webp" style="display:none" onchange="handleAvatarFile(this)">
-    <div class="av-settings-identity-copy"><strong>${h(user.username)}${Badge.renderList(userBadges)}</strong><span>${isPlaceholderEmail ? 'Add an email address to secure your account' : h(user.email)}</span><small>Member since ${memberSince}</small><div id="avatar-status" class="av-settings-status"></div></div>
+    <div class="av-settings-identity-copy"><strong>${h(user.username)}${Badge.renderList(userBadges)}</strong><span id="profile-username-display" hidden>${h(user.username)}</span><span id="profile-email-display" hidden>${isPlaceholderEmail ? "" : h(user.email)}</span><span>${isPlaceholderEmail ? 'Add an email address to secure your account' : h(user.email)}</span><small>Member since ${memberSince}</small><div id="avatar-status" class="av-settings-status"></div></div>
     <div class="av-settings-identity-actions">
       <button type="button" class="btn btn-ghost btn-sm" onclick="openUsernameModal()">${icon('edit','icon-small')} Edit username</button>
       <button type="button" class="btn btn-ghost btn-sm" onclick="openEmailModal()">${icon('mail','icon-small')} ${isPlaceholderEmail ? 'Add email' : 'Change email'}</button>
