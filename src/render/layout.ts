@@ -118,7 +118,7 @@ ${og.type === 'video.episode' ? `
       </div>
       <div class="dropdown-menu">
         <a href="${o.siteUrl}/u/${h(cu.username)}">${icon('user', 'icon-small')} My Profile</a>
-        <a href="${o.siteUrl}/profile">${icon('edit', 'icon-small')} Edit Profile</a>
+        <a href="${o.siteUrl}/settings">${icon('edit', 'icon-small')} Settings</a>
         <a href="${o.siteUrl}/mylist">${icon('list', 'icon-small')} My List</a>
         <a href="${o.siteUrl}/points"><span aria-hidden="true" style="display:inline-block;width:1.1em;text-align:center">✦</span> Points Store</a>
         <a href="${o.siteUrl}/announcements">${icon('megaphone', 'icon-small')} Announcements</a>
@@ -345,7 +345,7 @@ ${bannerBlock}
     <div class="av-nav-divider"></div>
     <a href="${o.siteUrl}/announcements" class="av-side-link ${active('announcements')}" title="Announcements">${icon('megaphone','icon-medium')}<span>Announcements</span></a>
     <a href="https://discord.gg/QK2dAVgK2a" class="av-side-link" target="_blank" rel="noopener" title="Discord">${icon('discord','icon-medium')}<span>Discord</span><span class="av-side-badge">JOIN</span></a>
-    <a href="${o.siteUrl}/profile" class="av-side-link ${active('profile')}" title="Settings">${icon('settings-gear','icon-medium')}<span>Settings</span></a>
+    <a href="${o.siteUrl}/settings" class="av-side-link ${active('settings')}" title="Settings">${icon('settings-gear','icon-medium')}<span>Settings</span></a>
     ${cu && (cu.role === 'admin' || cu.role === 'owner') ? `<a href="${o.siteUrl}/admin/index.php" class="av-side-link ${active('admin')}" title="Admin Panel">${icon('shield','icon-medium')}<span>Admin Panel</span></a>` : ''}
   </nav>
   <div class="av-sidebar-bottom">
@@ -527,7 +527,7 @@ export function renderFooter(o: { siteUrl: string; currentUser: CurrentUser | nu
         ${cu ? `
         <li><a href="${o.siteUrl}/mylist">${icon('list', 'icon-inline')} My List</a></li>
         <li><a href="${o.siteUrl}/favorites">${icon('heart', 'icon-inline')} Favorites</a></li>
-        <li><a href="${o.siteUrl}/profile">${icon('settings-gear', 'icon-inline')} Settings</a></li>
+        <li><a href="${o.siteUrl}/settings">${icon('settings-gear', 'icon-inline')} Settings</a></li>
         <li><a href="${o.siteUrl}/importexport">${icon('box', 'icon-inline')} Import / Export</a></li>` : `
         <li><a href="#" onclick="requireLogin('login');return false;">${icon('login', 'icon-inline')} Login</a></li>
         <li><a href="${o.siteUrl}/register">${icon('plus', 'icon-inline')} Sign Up</a></li>`}
