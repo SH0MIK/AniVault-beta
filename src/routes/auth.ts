@@ -107,7 +107,7 @@ authRoutes.get('/pages/oauth_google.php', async (c) => {
 
   const isConnecting = auth.check();
   const redirect = isConnecting
-    ? `${siteUrl}/profile`
+    ? `${siteUrl}/settings`
     : (session.data.oauth_redirect as string) ?? `${siteUrl}/`;
   const result = await auth.loginWithGoogle(code, state);
 
@@ -125,7 +125,7 @@ authRoutes.get('/pages/oauth_google.php', async (c) => {
     session.setFlash('error', result.message ?? 'Google login failed.');
   }
   await session.save(c, lifetime);
-  return c.redirect(isConnecting ? `${siteUrl}/profile` : `${siteUrl}/login`);
+  return c.redirect(isConnecting ? `${siteUrl}/settings` : `${siteUrl}/login`);
 });
 
 // ── pages/oauth_discord.php — Discord redirects back here ────────────────
@@ -145,7 +145,7 @@ authRoutes.get('/pages/oauth_discord.php', async (c) => {
 
   const isConnecting = auth.check();
   const redirect = isConnecting
-    ? `${siteUrl}/profile`
+    ? `${siteUrl}/settings`
     : (session.data.oauth_redirect as string) ?? `${siteUrl}/`;
   const result = await auth.loginWithDiscord(code, state);
 
@@ -163,7 +163,7 @@ authRoutes.get('/pages/oauth_discord.php', async (c) => {
     session.setFlash('error', result.message ?? 'Discord login failed.');
   }
   await session.save(c, lifetime);
-  return c.redirect(isConnecting ? `${siteUrl}/profile` : `${siteUrl}/login`);
+  return c.redirect(isConnecting ? `${siteUrl}/settings` : `${siteUrl}/login`);
 });
 
 // ── MAL/AniList list-sync connect callbacks ──────────────────────────────
@@ -178,7 +178,7 @@ authRoutes.get('/pages/oauth_mal_sync.php', async (c) => {
   if (error || !code) {
     session.setFlash('error', 'MyAnimeList connection was cancelled.');
     await session.save(c, lifetime);
-    return c.redirect(`${siteUrl}/profile?tab=connections`);
+    return c.redirect(`${siteUrl}/settings?tab=connections`);
   }
   const { MalSync } = await import('../lib/list-sync');
   const result = await MalSync.handleCallback(c.env as any, db, session, session.user_id!, code, state);
@@ -187,7 +187,7 @@ authRoutes.get('/pages/oauth_mal_sync.php', async (c) => {
     session.setFlash('success', pull.added ? `${result.message} Imported ${pull.added} new anime from your MAL list.` : result.message);
   } else session.setFlash('error', result.message);
   await session.save(c, lifetime);
-  return c.redirect(`${siteUrl}/profile?tab=connections`);
+  return c.redirect(`${siteUrl}/settings?tab=connections`);
 });
 
 authRoutes.get('/pages/oauth_anilist_sync.php', async (c) => {
@@ -200,13 +200,13 @@ authRoutes.get('/pages/oauth_anilist_sync.php', async (c) => {
   if (error || !code) {
     session.setFlash('error', 'AniList connection was cancelled.');
     await session.save(c, lifetime);
-    return c.redirect(`${siteUrl}/profile?tab=connections`);
+    return c.redirect(`${siteUrl}/settings?tab=connections`);
   }
   const { AniListSync } = await import('../lib/list-sync');
   const result = await AniListSync.handleCallback(c.env as any, db, session, session.user_id!, code);
   session.setFlash(result.success ? 'success' : 'error', result.message);
   await session.save(c, lifetime);
-  return c.redirect(`${siteUrl}/profile?tab=connections`);
+  return c.redirect(`${siteUrl}/settings?tab=connections`);
 });
 
 authRoutes.get('/logout', async (c) => {
