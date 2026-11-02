@@ -1516,6 +1516,45 @@ function initMobileMenu() {
   });
 }
 
+// ── AniVault collapsible sidebar ─────────────────────────────
+function initAniVaultSidebar() {
+  const toggle = document.getElementById('av-sidebar-toggle');
+  const bottomToggle = document.getElementById('av-sidebar-collapse');
+  const mobileToggle = document.getElementById('av-mobile-menu-btn');
+  const scrim = document.getElementById('av-sidebar-scrim');
+  const sidebar = document.getElementById('av-sidebar');
+  if (!sidebar) return;
+
+  const setCollapsed = collapsed => {
+    document.body.classList.toggle('av-sidebar-collapsed', collapsed);
+    try { localStorage.setItem('av-sidebar-collapsed', collapsed ? '1' : '0'); } catch (_) {}
+  };
+  try { setCollapsed(localStorage.getItem('av-sidebar-collapsed') === '1'); } catch (_) {}
+
+  const closeMobile = () => {
+    document.body.classList.remove('av-mobile-sidebar-open');
+    if (mobileToggle) mobileToggle.setAttribute('aria-expanded', 'false');
+  };
+  const openMobile = () => {
+    document.body.classList.add('av-mobile-sidebar-open');
+    if (mobileToggle) mobileToggle.setAttribute('aria-expanded', 'true');
+  };
+  [toggle, bottomToggle].forEach(button => button && button.addEventListener('click', () => {
+    setCollapsed(!document.body.classList.contains('av-sidebar-collapsed'));
+  }));
+  mobileToggle?.addEventListener('click', () => {
+    document.body.classList.contains('av-mobile-sidebar-open') ? closeMobile() : openMobile();
+  });
+  scrim?.addEventListener('click', closeMobile);
+  sidebar.querySelectorAll('a').forEach(link => link.addEventListener('click', closeMobile));
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape') closeMobile();
+  });
+  window.addEventListener('resize', () => {
+    if (window.innerWidth > 900) closeMobile();
+  });
+}
+
 // Admin sidebar toggle
 function initAdminSidebar() {
   const toggle = document.querySelector('.admin-sidebar-toggle');
@@ -1571,6 +1610,7 @@ function initMobileSearchPopup() {
 
 document.addEventListener('DOMContentLoaded', () => {
   initMobileMenu();
+  initAniVaultSidebar();
   initMobileSearchPopup();
   initAdminSidebar();
 });
