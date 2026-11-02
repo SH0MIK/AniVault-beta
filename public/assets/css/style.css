@@ -2839,3 +2839,17 @@ body.av-sidebar-collapsed .av-collapse-bottom .icon { transform:rotate(180deg); 
   .av-top-actions .notif-bell { width:35px; height:35px; }
   .av-top-actions .nav-avatar { width:35px; height:35px; }
 }
+
+@media (max-width: 900px) {
+  body.av-sidebar-collapsed .av-brand-word,
+  body.av-sidebar-collapsed .av-sidebar-toggle,
+  body.av-sidebar-collapsed .av-nav-label,
+  body.av-sidebar-collapsed .av-side-link span,
+  body.av-sidebar-collapsed .av-nav-divider { display:initial; }
+  body.av-sidebar-collapsed .av-sidebar-brand { justify-content:space-between; padding-left:5px; padding-right:5px; }
+  body.av-sidebar-collapsed .av-brand-link { justify-content:flex-start; }
+  body.av-sidebar-collapsed .av-side-nav { align-items:stretch; }
+  body.av-sidebar-collapsed .av-side-link { justify-content:flex-start; width:100%; padding:0 11px; }
+  body.av-sidebar-collapsed .av-collapse-bottom { font-size:.9rem; }
+  body.av-sidebar-collapsed .av-collapse-bottom .icon { transform:none; }
+}
