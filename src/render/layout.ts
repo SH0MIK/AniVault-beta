@@ -527,7 +527,7 @@ export function renderFooter(o: { siteUrl: string; currentUser: CurrentUser | nu
         ${cu ? `
         <li><a href="${o.siteUrl}/mylist">${icon('list', 'icon-inline')} My List</a></li>
         <li><a href="${o.siteUrl}/favorites">${icon('heart', 'icon-inline')} Favorites</a></li>
-        <li><a href="${o.siteUrl}/profile">${icon('edit', 'icon-inline')} Edit Profile</a></li>
+        <li><a href="${o.siteUrl}/profile">${icon('settings-gear', 'icon-inline')} Settings</a></li>
         <li><a href="${o.siteUrl}/importexport">${icon('box', 'icon-inline')} Import / Export</a></li>` : `
         <li><a href="#" onclick="requireLogin('login');return false;">${icon('login', 'icon-inline')} Login</a></li>
         <li><a href="${o.siteUrl}/register">${icon('plus', 'icon-inline')} Sign Up</a></li>`}
