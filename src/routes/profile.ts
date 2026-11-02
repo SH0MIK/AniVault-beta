@@ -236,7 +236,7 @@ async function renderProfilePage(c: any, db: Db, session: Session, lifetime: num
   const bannerZoom = Math.max(1, Math.min(2, Number(bannerSettings?.banner_zoom ?? 1)));
   const bannerSize = bannerZoom <= 1.001 ? 'cover' : `${Math.round(bannerZoom * 100)}% auto`;
   const __banner = await getBannerData(db);
-  let html = renderHeader({ ...__banner, siteUrl, siteName: c.env.SITE_NAME, pageTitle: 'My Profile', currentPage: 'profile', currentUser: layoutUser, unreadCount, requestUrl: c.req.url });  html += `<style>${PROFILE_CSS}</style>`;
+  let html = renderHeader({ ...__banner, siteUrl, siteName: c.env.SITE_NAME, pageTitle: 'Settings', currentPage: 'profile', currentUser: layoutUser, unreadCount, requestUrl: c.req.url });  html += `<style>${PROFILE_CSS}</style>`;
 
   const quickStats: [string, string | number, string, string][] = [
     ['Total', stats.total, 'text-primary', 'list'],
@@ -262,76 +262,37 @@ async function renderProfilePage(c: any, db: Db, session: Session, lifetime: num
   const socialLinks = buildSocialLinks(user);
 
   html += `
-<div class="u-hero">
-  <div class="u-banner${user.banner_url ? '' : ' u-banner-fallback'}"${user.banner_url ? ` style="background-image:url('${h(user.banner_url)}');background-position:${bannerX}% ${bannerY}%;background-size:${bannerSize};"` : ''} id="profile-banner-el"></div>
-  <button type="button" class="u-banner-edit-btn" onclick="document.getElementById('banner-file-input').click()">${icon('camera', 'icon-small')} ${user.banner_url ? 'Change Banner' : 'Add Banner'}</button>
-  ${user.banner_url ? `<button type="button" class="u-banner-adjust-btn" onclick="openBannerAdjustModal()">${icon('sliders-horizontal', 'icon-small')} Adjust</button>` : ''}
-  ${user.banner_url ? `<button type="button" class="u-banner-remove-btn" onclick="removeBanner()" title="Remove banner">${icon('trash', 'icon-small')}</button>` : ''}
-  <input type="file" id="banner-file-input" accept="image/jpeg,image/png,image/gif,image/webp" style="display:none" onchange="handleProfileBannerFile(this)">
-  <div id="banner-status" class="u-banner-status"></div>
-</div>
-
-<div class="container section" style="padding-top:0;">
-  <div class="u-header">
-    <div class="u-avatar-wrap profile-avatar-wrap" onclick="document.getElementById('avatar-file-input').click()" title="Click to change avatar">
+<div class="container section av-settings-page">
+  <header class="av-settings-heading">
+    <div><div class="av-settings-eyebrow">\${icon('settings-gear','icon-small')} ACCOUNT PREFERENCES</div><h1>Settings</h1><p>Manage your account, connections and privacy in one place.</p></div>
+    <a class="av-settings-public-link" href="\${siteUrl}/u/\${h(user.username)}" target="_blank" rel="noopener">\${icon('user','icon-small')} View public profile \${icon('arrow-right','icon-small')}</a>
+  </header>
+  <section class="av-settings-identity">
+    <div class="av-settings-avatar profile-avatar-wrap" onclick="document.getElementById('avatar-file-input').click()" title="Change profile picture">
       <div class="nav-avatar u-avatar" id="sidebar-avatar-wrap">
-        ${user.avatar_url
-          ? `<img src="${h(user.avatar_url)}" id="sidebar-avatar-img" alt="avatar" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`
-          : `<span id="sidebar-avatar-initials">${h(user.username.charAt(0).toUpperCase())}</span><img id="sidebar-avatar-img" src="" alt="" style="display:none;width:100%;height:100%;object-fit:cover;border-radius:50%;">`}
-      </div>
-      <div class="profile-avatar-edit-overlay">${icon('camera', 'icon-small')}<br>Change</div>
-      ${isOwner ? `<span class="u-role-badge">OWNER</span>` : user.role === 'admin' ? `<span class="u-role-badge">ADMIN</span>` : ''}
+        \${user.avatar_url ? \`<img src="\${h(user.avatar_url)}" id="sidebar-avatar-img" alt="avatar" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">\` : \`<span id="sidebar-avatar-initials">\${h(user.username.charAt(0).toUpperCase())}</span><img id="sidebar-avatar-img" src="" alt="" style="display:none;width:100%;height:100%;object-fit:cover;border-radius:50%;">\`}
+      </div><span class="av-settings-avatar-edit">\${icon('camera','icon-small')}</span>
     </div>
     <input type="file" id="avatar-file-input" accept="image/jpeg,image/png,image/gif,image/webp" style="display:none" onchange="handleAvatarFile(this)">
-
-    <div class="u-name-block">
-      <h1 class="u-username">
-        <span id="profile-username-display">${h(user.username)}</span>${Badge.renderList(userBadges)}
-        <button type="button" onclick="openUsernameModal()" title="Edit username">${icon('edit', 'icon-small')}</button>
-        ${user.pronouns ? `<span class="u-pronouns">${h(user.pronouns)}</span>` : ''}
-      </h1>
-      <!-- Tagline disabled for now — flip ENABLE_TAGLINE below to bring it back. -->
-      ${ENABLE_TAGLINE && user.tagline
-        ? `<p class="u-tagline">${h(user.tagline)}</p>`
-        : ENABLE_TAGLINE ? `<p class="u-tagline u-tagline-empty"><a href="javascript:void(0)" onclick="showProfileTab('account')">${icon('plus', 'icon-small')} Add a tagline</a></p>` : ''}
-      <p class="u-joined text-muted">Member since ${memberSince}</p>
+    <div class="av-settings-identity-copy"><strong>\${h(user.username)}\${Badge.renderList(userBadges)}</strong><span>\${isPlaceholderEmail ? 'Add an email address to secure your account' : h(user.email)}</span><small>Member since \${memberSince}</small><div id="avatar-status" class="av-settings-status"></div></div>
+    <div class="av-settings-identity-actions">
+      <button type="button" class="btn btn-ghost btn-sm" onclick="openUsernameModal()">\${icon('edit','icon-small')} Edit username</button>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="openEmailModal()">\${icon('mail','icon-small')} \${isPlaceholderEmail ? 'Add email' : 'Change email'}</button>
     </div>
-  </div>
-
-  <div class="u-header-meta">
-    <p class="profile-hero-email" id="profile-email-display">
-      ${isPlaceholderEmail
-        ? `<a href="javascript:void(0)" onclick="openEmailModal()" style="color:var(--accent-2);text-decoration:underline;">${icon('plus', 'icon-small')} Add email</a>`
-        : `${h(user.email)} <button type="button" onclick="openEmailModal()" title="Edit email" style="background:none;border:none;cursor:pointer;color:rgba(255,255,255,.6);padding:0;vertical-align:middle;">${icon('edit', 'icon-small')}</button>`}
-    </p>
-    ${socialLinks.length ? `
-    <div class="u-social-links">
-      ${socialLinks.map(([ic, url, label]) => `<a href="${h(url)}" target="_blank" rel="noopener noreferrer nofollow" class="u-social-link" style="--platform-color:${platformColor(ic)}" title="${h(label)}">${icon(ic, 'icon-small')}<span>${h(label)}</span></a>`).join('')}
-    </div>` : ''}
-    <div id="avatar-status" style="font-size:0.78rem;min-height:16px;color:rgba(255,255,255,.6);"></div>
-  </div>
-</div>
-
-<div class="profile-stat-strip">
-  ${quickStats.map(([l, v, cl, ic]) => `
-  <div class="profile-stat-box">
-    <span class="profile-stat-val" style="color:var(--${cl});">${v}</span>
-    <span class="profile-stat-label">${icon(ic, 'icon-small')} ${l}</span>
-  </div>`).join('')}
-</div>
-
-<div class="container section">
-  ${error ? `<div class="alert alert-error mb-2">${icon('alert', 'icon-small')} ${h(error)}</div>` : ''}
-  ${success ? `<div class="alert alert-success mb-2">${icon('check', 'icon-small')} ${h(success)}</div>` : ''}
-
-  <div class="profile-tabs">
-    <!-- Overview tab disabled for now — flip ENABLE_OVERVIEW_TAB below to bring it back -->
-    ${ENABLE_OVERVIEW_TAB ? `<button type="button" class="profile-tab-btn active" data-tab="overview" onclick="showProfileTab('overview')">${icon('user', 'icon-small')} Overview</button>` : ''}
-    <button type="button" class="profile-tab-btn${ENABLE_OVERVIEW_TAB ? '' : ' active'}" data-tab="account" onclick="showProfileTab('account')">${icon('edit', 'icon-small')} Account</button>
-    <button type="button" class="profile-tab-btn" data-tab="connections" onclick="showProfileTab('connections')">${icon('globe', 'icon-small')} Connections</button>
-    <button type="button" class="profile-tab-btn" data-tab="privacy" onclick="showProfileTab('privacy')">${icon('shield', 'icon-small')} Privacy</button>
-  </div>
-
+  </section>
+  <div class="av-settings-layout">
+    <nav class="profile-tabs av-settings-nav" aria-label="Settings sections">
+      <div class="av-settings-nav-label">PREFERENCES</div>
+      <button type="button" class="profile-tab-btn active" data-tab="account" onclick="showProfileTab('account')">\${icon('user','icon-medium')} <span>Account</span></button>
+      <button type="button" class="profile-tab-btn" data-tab="connections" onclick="showProfileTab('connections')">\${icon('globe','icon-medium')} <span>Connections</span></button>
+      <button type="button" class="profile-tab-btn" data-tab="privacy" onclick="showProfileTab('privacy')">\${icon('shield','icon-medium')} <span>Privacy &amp; security</span></button>
+      <div class="av-settings-nav-divider"></div>
+      <a class="av-settings-nav-link" href="\${siteUrl}/mylist">\${icon('list','icon-medium')} <span>My anime list</span>\${icon('arrow-right','icon-small')}</a>
+      <a class="av-settings-nav-link" href="\${siteUrl}/importexport">\${icon('box','icon-medium')} <span>Import / Export</span>\${icon('arrow-right','icon-small')}</a>
+    </nav>
+    <main class="av-settings-content">
+      \${error ? \`<div class="alert alert-error mb-2">\${icon('alert','icon-small')} \${h(error)}</div>\` : ''}
+      \${success ? \`<div class="alert alert-success mb-2">\${icon('check','icon-small')} \${h(success)}</div>\` : ''}
   ${ENABLE_OVERVIEW_TAB ? `
   <div class="profile-tab-panel active" id="tab-overview">
     <div class="profile-columns">
@@ -541,6 +502,8 @@ async function renderProfilePage(c: any, db: Db, session: Session, lifetime: num
         </div>
       </div>` : ''}
     </div>
+  </div>
+    </main>
   </div>
 </div>
 
