@@ -270,7 +270,7 @@ async function renderProfilePage(c: any, db: Db, session: Session, lifetime: num
   <section class="av-settings-identity">
     <div class="av-settings-avatar profile-avatar-wrap" onclick="document.getElementById('avatar-file-input').click()" title="Change profile picture">
       <div class="nav-avatar u-avatar" id="sidebar-avatar-wrap">
-        ${user.avatar_url ? \`<img src="${h(user.avatar_url)}" id="sidebar-avatar-img" alt="avatar" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">\` : \`<span id="sidebar-avatar-initials">${h(user.username.charAt(0).toUpperCase())}</span><img id="sidebar-avatar-img" src="" alt="" style="display:none;width:100%;height:100%;object-fit:cover;border-radius:50%;">\`}
+        ${user.avatar_url ? `<img src="${h(user.avatar_url)}" id="sidebar-avatar-img" alt="avatar" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">` : `<span id="sidebar-avatar-initials">${h(user.username.charAt(0).toUpperCase())}</span><img id="sidebar-avatar-img" src="" alt="" style="display:none;width:100%;height:100%;object-fit:cover;border-radius:50%;">`}
       </div><span class="av-settings-avatar-edit">${icon('camera','icon-small')}</span>
     </div>
     <input type="file" id="avatar-file-input" accept="image/jpeg,image/png,image/gif,image/webp" style="display:none" onchange="handleAvatarFile(this)">
@@ -291,8 +291,8 @@ async function renderProfilePage(c: any, db: Db, session: Session, lifetime: num
       <a class="av-settings-nav-link" href="${siteUrl}/importexport">${icon('box','icon-medium')} <span>Import / Export</span>${icon('arrow-right','icon-small')}</a>
     </nav>
     <main class="av-settings-content">
-      ${error ? \`<div class="alert alert-error mb-2">${icon('alert','icon-small')} ${h(error)}</div>\` : ''}
-      ${success ? \`<div class="alert alert-success mb-2">${icon('check','icon-small')} ${h(success)}</div>\` : ''}
+      ${error ? `<div class="alert alert-error mb-2">${icon('alert','icon-small')} ${h(error)}</div>` : ''}
+      ${success ? `<div class="alert alert-success mb-2">${icon('check','icon-small')} ${h(success)}</div>` : ''}
   ${ENABLE_OVERVIEW_TAB ? `
   <div class="profile-tab-panel active" id="tab-overview">
     <div class="profile-columns">
