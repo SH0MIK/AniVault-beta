@@ -141,7 +141,7 @@ export const Notification = {
       case 'bug_report_solved': return `${siteUrl}/bug-reports`;
       case 'points_gift': return `${siteUrl}/points`;
       case 'reward_gift': return `${siteUrl}/points`;
-      case 'auto_account': return `${siteUrl}/profile`;
+      case 'auto_account': return `${siteUrl}/settings`;
       default: return `${siteUrl}/feed`;
     }
   },
