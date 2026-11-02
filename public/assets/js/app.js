@@ -1529,7 +1529,14 @@ function initAniVaultSidebar() {
     document.body.classList.toggle('av-sidebar-collapsed', collapsed);
     try { localStorage.setItem('av-sidebar-collapsed', collapsed ? '1' : '0'); } catch (_) {}
   };
-  try { setCollapsed(localStorage.getItem('av-sidebar-collapsed') === '1'); } catch (_) {}
+  // Start collapsed for first-time visitors. Once the user expands or collapses
+  // it, keep that explicit choice across every page navigation and reload.
+  try {
+    const savedState = localStorage.getItem('av-sidebar-collapsed');
+    setCollapsed(savedState === null ? true : savedState === '1');
+  } catch (_) {
+    setCollapsed(true);
+  }
 
   const closeMobile = () => {
     document.body.classList.remove('av-mobile-sidebar-open');
