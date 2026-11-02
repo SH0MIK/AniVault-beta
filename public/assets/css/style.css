@@ -2941,3 +2941,31 @@ body.av-sidebar-collapsed .av-side-nav::-webkit-scrollbar {
   display: none;
   width: 0;
 }
+
+
+/* Refine expanded sidebar scrollbar: hairline, flush to the outer edge */
+.av-side-nav {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,.19) transparent;
+  margin-right: -12px;
+  padding-right: 12px;
+}
+.av-side-nav::-webkit-scrollbar {
+  display: block;
+  width: 2px;
+}
+.av-side-nav::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 4px 0;
+}
+.av-side-nav::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,.18);
+  border-radius: 999px;
+}
+.av-side-nav::-webkit-scrollbar-thumb:hover {
+  background: rgba(255,255,255,.32);
+}
+body.av-sidebar-collapsed .av-side-nav {
+  margin-right: 0;
+  padding-right: 0;
+}
