@@ -106,10 +106,10 @@ profileRoutes.get('/api/list_sync_connect.php', async (c) => {
     return c.redirect(url);
   }
   await session.save(c, lifetime);
-  return c.redirect(`${siteUrl}/profile?tab=connections`);
+  return c.redirect(`${siteUrl}/settings?tab=connections`);
 });
 
-profileRoutes.on(['GET', 'POST'], '/profile', async (c) => {
+profileRoutes.on(['GET', 'POST'], '/settings', async (c) => {
   const db = new Db(c.env.DB);
   const lifetime = Number(c.env.SESSION_LIFETIME_SECONDS ?? 86400);
   const session = await Session.load(c, db, lifetime);
@@ -126,13 +126,13 @@ profileRoutes.on(['GET', 'POST'], '/profile', async (c) => {
     if (body.social_action === 'connect') {
       const provider = body.provider === 'google' || body.provider === 'discord' ? body.provider : null;
       if (provider === 'google') {
-        session.data.oauth_redirect = `${siteUrl}/profile`;
+        session.data.oauth_redirect = `${siteUrl}/settings`;
         const url = auth.getGoogleAuthUrl();
         await session.save(c, lifetime);
         return c.redirect(url);
       }
       if (provider === 'discord') {
-        session.data.oauth_redirect = `${siteUrl}/profile`;
+        session.data.oauth_redirect = `${siteUrl}/settings`;
         const url = auth.getDiscordAuthUrl();
         await session.save(c, lifetime);
         return c.redirect(url);
@@ -236,7 +236,7 @@ async function renderProfilePage(c: any, db: Db, session: Session, lifetime: num
   const bannerZoom = Math.max(1, Math.min(2, Number(bannerSettings?.banner_zoom ?? 1)));
   const bannerSize = bannerZoom <= 1.001 ? 'cover' : `${Math.round(bannerZoom * 100)}% auto`;
   const __banner = await getBannerData(db);
-  let html = renderHeader({ ...__banner, siteUrl, siteName: c.env.SITE_NAME, pageTitle: 'Settings', currentPage: 'profile', currentUser: layoutUser, unreadCount, requestUrl: c.req.url });  html += `<style>${PROFILE_CSS}</style>`;
+  let html = renderHeader({ ...__banner, siteUrl, siteName: c.env.SITE_NAME, pageTitle: 'Settings', currentPage: 'settings', currentUser: layoutUser, unreadCount, requestUrl: c.req.url });  html += `<style>${PROFILE_CSS}</style>`;
 
   const quickStats: [string, string | number, string, string][] = [
     ['Total', stats.total, 'text-primary', 'list'],
