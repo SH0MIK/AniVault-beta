@@ -337,12 +337,18 @@ async function renderProfilePage(c: any, db: Db, session: Session, lifetime: num
         </div>
         ${user.avatar_url ? `<button type="button" class="btn btn-ghost btn-sm" id="delete-avatar-btn" onclick="deleteAvatar()" title="Remove your current avatar">${icon('trash', 'icon-small')} Remove</button>` : ''}
       </div>
-      <div class="settings-row">
+      <div class="settings-row av-settings-banner-row">
         <div class="settings-row-label">
           <div class="settings-row-name">${icon('camera', 'icon-small')} Profile Banner</div>
-          <div class="settings-row-desc">Click "${user.banner_url ? 'Change' : 'Add'} Banner" at the top of the page · JPG, PNG, GIF, WEBP · Max 20MB</div>
+          <div class="settings-row-desc">Personalize the banner shown on your public profile · JPG, PNG, GIF, WEBP · Max 20MB</div>
+          <div id="profile-banner-el" class="av-settings-banner-preview${user.banner_url ? '' : ' is-empty'}"${user.banner_url ? ` style="background-image:url('${h(user.banner_url)}');background-position:${bannerX}% ${bannerY}%;background-size:${bannerSize};"` : ''}></div>
+          <input type="file" id="banner-file-input" accept="image/jpeg,image/png,image/gif,image/webp" hidden onchange="handleProfileBannerFile(this)">
+          <div id="banner-status" class="av-settings-status"></div>
         </div>
-        ${user.banner_url ? `<button type="button" class="btn btn-ghost btn-sm" onclick="removeBanner()" title="Remove your current banner">${icon('trash', 'icon-small')} Remove</button>` : ''}
+        <div class="av-settings-banner-actions">
+          <button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('banner-file-input').click()">${icon('upload', 'icon-small')} ${user.banner_url ? 'Change' : 'Upload'}</button>
+          ${user.banner_url ? `<button type="button" class="btn btn-ghost btn-sm" onclick="openBannerAdjustModal()">${icon('sliders-horizontal', 'icon-small')} Adjust</button><button type="button" class="btn btn-ghost btn-sm" onclick="removeBanner()">${icon('trash', 'icon-small')} Remove</button>` : ''}
+        </div>
       </div>
     </div>
 
