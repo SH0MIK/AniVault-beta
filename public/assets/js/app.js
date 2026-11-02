@@ -228,7 +228,7 @@ function showAutoAccountToast(info) {
   t.innerHTML =
     `<div>We saved you a free account 🎉</div>` +
     `<div style="margin-top:4px;"><strong>${info.username}</strong> <span style="opacity:.6">/</span> <strong>${info.password || ''}</strong></div>` +
-    `<div style="margin-top:4px;"><a href="${window.__siteUrl || ''}/profile" style="text-decoration:underline;color:inherit;">Tap to set your own password →</a></div>`;
+    `<div style="margin-top:4px;"><a href="${window.__siteUrl || ''}/settings" style="text-decoration:underline;color:inherit;">Tap to set your own password →</a></div>`;
   c.appendChild(t);
   setTimeout(() => t.remove(), 15000);
 }
@@ -1908,7 +1908,7 @@ async function epedSave() {
     '/feed.php', '/pages/feed.php',
     '/mylist.php', '/pages/mylist.php',
     '/favorites.php', '/pages/favorites.php',
-    '/profile.php', '/pages/profile.php',
+    '/profile.php', '/pages/profile.php', '/settings',
     '/notifications.php', '/pages/notifications.php',
     '/importexport.php', '/pages/importexport.php',
     '/pages/wrapped.php',
