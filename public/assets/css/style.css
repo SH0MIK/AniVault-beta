@@ -2805,7 +2805,6 @@ textarea.form-control { resize: vertical; min-height: 100px; }
 .av-mobile-menu-btn,.av-mobile-search-btn { display:none; }
 html.av-sidebar-collapsed body { --av-sidebar-width: var(--av-sidebar-collapsed); }
 html.av-sidebar-collapsed body .av-brand-word,
-html.av-sidebar-collapsed body .av-sidebar-toggle,
 html.av-sidebar-collapsed body .av-nav-label,
 html.av-sidebar-collapsed body .av-side-link span,
 html.av-sidebar-collapsed body .av-nav-divider { display:none; }
@@ -2842,7 +2841,6 @@ html.av-sidebar-collapsed body .av-collapse-bottom .icon { transform:rotate(180d
 
 @media (max-width: 900px) {
   html.av-sidebar-collapsed body .av-brand-word,
-  html.av-sidebar-collapsed body .av-sidebar-toggle,
   html.av-sidebar-collapsed body .av-nav-label,
   html.av-sidebar-collapsed body .av-side-link span,
   html.av-sidebar-collapsed body .av-nav-divider { display:initial; }
