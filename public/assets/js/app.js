@@ -1526,6 +1526,9 @@ function initAniVaultSidebar() {
   if (!sidebar) return;
 
   const setCollapsed = collapsed => {
+    // Keep the root class in sync with the body class. The root class is set
+    // by a tiny head script before first paint to prevent an expanded flash.
+    document.documentElement.classList.toggle('av-sidebar-collapsed', collapsed);
     document.body.classList.toggle('av-sidebar-collapsed', collapsed);
     try { localStorage.setItem('av-sidebar-collapsed', collapsed ? '1' : '0'); } catch (_) {}
   };
