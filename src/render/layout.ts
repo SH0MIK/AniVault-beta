@@ -172,6 +172,16 @@ ${(() => {
   "description": "Watch all anime subbed & dubbed Ad-free on Anivault!"
 }
 </script>
+<script>
+(function(){
+  try {
+    var saved = localStorage.getItem('av-sidebar-collapsed');
+    if (saved === null || saved === '1') document.documentElement.classList.add('av-sidebar-collapsed');
+  } catch (_) {
+    document.documentElement.classList.add('av-sidebar-collapsed');
+  }
+})();
+</script>
 <script>window.__siteUrl = '${o.siteUrl}';</script>
 <script src="${o.siteUrl}/assets/js/app.js" defer></script>
 ${ogBlock}
