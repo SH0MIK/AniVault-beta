@@ -2803,19 +2803,19 @@ textarea.form-control { resize: vertical; min-height: 100px; }
 .av-top-actions { position:absolute; right:22px; display:flex; align-items:center; gap:12px; }
 .av-top-icon { display:flex; align-items:center; justify-content:center; width:38px; height:38px; color:var(--text-secondary); background:rgba(255,255,255,.045); border:1px solid var(--border); border-radius:50%; cursor:pointer; }
 .av-mobile-menu-btn,.av-mobile-search-btn { display:none; }
-body.av-sidebar-collapsed { --av-sidebar-width: var(--av-sidebar-collapsed); }
-body.av-sidebar-collapsed .av-brand-word,
-body.av-sidebar-collapsed .av-sidebar-toggle,
-body.av-sidebar-collapsed .av-nav-label,
-body.av-sidebar-collapsed .av-side-link span,
-body.av-sidebar-collapsed .av-nav-divider { display:none; }
-body.av-sidebar-collapsed .av-sidebar-brand { justify-content:center; padding-left:0; padding-right:0; }
-body.av-sidebar-collapsed .av-brand-link { justify-content:center; }
-body.av-sidebar-collapsed .av-side-nav { align-items:center; }
-body.av-sidebar-collapsed .av-side-link { justify-content:center; width:48px; padding:0; }
-body.av-sidebar-collapsed .av-side-link:hover::after { content:attr(title); position:absolute; left:calc(100% + 12px); top:50%; transform:translateY(-50%); z-index:1200; padding:7px 10px; color:#fff; background:#202126; border:1px solid rgba(255,255,255,.1); border-radius:7px; font-size:.78rem; box-shadow:0 8px 24px #0008; }
-body.av-sidebar-collapsed .av-collapse-bottom { font-size:0; }
-body.av-sidebar-collapsed .av-collapse-bottom .icon { transform:rotate(180deg); }
+html.av-sidebar-collapsed body { --av-sidebar-width: var(--av-sidebar-collapsed); }
+html.av-sidebar-collapsed body .av-brand-word,
+html.av-sidebar-collapsed body .av-sidebar-toggle,
+html.av-sidebar-collapsed body .av-nav-label,
+html.av-sidebar-collapsed body .av-side-link span,
+html.av-sidebar-collapsed body .av-nav-divider { display:none; }
+html.av-sidebar-collapsed body .av-sidebar-brand { justify-content:center; padding-left:0; padding-right:0; }
+html.av-sidebar-collapsed body .av-brand-link { justify-content:center; }
+html.av-sidebar-collapsed body .av-side-nav { align-items:center; }
+html.av-sidebar-collapsed body .av-side-link { justify-content:center; width:48px; padding:0; }
+html.av-sidebar-collapsed body .av-side-link:hover::after { content:attr(title); position:absolute; left:calc(100% + 12px); top:50%; transform:translateY(-50%); z-index:1200; padding:7px 10px; color:#fff; background:#202126; border:1px solid rgba(255,255,255,.1); border-radius:7px; font-size:.78rem; box-shadow:0 8px 24px #0008; }
+html.av-sidebar-collapsed body .av-collapse-bottom { font-size:0; }
+html.av-sidebar-collapsed body .av-collapse-bottom .icon { transform:rotate(180deg); }
 .page-content { margin-left:var(--av-sidebar-width); width:calc(100% - var(--av-sidebar-width)); transition:margin-left .24s ease,width .24s ease; }
 .footer { margin-left:var(--av-sidebar-width); width:calc(100% - var(--av-sidebar-width)); transition:margin-left .24s ease,width .24s ease; }
 .av-sidebar-scrim { display:none; }
@@ -2841,17 +2841,17 @@ body.av-sidebar-collapsed .av-collapse-bottom .icon { transform:rotate(180deg); 
 }
 
 @media (max-width: 900px) {
-  body.av-sidebar-collapsed .av-brand-word,
-  body.av-sidebar-collapsed .av-sidebar-toggle,
-  body.av-sidebar-collapsed .av-nav-label,
-  body.av-sidebar-collapsed .av-side-link span,
-  body.av-sidebar-collapsed .av-nav-divider { display:initial; }
-  body.av-sidebar-collapsed .av-sidebar-brand { justify-content:space-between; padding-left:5px; padding-right:5px; }
-  body.av-sidebar-collapsed .av-brand-link { justify-content:flex-start; }
-  body.av-sidebar-collapsed .av-side-nav { align-items:stretch; }
-  body.av-sidebar-collapsed .av-side-link { justify-content:flex-start; width:100%; padding:0 11px; }
-  body.av-sidebar-collapsed .av-collapse-bottom { font-size:.9rem; }
-  body.av-sidebar-collapsed .av-collapse-bottom .icon { transform:none; }
+  html.av-sidebar-collapsed body .av-brand-word,
+  html.av-sidebar-collapsed body .av-sidebar-toggle,
+  html.av-sidebar-collapsed body .av-nav-label,
+  html.av-sidebar-collapsed body .av-side-link span,
+  html.av-sidebar-collapsed body .av-nav-divider { display:initial; }
+  html.av-sidebar-collapsed body .av-sidebar-brand { justify-content:space-between; padding-left:5px; padding-right:5px; }
+  html.av-sidebar-collapsed body .av-brand-link { justify-content:flex-start; }
+  html.av-sidebar-collapsed body .av-side-nav { align-items:stretch; }
+  html.av-sidebar-collapsed body .av-side-link { justify-content:flex-start; width:100%; padding:0 11px; }
+  html.av-sidebar-collapsed body .av-collapse-bottom { font-size:.9rem; }
+  html.av-sidebar-collapsed body .av-collapse-bottom .icon { transform:none; }
 }
 
 
@@ -2881,12 +2881,12 @@ body.av-sidebar-collapsed .av-collapse-bottom .icon { transform:rotate(180deg); 
 .av-side-link.active:hover .icon {
   color: #08090b;
 }
-body.av-sidebar-collapsed .av-side-link.active {
+html.av-sidebar-collapsed body .av-side-link.active {
   color: #111216;
   background: #f1f1f3;
   box-shadow: none;
 }
-body.av-sidebar-collapsed .av-side-link.active .icon {
+html.av-sidebar-collapsed body .av-side-link.active .icon {
   color: #17181c;
 }
 .av-sidebar,
@@ -2898,17 +2898,17 @@ body.av-sidebar-collapsed .av-side-link.active .icon {
   flex: none;
   overflow: hidden;
 }
-body.av-sidebar-collapsed .av-sidebar-bottom {
+html.av-sidebar-collapsed body .av-sidebar-bottom {
   display: flex;
   justify-content: center;
 }
-body.av-sidebar-collapsed .av-collapse-bottom {
+html.av-sidebar-collapsed body .av-collapse-bottom {
   width: 48px;
   min-width: 48px;
   padding: 0;
   justify-content: center;
 }
-body.av-sidebar-collapsed .av-collapse-bottom span {
+html.av-sidebar-collapsed body .av-collapse-bottom span {
   display: none;
 }
 
@@ -2933,11 +2933,11 @@ body.av-sidebar-collapsed .av-collapse-bottom span {
 .av-side-nav::-webkit-scrollbar-thumb:hover {
   background: rgba(255,255,255,.38);
 }
-body.av-sidebar-collapsed .av-side-nav {
+html.av-sidebar-collapsed body .av-side-nav {
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
-body.av-sidebar-collapsed .av-side-nav::-webkit-scrollbar {
+html.av-sidebar-collapsed body .av-side-nav::-webkit-scrollbar {
   display: none;
   width: 0;
 }
@@ -2965,7 +2965,7 @@ body.av-sidebar-collapsed .av-side-nav::-webkit-scrollbar {
 .av-side-nav::-webkit-scrollbar-thumb:hover {
   background: rgba(255,255,255,.32);
 }
-body.av-sidebar-collapsed .av-side-nav {
+html.av-sidebar-collapsed body .av-side-nav {
   margin-right: 0;
   padding-right: 0;
 }
