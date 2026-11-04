@@ -332,7 +332,6 @@ ${bannerBlock}
       <img src="${o.siteUrl}/assets/img/site-img/favicon.svg" alt="" width="30" height="30">
       <span class="av-brand-word">Ani<span>Vault</span></span>
     </a>
-    <button type="button" class="av-sidebar-toggle" id="av-sidebar-toggle" aria-label="Collapse sidebar" title="Collapse sidebar">${icon('chevron-left','icon-medium')}</button>
   </div>
   <nav class="av-side-nav">
     <span class="av-nav-label">DISCOVER</span>
