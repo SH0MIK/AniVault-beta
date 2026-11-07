@@ -1610,8 +1610,8 @@ document.querySelectorAll('.server-tab-panel').forEach(panel => {
         finishMultiUI();
     }
 
-    // Resolve other groups only when the viewer opens their tabs. The
-    // fallback chain above reuses these same promises if Sub has no stream.
+    // Other groups are resolved only when opened. The fallback chain above
+    // reuses the same promises if Sub has no playable stream.
     document.querySelectorAll('.server-tab').forEach(tab => {
         tab.addEventListener('click', () => {
             const group = tab.dataset.tab;
