@@ -1482,27 +1482,36 @@ document.querySelectorAll('.server-tab-panel').forEach(panel => {
     // Sub provider must not block Dub watchers from seeing their servers.
     // Each lane still probes one provider at a time to avoid a request burst.
     // Hindi waits for English Dub to finish, keeping total concurrency bounded.
-    const subMapPromise = resolveGroupUI('sub', SUB_PROVIDERS, 'sub');
-    const dubMapPromise = resolveGroupUI('dub', DUB_PROVIDERS, 'dub');
-    const hindiMapPromise = dubMapPromise.then(() => resolveGroupUI('hindi', HINDI_PROVIDERS, 'dub'));
+    // Resolve only the active group unless the default Sub group has no
+    // playable source. Preserve automatic Sub -> Dub -> Hindi fallback,
+    // but do not spend requests checking unused audio groups on healthy Sub
+    // episodes.
+    const groupProbePromises = {};
+    let multiProbePromise = null;
 
-    // Autoplay priority: Sub first; if Sub has nothing at all for this
-    // episode, fall to English Dub; if that's also empty, fall to Hindi
-    // Dub as a last resort. Every group still resolves and updates its
-    // own buttons in the background regardless of this chain.
+    function ensureGroupProbed(group, defs, audio) {
+        if (!groupProbePromises[group]) {
+            const errEl = document.getElementById('sp-error');
+            if (errEl) errEl.classList.remove('show');
+            groupProbePromises[group] = resolveGroupUI(group, defs, audio);
+        }
+        return groupProbePromises[group];
+    }
+
+    const subMapPromise = ensureGroupProbed('sub', SUB_PROVIDERS, 'sub');
     subMapPromise.then(subMap => {
         const pick = firstPlayable(SUB_PROVIDERS, subMap);
         if (pick) {
             if (!playbackStarted && !window._manualServerSelection) activateFixedButton('sub', pick, 'sub');
             return;
         }
-        return dubMapPromise.then(dubMap => {
+        return ensureGroupProbed('dub', DUB_PROVIDERS, 'dub').then(dubMap => {
             const dpick = firstPlayable(DUB_PROVIDERS, dubMap);
             if (dpick) {
                 if (!playbackStarted && !window._manualServerSelection) activateFixedButton('dub', dpick, 'dub');
                 return;
             }
-            return hindiMapPromise.then(hindiMap => {
+            return ensureGroupProbed('hindi', HINDI_PROVIDERS, 'dub').then(hindiMap => {
                 const hpick = firstPlayable(HINDI_PROVIDERS, hindiMap);
                 if (hpick && !playbackStarted && !window._manualServerSelection) activateFixedButton('hindi', hpick, 'dub');
                 else if (!hpick && !playbackStarted && !window._manualServerSelection) showNoServersAtAll();
@@ -1551,7 +1560,7 @@ document.querySelectorAll('.server-tab-panel').forEach(panel => {
 
     // Multi-language discovery is sequential too: one source/list/provider
     // request at a time, preventing a burst against the scraper API.
-    (async function probeMultiSequentially() {
+    async function probeMultiSequentially() {
         for (const source of MULTI_LANG_SOURCES) {
             let list = [];
             try {
@@ -1599,7 +1608,22 @@ document.querySelectorAll('.server-tab-panel').forEach(panel => {
         }
 
         finishMultiUI();
-    })();
+    }
+
+    // Other groups are resolved only when opened. The fallback chain above
+    // reuses the same promises if Sub has no playable stream.
+    document.querySelectorAll('.server-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            const group = tab.dataset.tab;
+            if (group === 'sub') ensureGroupProbed('sub', SUB_PROVIDERS, 'sub');
+            else if (group === 'dub') {
+                ensureGroupProbed('dub', DUB_PROVIDERS, 'dub');
+                if (!multiProbePromise) multiProbePromise = probeMultiSequentially().catch(() => finishMultiUI());
+            } else if (group === 'hindi') {
+                ensureGroupProbed('hindi', HINDI_PROVIDERS, 'dub');
+            }
+        });
+    });
 
     } catch (e) {
       _showFatalClientError('probeAndRenderServers crashed: ' + (e && e.message ? e.message : e));
